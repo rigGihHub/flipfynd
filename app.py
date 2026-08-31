@@ -43,6 +43,9 @@ st.set_page_config(
 )
 
 
+APP_VERSION = "v0.2.2"
+
+
 BASE_DIR = (
     Path(__file__)
     .resolve()
@@ -814,7 +817,7 @@ st.title(
 )
 
 st.caption(
-    "Hitta undervärderade hockey- och fotbollskort för vidareförsäljning."
+    f"{APP_VERSION} • Hitta undervärderade hockey- och fotbollskort för vidareförsäljning."
 )
 
 

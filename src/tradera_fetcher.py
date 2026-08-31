@@ -1,6 +1,9 @@
 import json
+import os
 import re
 import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urljoin
@@ -527,6 +530,34 @@ def _find_system_chromium():
     return None
 
 
+def _install_playwright_chromium():
+    """Installera Playwrights Chromium-bundle om den saknas.
+
+    Streamlit Community Cloud kan ibland bygga om Python-miljön utan att
+    systempaketet chromium blir tillgängligt. Då installerar vi Playwrights
+    egen browser-bundle i den skrivbara användarcachen och försöker igen.
+    """
+    env = os.environ.copy()
+    env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(Path.home() / ".cache" / "ms-playwright"))
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    if completed.returncode != 0:
+        tail = "\n".join((completed.stdout or "").splitlines()[-20:])
+        raise RuntimeError(
+            "Chromium kunde inte installeras automatiskt i körmiljön. "
+            "Installationslogg:\n" + tail
+        )
+
+
 def _launch_chromium(playwright, headless=True):
     """Starta Chromium robust både lokalt och på Streamlit Cloud."""
     system_chromium = _find_system_chromium()
@@ -548,11 +579,20 @@ def _launch_chromium(playwright, headless=True):
         message = str(exc)
 
         if "Executable doesn't exist" in message or "playwright install" in message:
-            raise RuntimeError(
-                "Chromium saknas i körmiljön. På Streamlit Community Cloud "
-                "ska packages.txt innehålla 'chromium'. Efter ändringen krävs "
-                "en full redeploy så Linux-paketet installeras."
-            ) from exc
+            _install_playwright_chromium()
+            try:
+                return playwright.chromium.launch(
+                    headless=headless,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                    ],
+                )
+            except Exception as retry_exc:
+                raise RuntimeError(
+                    "Chromium saknas eller kunde inte startas efter automatisk installation. "
+                    "Se hämtloggen för detaljer."
+                ) from retry_exc
 
         raise
 
