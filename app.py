@@ -43,7 +43,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.2.2"
+APP_VERSION = "v0.3.0"
 
 
 BASE_DIR = (
@@ -812,627 +812,394 @@ if (
     )
 
 
-st.title(
-    "🃏 FlipFynd"
+st.markdown(
+    """
+    <style>
+    .ff-hero {
+        padding: 0.2rem 0 0.8rem 0;
+    }
+    .ff-hero h1 {
+        margin-bottom: 0.15rem;
+    }
+    .ff-muted {
+        color: #8b949e;
+        font-size: 0.92rem;
+    }
+    .ff-decision {
+        font-size: 1.05rem;
+        font-weight: 750;
+        margin-bottom: 0.15rem;
+    }
+    .ff-card-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        line-height: 1.3;
+        margin-bottom: 0.45rem;
+    }
+    div[data-testid="stMetric"] {
+        border: 1px solid rgba(128, 128, 128, 0.22);
+        border-radius: 0.65rem;
+        padding: 0.55rem 0.65rem;
+    }
+    @media (max-width: 640px) {
+        .ff-card-title { font-size: 1.05rem; }
+        .ff-decision { font-size: 1rem; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-st.caption(
-    f"{APP_VERSION} • Hitta undervärderade hockey- och fotbollskort för vidareförsäljning."
+st.markdown(
+    """
+    <div class="ff-hero">
+      <h1>🃏 FlipFynd</h1>
+      <div class="ff-muted">Hitta samlarkort med potential för vidareförsäljning – rankade efter pris, efterfrågan, säljsannolikhet och möjlig vinst.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
+st.caption(f"{APP_VERSION} • Hockey + fotboll")
 
-
-if st.session_state.get(
-    "fetch_last_message"
-):
-    st.info(
-        st.session_state[
-            "fetch_last_message"
-        ]
-    )
+if st.session_state.get("fetch_last_message"):
+    message = st.session_state["fetch_last_message"]
+    if st.session_state.get("fetch_status") == "finished":
+        st.success(message)
+    elif st.session_state.get("fetch_status") == "failed":
+        st.error(message)
+    else:
+        st.info(message)
 
 if st.session_state.get("fetch_status") == "failed":
     log_tail = read_fetch_log_tail()
     if log_tail:
-        with st.expander("Visa hämtfel"):
+        with st.expander("Visa tekniska detaljer om hämtfelet"):
             st.code(log_tail, language="text")
 
 
-fetch_state = (
-    load_fetch_state()
-)
-
-
-with st.expander(
-    "1. Hämta annonser",
-    expanded=True,
-):
-    col1, col2, col3 = (
-        st.columns(3)
-    )
-
-    with col1:
-        category = (
-            st.selectbox(
-                "Sport/kategori",
-                list(
-                    CATEGORY_URLS.keys()
-                ),
-            )
-        )
-
-    info = (
-        fetch_state.get(
-            "categories",
-            {},
-        ).get(
-            category,
-            {},
-        )
-    )
-
-    loaded_pages = (
-        info.get(
-            "loaded_pages",
-            [],
-        )
-    )
-
-    max_loaded = (
-        info.get(
-            "max_page_loaded",
-            0,
-        )
-    )
-
-    with col2:
-        pages = st.selectbox(
-            "Hämta upp till sida",
-            list(
-                range(
-                    10,
-                    101,
-                    10,
-                )
-            ),
-        )
-
-    with col3:
-        headless = (
-            st.checkbox(
-                "Kör i bakgrunden",
-                value=True,
-            )
-        )
-
-    mode_label = st.radio(
-        "Hämtläge",
-        [
-            "Bygg vidare",
-            "Börja om från sida 1",
-        ],
-    )
-
-    mode = (
-        "incremental"
-        if mode_label
-        == "Bygg vidare"
-        else "full"
-    )
-
-    st.write(
-        "**Inlästa sidor:** "
-        + format_loaded_pages(
-            loaded_pages
-        )
-    )
-
-    if (
-        mode == "incremental"
-        and max_loaded
-    ):
-        st.caption(
-            f"Nästa sida: "
-            f"{max_loaded + 1}"
-        )
-
-    b1, b2, b3, b4 = (
-        st.columns(4)
-    )
-
-    with b1:
-        if st.button(
-            "Hämta annonser",
-            disabled=(
-                st.session_state[
-                    "fetch_status"
-                ]
-                == "running"
-            ),
-        ):
-            start_fetch(
-                category,
-                pages,
-                headless,
-                mode,
-            )
-
-            st.rerun()
-
-    with b2:
-        if st.button(
-            "Avbryt",
-            disabled=(
-                st.session_state[
-                    "fetch_status"
-                ]
-                != "running"
-            ),
-        ):
-            stop_fetch()
-
-            st.rerun()
-
-    with b3:
-        if st.button(
-            "Rensa analys-cache"
-        ):
-            clear_analysis_cache()
-
-            st.session_state[
-                "result_cache"
-            ] = {}
-
-            st.success(
-                "Analys-cache rensad."
-            )
-
-    with b4:
-        if st.button(
-            "Rensa all data"
-        ):
-            clear_all_loaded_data()
-
-            clear_analysis_cache()
-
-            get_data.clear()
-
-            st.session_state[
-                "results"
-            ] = None
-
-            st.session_state[
-                "result_cache"
-            ] = {}
-
-            st.rerun()
-
-
 data = get_data()
-
-if not isinstance(
-    data,
-    list,
-):
+if not isinstance(data, list):
     data = []
 
+st.subheader("Hitta fynd")
+st.caption(f"{len(data):,} annonser finns i analysunderlaget.".replace(",", " "))
 
-st.write(
-    f"**Objekt i datafil:** "
-    f"{len(data)}"
-)
+with st.form("analysis_form"):
+    p1, p2 = st.columns(2)
 
+    with p1:
+        sport_label = st.selectbox(
+            "Sport",
+            ["Hockey", "Fotboll"],
+        )
+        sport = "hockey" if sport_label == "Hockey" else "football"
 
-with st.form(
-    "analysis_form"
-):
-    c1, c2, c3, c4 = (
-        st.columns(4)
-    )
-
-    with c1:
-        sport_label = (
-            st.selectbox(
-                "Analysera",
-                [
-                    "Hockey",
-                    "Fotboll",
-                ],
-            )
+    with p2:
+        max_price = st.number_input(
+            "Budget – max totalpris inkl. frakt",
+            min_value=0,
+            value=1000,
+            step=50,
+            help="Annonser vars pris + frakt överstiger budgeten sorteras bort.",
         )
 
-        sport = (
-            "hockey"
-            if sport_label
-            == "Hockey"
-            else "football"
+    p3, p4 = st.columns(2)
+
+    with p3:
+        strategy_label = st.selectbox(
+            "Strategi",
+            [
+                "Snabb flip",
+                "Störst vinstpotential",
+                "Bästa kortet",
+            ],
+            help="Snabb flip prioriterar lättsålda kort. Störst vinstpotential väger premiumegenskaper högre. Bästa kortet prioriterar kortkvalitet och spelare.",
         )
 
-    with c2:
-        search = (
-            st.text_input(
-                "Sökord",
-                value="",
-            )
-        )
-
-    with c3:
-        max_price = (
-            st.number_input(
-                "Maxpris inkl. frakt",
-                min_value=0,
-                value=1000,
-                step=10,
-            )
-        )
-
-    with c4:
-        show_count = (
-            st.number_input(
-                "Antal att visa",
-                min_value=1,
-                max_value=200,
-                value=20,
-            )
-        )
-
-    c5, c6, c7 = (
-        st.columns(3)
-    )
-
-    with c5:
-        sale_type = (
-            st.selectbox(
-                "Annonsform",
-                [
-                    "Alla",
-                    "Endast auktioner",
-                    "Endast Köp nu",
-                ],
-            )
-        )
-
-    with c6:
-        full_limit = (
-            st.selectbox(
-                "Djupanalys topp",
-                list(
-                    range(
-                        1,
-                        21,
-                    )
-                ),
-                index=9,
-            )
-        )
-
-    with c7:
-        strategy_label = (
-            st.selectbox(
-                "Läge",
-                [
-                    "Quick flip",
-                    "Premium flip",
-                    "Kortläge",
-                ],
-            )
+    with p4:
+        search = st.text_input(
+            "Sök spelare, set eller kort",
+            value="",
+            placeholder="T.ex. Bedard, Young Guns, Messi…",
         )
 
     strategy_map = {
-        "Quick flip":
-            "quick_flip",
-
-        "Premium flip":
-            "premium_flip",
-
-        "Kortläge":
-            "kort",
+        "Snabb flip": "quick_flip",
+        "Störst vinstpotential": "premium_flip",
+        "Bästa kortet": "kort",
     }
+    strategy = strategy_map[strategy_label]
 
-    strategy = (
-        strategy_map[
-            strategy_label
-        ]
-    )
-
-    f1, f2, f3 = (
-        st.columns(3)
-    )
-
-    with f1:
-        numbered_only = (
-            st.checkbox(
-                "Endast numrerade",
-                value=False,
+    with st.expander("Avancerade filter"):
+        a1, a2 = st.columns(2)
+        with a1:
+            sale_type = st.selectbox(
+                "Annonsform",
+                ["Alla", "Endast auktioner", "Endast Köp nu"],
             )
-        )
-
-    with f2:
-        patch_only = (
-            st.checkbox(
-                "Endast patch/relic",
-                value=False,
-            )
-        )
-
-    with f3:
-        auto_only = (
-            st.checkbox(
-                "Endast autograf",
-                value=False,
-            )
-        )
-
-    display1, display2 = (
-        st.columns(2)
-    )
-
-    with display1:
-        minimum_confidence = (
-            st.slider(
-                "Minsta säkerhet",
+            minimum_confidence = st.slider(
+                "Minsta analyssäkerhet",
                 0.0,
                 1.0,
                 0.0,
                 0.05,
             )
-        )
 
-    with display2:
-        show_skip = (
-            st.checkbox(
-                "Visa även SKIP",
-                value=True,
+        with a2:
+            show_count = st.number_input(
+                "Antal fynd att visa",
+                min_value=1,
+                max_value=100,
+                value=20,
             )
-        )
+            show_skip = st.checkbox(
+                "Visa även Hoppa över",
+                value=False,
+            )
 
-    run = (
-        st.form_submit_button(
-            "Visa fynd",
-            type="primary",
-        )
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            numbered_only = st.checkbox("Endast numrerade", value=False)
+        with f2:
+            patch_only = st.checkbox("Endast patch/relic", value=False)
+        with f3:
+            auto_only = st.checkbox("Endast autograf", value=False)
+
+    # Intern prestandaparameter: användaren ska inte behöva förstå den.
+    full_limit = 12
+
+    run = st.form_submit_button(
+        "🔎 Hitta fynd",
+        type="primary",
+        use_container_width=True,
     )
 
 
 if run:
-    with st.spinner(
-        f"Analyserar "
-        f"{sport_label.lower()}..."
-    ):
-        (
-            results,
-            debug,
-        ) = analyze_data(
+    with st.spinner(f"Analyserar {sport_label.lower()} och rankar de bästa fynden…"):
+        results, debug = analyze_data(
             data=data,
             sport=sport,
             search=search,
-            max_price=
-                max_price,
-            sale_type=
-                sale_type,
-            full_limit=
-                full_limit,
-            strategy=
-                strategy,
-            numbered_only=
-                numbered_only,
-            patch_only=
-                patch_only,
-            auto_only=
-                auto_only,
+            max_price=max_price,
+            sale_type=sale_type,
+            full_limit=full_limit,
+            strategy=strategy,
+            numbered_only=numbered_only,
+            patch_only=patch_only,
+            auto_only=auto_only,
         )
 
-    st.session_state[
-        "results"
-    ] = results
-
-    st.session_state[
-        "debug"
-    ] = debug
+    st.session_state["results"] = results
+    st.session_state["debug"] = debug
 
 
-if st.session_state.get(
-    "debug"
-):
-    with st.expander(
-        "Felsökningsstatistik"
-    ):
-        st.json(
-            st.session_state[
-                "debug"
-            ]
-        )
-
-
-if st.session_state.get(
-    "results"
-) is not None:
-
+if st.session_state.get("results") is not None:
     filtered = []
 
-    for item in (
-        st.session_state[
-            "results"
-        ]
-    ):
-        if (
-            item.get(
-                "confidence",
-                0,
-            )
-            < minimum_confidence
-        ):
+    for item in st.session_state["results"]:
+        if item.get("confidence", 0) < minimum_confidence:
             continue
 
-        if (
-            not show_skip
-            and item.get(
-                "beslut"
-            )
-            == "SKIP"
-        ):
+        if not show_skip and item.get("beslut") == "SKIP":
             continue
 
-        filtered.append(
-            item
+        filtered.append(item)
+
+    visible = filtered[: int(show_count)]
+
+    st.divider()
+    st.subheader(f"Bästa fynden ({len(visible)})")
+
+    if not visible:
+        st.info(
+            "Inga fynd matchar dina filter just nu. Prova en högre budget, lägre analyssäkerhet eller bredare sökning."
         )
 
-    st.subheader(
-        f"Resultat: "
-        f"{len(filtered)}"
+    for index, item in enumerate(visible, start=1):
+        raw_decision = item.get("beslut", "SKIP")
+        if raw_decision == "KÖP (starkt fynd)":
+            decision_label = "🟢 STARKT FYND"
+            decision_help = "Analysen bedömer både vinstpotential och säljsannolikhet som starka."
+        elif raw_decision == "KÖP":
+            decision_label = "🟢 KÖP"
+            decision_help = "Kortet passerar FlipFynds köpgränser för vinst och säljsannolikhet."
+        elif raw_decision == "KANSKE":
+            decision_label = "🟡 BEVAKA"
+            decision_help = "Potential finns, men marginal eller säljsannolikhet är inte tillräckligt stark för ett tydligt köp."
+        else:
+            decision_label = "🔴 HOPPA ÖVER"
+            decision_help = "Risk, låg efterfrågan eller för liten marginal gör kortet svagt för vidareförsäljning."
+
+        total_cost = item.get("total_cost", 0) or 0
+        expected = item.get("expected_resale", 0) or 0
+        floor = item.get("floor_resale", 0) or 0
+        best_case = item.get("best_case_resale", 0) or 0
+        net_profit = item.get("net_profit_estimate", 0) or 0
+        sale_probability = item.get("sale_probability", 0) or 0
+
+        with st.container(border=True):
+            st.markdown(f'<div class="ff-decision">#{index} · {decision_label}</div>', unsafe_allow_html=True)
+            st.caption(decision_help)
+            st.markdown(
+                f'<div class="ff-card-title">{item.get("titel", "")}</div>',
+                unsafe_allow_html=True,
+            )
+
+            m1, m2 = st.columns(2)
+            with m1:
+                st.metric("Köp för", f"{total_cost:.0f} kr")
+            with m2:
+                st.metric("Möjlig nettovinst", f"{net_profit:.0f} kr")
+
+            m3, m4 = st.columns(2)
+            with m3:
+                if floor and expected and floor != expected:
+                    resale_text = f"{floor:.0f}–{expected:.0f} kr"
+                else:
+                    resale_text = f"{expected:.0f} kr"
+                st.metric("Realistiskt försäljningsvärde", resale_text)
+            with m4:
+                st.metric("Säljchans", f"{sale_probability:.0f} %")
+
+            why_bits = []
+            player = item.get("player_name")
+            if player:
+                why_bits.append(player)
+            demand = item.get("demand_tier")
+            if demand:
+                why_bits.append(f"efterfrågan: {demand}")
+            exit_speed = item.get("exit_speed")
+            if exit_speed:
+                why_bits.append(f"exit: {exit_speed}")
+
+            if why_bits:
+                st.caption(" • ".join(why_bits))
+
+            if item.get("kommentar"):
+                st.write(item["kommentar"])
+
+            if item.get("lank"):
+                st.link_button(
+                    "Öppna annons på Tradera ↗",
+                    item["lank"],
+                    use_container_width=True,
+                )
+
+            with st.expander("Visa full analys"):
+                d1, d2 = st.columns(2)
+                with d1:
+                    st.write(f"**Pris:** {item.get('pris', 0)} kr")
+                    st.write(f"**Frakt:** {item.get('frakt')} kr")
+                    st.write(f"**Spelare:** {player or 'Okänd'}")
+                    st.write(f"**Spelarscore:** {item.get('player_market_score', 0)}/100")
+                    st.write(f"**Efterfrågan:** {demand or 'Okänd'}")
+                    st.write(f"**Annonsform:** {item.get('sale_type', '')}")
+
+                with d2:
+                    st.write(f"**Försiktigt värde:** {floor:.0f} kr")
+                    st.write(f"**Förväntat värde:** {expected:.0f} kr")
+                    st.write(f"**Best case:** {best_case:.0f} kr")
+                    st.write(f"**Riskjusterad vinst:** {item.get('risk_adjusted_profit', 0)} kr")
+                    st.write(f"**ROI:** {item.get('roi_estimate', 0)}")
+                    st.write(f"**Rank:** {item.get('rank_score', 0)}")
+
+                reasons = item.get("reasons", [])
+                if reasons:
+                    st.write("**Varför rankas kortet så här?**")
+                    for reason in reasons:
+                        st.write(f"- {reason}")
+
+                risks = item.get("risk_flags", [])
+                if risks:
+                    st.write("**Risker**")
+                    for risk in risks:
+                        st.write(f"- {risk}")
+
+                st.caption(f"Säljare: {get_seller(item)}")
+
+
+fetch_state = load_fetch_state()
+
+st.divider()
+with st.expander("⚙️ Administration & data"):
+    st.caption(
+        "Här finns tekniska funktioner för att uppdatera Tradera-underlaget. Vanliga användare behöver normalt inte ändra dessa inställningar."
     )
 
-    for index, item in enumerate(
-        filtered[
-            :show_count
-        ],
-        start=1,
-    ):
-        with st.container(
-            border=True
+    col1, col2 = st.columns(2)
+    with col1:
+        category = st.selectbox(
+            "Sport/kategori att hämta",
+            list(CATEGORY_URLS.keys()),
+            key="admin_category",
+        )
+
+    info = fetch_state.get("categories", {}).get(category, {})
+    loaded_pages = info.get("loaded_pages", [])
+    max_loaded = info.get("max_page_loaded", 0)
+
+    with col2:
+        pages = st.selectbox(
+            "Hämta upp till sida",
+            list(range(10, 101, 10)),
+            key="admin_pages",
+        )
+
+    st.write("**Inlästa sidor:** " + format_loaded_pages(loaded_pages))
+    if max_loaded:
+        st.caption(f"Nästa sida vid fortsatt hämtning: {max_loaded + 1}")
+
+    with st.expander("Avancerade hämtningsinställningar"):
+        headless = st.checkbox(
+            "Kör browsern i bakgrunden",
+            value=True,
+            key="admin_headless",
+        )
+        mode_label = st.radio(
+            "Hämtläge",
+            ["Bygg vidare", "Börja om från sida 1"],
+            key="admin_mode",
+        )
+        mode = "incremental" if mode_label == "Bygg vidare" else "full"
+
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button(
+            "Uppdatera annonser",
+            type="primary",
+            use_container_width=True,
+            disabled=st.session_state["fetch_status"] == "running",
         ):
-            st.markdown(
-                f"### #{index} – "
-                f"{item.get('titel', '')}"
-            )
+            start_fetch(category, pages, headless, mode)
+            st.rerun()
 
-            a, b, c, d = (
-                st.columns(4)
-            )
+    with b2:
+        if st.button(
+            "Avbryt hämtning",
+            use_container_width=True,
+            disabled=st.session_state["fetch_status"] != "running",
+        ):
+            stop_fetch()
+            st.rerun()
 
-            with a:
-                st.write(
-                    f"**Pris:** "
-                    f"{item.get('pris', 0)} kr"
-                )
+    with st.expander("Underhåll / riskzon"):
+        st.warning("Dessa funktioner påverkar lokalt analysunderlag och cache.")
+        r1, r2 = st.columns(2)
+        with r1:
+            if st.button("Rensa analys-cache", use_container_width=True):
+                clear_analysis_cache()
+                st.session_state["result_cache"] = {}
+                st.success("Analys-cache rensad.")
+        with r2:
+            if st.button("Rensa all data", use_container_width=True):
+                clear_all_loaded_data()
+                clear_analysis_cache()
+                get_data.clear()
+                st.session_state["results"] = None
+                st.session_state["result_cache"] = {}
+                st.rerun()
 
-                st.write(
-                    f"**Frakt:** "
-                    f"{item.get('frakt')} kr"
-                )
-
-                st.write(
-                    f"**Total:** "
-                    f"{item.get('total_cost', 0)} kr"
-                )
-
-            with b:
-                st.write(
-                    f"**Spelare:** "
-                    f"{item.get('player_name') or 'Okänd'}"
-                )
-
-                st.write(
-                    f"**Spelarscore:** "
-                    f"{item.get('player_market_score', 0)}/100"
-                )
-
-                st.write(
-                    f"**Efterfrågan:** "
-                    f"{item.get('demand_tier', '')}"
-                )
-
-            with c:
-                st.write(
-                    f"**Beslut:** "
-                    f"{item.get('beslut', '')}"
-                )
-
-                st.write(
-                    f"**Rank:** "
-                    f"{item.get('rank_score', 0)}"
-                )
-
-                st.write(
-                    f"**Säljchans:** "
-                    f"{item.get('sale_probability', 0)} %"
-                )
-
-            with d:
-                st.write(
-                    f"**Riskjusterad vinst:** "
-                    f"{item.get('risk_adjusted_profit', 0)} kr"
-                )
-
-                st.write(
-                    f"**Exit:** "
-                    f"{item.get('exit_speed', '')}"
-                )
-
-                st.write(
-                    f"**Säljare:** "
-                    f"{get_seller(item)}"
-                )
-
-            if item.get(
-                "kommentar"
-            ):
-                st.write(
-                    f"**Kommentar:** "
-                    f"{item['kommentar']}"
-                )
-
-            if item.get(
-                "lank"
-            ):
-                st.markdown(
-                    f"[Öppna annons]"
-                    f"({item['lank']})"
-                )
-
-            with st.expander(
-                "Värde och vinst"
-            ):
-                st.write(
-                    f"Förväntat värde: "
-                    f"**{item.get('expected_resale', 0)} kr**"
-                )
-
-                st.write(
-                    f"Försiktigt värde: "
-                    f"**{item.get('floor_resale', 0)} kr**"
-                )
-
-                st.write(
-                    f"Best case: "
-                    f"**{item.get('best_case_resale', 0)} kr**"
-                )
-
-                st.write(
-                    f"Nettovinst: "
-                    f"**{item.get('net_profit_estimate', 0)} kr**"
-                )
-
-                st.write(
-                    f"ROI: "
-                    f"**{item.get('roi_estimate', 0)}**"
-                )
-
-            with st.expander(
-                "Varför rankas kortet så?"
-            ):
-                for reason in (
-                    item.get(
-                        "reasons",
-                        [],
-                    )
-                ):
-                    st.write(
-                        f"- {reason}"
-                    )
-
-                if item.get(
-                    "risk_flags"
-                ):
-                    st.write(
-                        "**Risker:**"
-                    )
-
-                    for risk in (
-                        item.get(
-                            "risk_flags",
-                            [],
-                        )
-                    ):
-                        st.write(
-                            f"- {risk}"
-                        )
+    if st.session_state.get("debug"):
+        with st.expander("Teknisk analysstatistik"):
+            st.json(st.session_state["debug"])
