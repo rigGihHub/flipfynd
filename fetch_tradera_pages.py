@@ -10,9 +10,42 @@ from src.tradera_fetcher import (
 )
 
 
+def fetch_one_category(category, mode, headed, output_path, safety_max_pages):
+    old_items = load_items(output_path)
+    known_links = {item.get("lank") for item in old_items if item.get("lank")}
+
+    stop_after_known_pages = 3 if mode == "incremental" else 0
+    print(
+        f"Startar {'smart uppdatering' if mode == 'incremental' else 'full genomsökning'}: "
+        f"{category}, sida 1 och framåt",
+        flush=True,
+    )
+
+    new_items, logs = fetch_tradera_category(
+        category_name=category,
+        start_page=1,
+        end_page=None,
+        headless=not headed,
+        known_links=known_links,
+        stop_after_known_pages=stop_after_known_pages,
+        safety_max_pages=max(10, safety_max_pages),
+    )
+
+    merged_items = merge_items(old_items, new_items)
+    save_items(merged_items, output_path)
+    truly_new = sum(1 for item in new_items if item.get("lank") not in known_links)
+
+    print(f"Nya annonser ({category}): {truly_new}", flush=True)
+    print(f"Annonser lästa ({category}): {len(new_items)}", flush=True)
+    print(f"Totalt sparade objekt: {len(merged_items)}", flush=True)
+    return truly_new, len(new_items), len(merged_items)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--category", required=True, choices=list(CATEGORY_URLS.keys()))
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--category", choices=list(CATEGORY_URLS.keys()))
+    scope.add_argument("--all-categories", action="store_true")
     parser.add_argument("--mode", choices=["incremental", "full"], default="incremental")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--output", default="tradera_data.json")
@@ -20,37 +53,30 @@ def main():
     args = parser.parse_args()
 
     output_path = Path(args.output)
-    old_items = load_items(output_path)
-    known_links = {item.get("lank") for item in old_items if item.get("lank")}
+    categories = list(CATEGORY_URLS.keys()) if args.all_categories else [args.category]
 
-    # Both modes start at page 1 so newly published listings are discovered.
-    # Incremental mode stops after three consecutive fully-known pages; full
-    # mode keeps going until Tradera returns no more listings (or safety limit).
-    stop_after_known_pages = 3 if args.mode == "incremental" else 0
+    total_new = 0
+    total_seen = 0
+    final_total = len(load_items(output_path))
 
-    print(
-        f"Startar {'smart uppdatering' if args.mode == 'incremental' else 'full genomsökning'}: "
-        f"{args.category}, sida 1 och framåt",
-        flush=True,
-    )
+    for index, category in enumerate(categories, start=1):
+        if len(categories) > 1:
+            print(f"=== Kategori {index}/{len(categories)}: {category} ===", flush=True)
+        new_count, seen_count, final_total = fetch_one_category(
+            category=category,
+            mode=args.mode,
+            headed=args.headed,
+            output_path=output_path,
+            safety_max_pages=args.safety_max_pages,
+        )
+        total_new += new_count
+        total_seen += seen_count
 
-    new_items, logs = fetch_tradera_category(
-        category_name=args.category,
-        start_page=1,
-        end_page=None,
-        headless=not args.headed,
-        known_links=known_links,
-        stop_after_known_pages=stop_after_known_pages,
-        safety_max_pages=max(10, args.safety_max_pages),
-    )
-
-    merged_items = merge_items(old_items, new_items)
-    save_items(merged_items, output_path)
-    truly_new = sum(1 for item in new_items if item.get("lank") not in known_links)
-
-    print(f"Nya annonser: {truly_new}", flush=True)
-    print(f"Annonser lästa denna körning: {len(new_items)}", flush=True)
-    print(f"Totalt sparade objekt: {len(merged_items)}", flush=True)
+    if len(categories) > 1:
+        print("=== Alla sporter klara ===", flush=True)
+        print(f"Nya annonser totalt: {total_new}", flush=True)
+        print(f"Annonser lästa totalt: {total_seen}", flush=True)
+        print(f"Totalt sparade objekt: {final_total}", flush=True)
 
 
 if __name__ == "__main__":

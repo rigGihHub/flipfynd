@@ -49,7 +49,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.4.9"
+APP_VERSION = "v0.5.0"
 
 
 BASE_DIR = (
@@ -329,13 +329,19 @@ def start_fetch(
     command = [
         sys.executable,
         "fetch_tradera_pages.py",
-        "--category",
-        category,
+    ]
+
+    if category == "__all__":
+        command.append("--all-categories")
+    else:
+        command.extend(["--category", category])
+
+    command.extend([
         "--mode",
         mode,
         "--output",
         "tradera_data.json",
-    ]
+    ])
 
     if not headless:
         command.append(
@@ -390,8 +396,9 @@ def start_fetch(
     st.session_state[
         "fetch_last_message"
     ] = (
-        f"Hämtar "
-        f"{category}..."
+        "Hämtar hockey och fotboll..."
+        if category == "__all__"
+        else f"Hämtar {category}..."
     )
 
 
@@ -923,9 +930,27 @@ else:
     _latest_fetch = format_last_fetch_time(_dataset_timestamp) if _dataset_timestamp else "Aldrig"
     _latest_label = "data senast ändrad" if _dataset_timestamp else "senast hämtat"
 
+_sport_counts = {"hockey": 0, "football": 0, "unknown": 0}
+for _item in data:
+    _sport = infer_item_sport(_item)
+    if _sport in ("hockey", "football"):
+        _sport_counts[_sport] += 1
+    else:
+        _sport_counts["unknown"] += 1
+
+_count_parts = [
+    f"{_sport_counts['hockey']:,} hockey",
+    f"{_sport_counts['football']:,} fotboll",
+]
+if _sport_counts["unknown"]:
+    _count_parts.append(f"{_sport_counts['unknown']:,} okategoriserade")
+
 st.caption(
-    (f"{len(data):,} annonser i analysunderlaget • {_latest_label} {_latest_fetch}")
-    .replace(",", " ")
+    (
+        f"{len(data):,} annonser totalt • "
+        + " • ".join(_count_parts)
+        + f" • {_latest_label} {_latest_fetch}"
+    ).replace(",", " ")
 )
 
 with st.form("analysis_form"):
@@ -1206,27 +1231,26 @@ fetch_state = load_fetch_state()
 st.divider()
 with st.expander("⚙️ Administration & data"):
     st.caption(
-        "Uppdatera Tradera-underlaget. FlipFynd går automatiskt sida för sida – du behöver inte välja antal sidor."
+        "Standardvalet uppdaterar både hockey och fotboll automatiskt. "
+        "FlipFynd går sida för sida – du behöver inte välja antal sidor."
     )
 
-    category = st.selectbox(
-        "Sport/kategori att hämta",
-        list(CATEGORY_URLS.keys()),
-        key="admin_category",
-    )
-
-    info = fetch_state.get("categories", {}).get(category, {})
-    last_fetch = format_last_fetch_time(info.get("last_fetch_at"))
-    last_new = int(info.get("last_new_items", 0) or 0)
-    last_pages = int(info.get("last_pages_scanned", 0) or 0)
-    last_stop = info.get("last_stop_reason", "")
-
-    st.write(f"**Senast uppdaterad:** {last_fetch}")
-    if info.get("last_fetch_at"):
-        st.caption(
-            f"Senaste körningen: {last_pages} sidor genomsökta • {last_new} nya annonser"
-            + (f" • stopp: {last_stop}" if last_stop else "")
-        )
+    category_infos = fetch_state.get("categories", {})
+    summary_cols = st.columns(2)
+    for idx, category_name in enumerate(CATEGORY_URLS.keys()):
+        info = category_infos.get(category_name, {})
+        sport_name = "Hockey" if "Hockey" in category_name else "Fotboll"
+        with summary_cols[idx]:
+            st.markdown(f"**{sport_name}**")
+            st.write(f"Senast uppdaterad: {format_last_fetch_time(info.get('last_fetch_at'))}")
+            if info.get("last_fetch_at"):
+                last_new = int(info.get("last_new_items", 0) or 0)
+                last_pages = int(info.get("last_pages_scanned", 0) or 0)
+                last_stop = info.get("last_stop_reason", "")
+                st.caption(
+                    f"{last_pages} sidor • {last_new} nya annonser"
+                    + (f" • stopp: {last_stop}" if last_stop else "")
+                )
 
     with st.expander("Avancerade hämtningsinställningar"):
         headless = st.checkbox(
@@ -1240,23 +1264,38 @@ with st.expander("⚙️ Administration & data"):
             key="admin_mode",
             help=(
                 "Smart uppdatering börjar på sida 1 och stoppar efter tre hela sidor utan nya annonser. "
-                "Full genomsökning fortsätter tills Tradera inte visar fler annonser, med en säkerhetsgräns på 250 sidor."
+                "Full genomsökning fortsätter tills Tradera inte visar fler annonser, med en säkerhetsgräns på 250 sidor per sport."
             ),
         )
         mode = "incremental" if mode_label == "Smart uppdatering" else "full"
+        single_category = st.selectbox(
+            "Uppdatera endast en sport",
+            list(CATEGORY_URLS.keys()),
+            key="admin_category",
+            help="Använd bara detta när du specifikt vill uppdatera en enda sport.",
+        )
 
-    b1, b2 = st.columns(2)
+    b1, b2, b3 = st.columns([2, 1, 1])
     with b1:
         if st.button(
-            "Uppdatera annonser",
+            "Uppdatera alla sporter",
             type="primary",
             use_container_width=True,
             disabled=st.session_state["fetch_status"] == "running",
         ):
-            start_fetch(category, headless, mode)
+            start_fetch("__all__", headless, mode)
             st.rerun()
 
     with b2:
+        if st.button(
+            "Endast vald sport",
+            use_container_width=True,
+            disabled=st.session_state["fetch_status"] == "running",
+        ):
+            start_fetch(single_category, headless, mode)
+            st.rerun()
+
+    with b3:
         if st.button(
             "Avbryt hämtning",
             use_container_width=True,
