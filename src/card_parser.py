@@ -1,47 +1,10 @@
 import re
 from typing import Optional
 
+from src.player_market import get_all_player_names, normalize_player_name
 
-KNOWN_PLAYERS = [
-    "connor bedard",
-    "macklin celebrini",
-    "ivan demidov",
-    "ryan leonard",
-    "connor mcdavid",
-    "wayne gretzky",
-    "sidney crosby",
-    "nathan mackinnon",
-    "alex ovechkin",
-    "elias pettersson",
-    "mats sundin",
-    "peter forsberg",
-    "juraj slafkovsky",
-    "auston matthews",
-    "cale makar",
-    "igor shesterkin",
-    "carey price",
-    "jaromir jagr",
-    "teemu selanne",
-    "nikita kucherov",
-    "david pastrnak",
-    "leon draisaitl",
-    "adam fantilli",
-    "lane hutson",
-    "matthew knies",
-    "quinn hughes",
-    "roman josi",
-    "martin brodeur",
-    "mario lemieux",
-    "jarome iginla",
-    "joe sakic",
-    "mikko rantanen",
-    "mitch marner",
-    "william nylander",
-    "nicklas backstrom",
-    "rasmus dahlin",
-    "jake sanderson",
-    "artem levshunov",
-]
+
+KNOWN_PLAYERS = [name.casefold() for name in get_all_player_names()]
 
 
 SET_PATTERNS = [
@@ -70,6 +33,19 @@ SET_PATTERNS = [
     ("trilogy", "Trilogy"),
     ("sp game used", "SP Game Used"),
     ("spa", "SP Authentic"),
+    ("topps chrome", "Topps Chrome"),
+    ("topps finest", "Topps Finest"),
+    ("merlin chrome", "Topps Merlin"),
+    ("topps merlin", "Topps Merlin"),
+    ("panini prizm", "Panini Prizm"),
+    ("prizm", "Panini Prizm"),
+    ("panini select", "Panini Select"),
+    ("topps museum", "Topps Museum"),
+    ("museum collection", "Topps Museum"),
+    ("obsidian", "Obsidian"),
+    ("immaculate", "Immaculate"),
+    ("national treasures", "National Treasures"),
+    ("donruss", "Donruss"),
     ("upper deck", "Upper Deck"),
 ]
 
@@ -165,7 +141,7 @@ def extract_player_name(title: str) -> Optional[str]:
 
     for player in KNOWN_PLAYERS:
         if player in norm:
-            return player.title()
+            return normalize_player_name(player.title())
 
     tokens = norm.split()
     candidates = []
@@ -229,16 +205,25 @@ def extract_grade(title: str) -> Optional[str]:
     norm = normalize_text(title)
 
     grade_patterns = [
-        r"\bpsa\s*(10|9|8|7|6)\b",
-        r"\bbgs\s*(10|9\.5|9|8\.5|8)\b",
-        r"\bsgc\s*(10|9|8)\b",
+        # PSA titles often include GEM MINT / GEM MT between company and grade.
+        ("PSA", r"\bpsa(?:\s+(?:gem\s+mint|gem\s+mt|mint|nm[- ]?mt))?\s*(10|9|8|7|6)\b"),
+        ("BGS", r"\bbgs\s*(10|9\.5|9|8\.5|8|7\.5|7)\b"),
+        ("SGC", r"\bsgc\s*(10|9\.5|9|8\.5|8|7\.5|7)\b"),
     ]
 
-    for pattern in grade_patterns:
+    for company, pattern in grade_patterns:
         match = re.search(pattern, norm)
         if match:
-            return match.group(0).upper()
+            return f"{company} {match.group(1)}"
 
+    return None
+
+
+def extract_grading_company(title: str) -> Optional[str]:
+    norm = normalize_text(title)
+    for company in ("PSA", "BGS", "SGC"):
+        if re.search(rf"\b{company.lower()}\b", norm):
+            return company
     return None
 
 
@@ -267,14 +252,56 @@ def detect_parallel(norm: str) -> Optional[str]:
     return None
 
 
+
+def detect_rookie_variant(norm: str, set_name: Optional[str] = None) -> tuple[Optional[str], str]:
+    """Identify named rookie programs separately from a generic RC label.
+
+    The tier is intentionally coarse: ``iconic`` for established flagship rookie
+    programs, ``strong`` for recognizable rookie inserts/lines and ``standard``
+    for a generic rookie label. It is used as a guardrail, not as a price guide.
+    """
+    text = norm or ""
+
+    # Hockey rookie programs. Order matters: specific variants before parent set.
+    if re.search(r"\byoung\s+guns\s+canvas\b|\bcanvas\s+young\s+guns\b", text):
+        return "Young Guns Canvas", "strong"
+    if re.search(r"\bfuture\s+watch\s+(?:auto|autograph|autograf)\b|\bfwa\b", text):
+        return "Future Watch Auto", "iconic"
+    if re.search(r"\bfuture\s+watch\b", text):
+        return "Future Watch", "strong"
+    if set_name == "Young Guns" or re.search(r"\byoung\s+guns\b|\byoungguns\b", text):
+        return "Young Guns", "iconic"
+    if re.search(r"\bmarquee\s+rookie(?:s)?\b", text):
+        return "Marquee Rookie", "strong"
+
+    # Football/soccer rookie programs. These are useful signals, but still need
+    # player demand and comps; a brand name alone must not create a large premium.
+    if re.search(r"\brated\s+rookie\b", text):
+        return "Rated Rookie", "strong"
+    if (set_name == "Panini Prizm" or "prizm" in text) and re.search(r"\b(?:rookie|rc)\b", text):
+        return "Prizm Rookie", "strong"
+    if set_name == "Topps Chrome" and re.search(r"\b(?:rookie|rc)\b", text):
+        return "Topps Chrome Rookie", "strong"
+    if set_name == "Topps Merlin" and re.search(r"\b(?:rookie|rc)\b", text):
+        return "Merlin Rookie", "strong"
+    if set_name == "Panini Select" and re.search(r"\b(?:rookie|rc)\b", text):
+        return "Select Rookie", "strong"
+
+    if re.search(r"\b(?:rookie|rc)\b", text):
+        return "Generic Rookie", "standard"
+
+    return None, "none"
+
 def parse_card_features(title: str) -> dict:
     norm = normalize_text(title)
     serial_number = extract_serial_number(title)
     set_name = extract_set_name(title)
     player_name = extract_player_name(title)
     grade = extract_grade(title)
+    grading_company = extract_grading_company(title)
 
-    is_rookie = bool(re.search(r"\brookie\b|\brc\b", norm))
+    rookie_variant, rookie_tier = detect_rookie_variant(norm, set_name)
+    is_rookie = rookie_variant is not None
     is_auto = bool(re.search(r"\bauto\b|\bautograph\b|\bautograf\b|\bsigned\b|\bsignature\b", norm))
     is_patch = "patch" in norm
     is_jersey = "jersey" in norm or "memorabilia" in norm
@@ -289,12 +316,15 @@ def parse_card_features(title: str) -> dict:
         "year": extract_year(title),
         "parallel": detect_parallel(norm),
         "is_rookie": is_rookie,
+        "rookie_variant": rookie_variant,
+        "rookie_tier": rookie_tier,
         "is_auto": is_auto,
         "is_patch": is_patch,
         "is_jersey": is_jersey,
         "is_game_worn": is_game_worn,
         "is_graded": is_graded,
         "grade": grade,
+        "grading_company": grading_company,
         "is_lot": is_lot,
         "serial_number": serial_number,
         "is_low_serial": serial_number is not None and serial_number <= 50,

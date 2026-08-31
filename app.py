@@ -28,6 +28,12 @@ from src.loader import (
     load_data,
 )
 
+from src.pricing import (
+    DEFAULT_UNKNOWN_SHIPPING,
+    normalize_shipping,
+    total_acquisition_cost,
+)
+
 from src.tradera_fetcher import (
     CATEGORY_URLS,
     clear_all_loaded_data,
@@ -43,7 +49,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.3.0"
+APP_VERSION = "v0.4.7"
 
 
 BASE_DIR = (
@@ -549,6 +555,13 @@ def analyze_data(
         get_data_version()
     )
 
+    # Comps ska alltid komma från samma sport som objektet som analyseras.
+    sport_items = [
+        item for item in data
+        if isinstance(item, dict)
+        and (infer_item_sport(item) in {None, sport})
+    ]
+
     for item in data:
         if not isinstance(
             item,
@@ -589,22 +602,14 @@ def analyze_data(
         ):
             continue
 
-        shipping = (
-            item.get(
-                "frakt"
-            )
-        )
-
-        shipping = (
-            0
-            if shipping is None
-            else shipping
+        total_cost = total_acquisition_cost(
+            price,
+            item.get("frakt"),
         )
 
         if (
-            price
-            + shipping
-            > max_price
+            total_cost is None
+            or total_cost > max_price
         ):
             continue
 
@@ -735,7 +740,7 @@ def analyze_data(
         else:
             full = analyze_item(
                 original,
-                all_items=data,
+                all_items=sport_items,
                 mode="full",
                 strategy_mode=
                     strategy,
@@ -953,8 +958,9 @@ with st.form("analysis_form"):
                 value=20,
             )
             show_skip = st.checkbox(
-                "Visa även Hoppa över",
-                value=False,
+                "Visa även svaga kandidater",
+                value=True,
+                help="På som standard så att FlipFynd alltid visar de bäst rankade korten, även när inget når köpgränsen.",
             )
 
         f1, f2, f3 = st.columns(3)
@@ -1009,11 +1015,19 @@ if st.session_state.get("results") is not None:
     visible = filtered[: int(show_count)]
 
     st.divider()
-    st.subheader(f"Bästa fynden ({len(visible)})")
+    non_skip_count = sum(1 for item in st.session_state["results"] if item.get("beslut") != "SKIP")
+    if non_skip_count > 0:
+        st.subheader(f"Bästa fynden ({len(visible)})")
+    else:
+        st.subheader(f"Bästa kandidaterna ({len(visible)})")
+        if visible:
+            st.info(
+                "Inget kort når FlipFynds köpgräns just nu. De bäst rankade kandidaterna visas ändå så att du kan bedöma marknaden."
+            )
 
     if not visible:
         st.info(
-            "Inga fynd matchar dina filter just nu. Prova en högre budget, lägre analyssäkerhet eller bredare sökning."
+            "Inga annonser matchar dina filter just nu. Prova en högre budget, lägre analyssäkerhet eller bredare sökning."
         )
 
     for index, item in enumerate(visible, start=1):
@@ -1076,6 +1090,12 @@ if st.session_state.get("results") is not None:
             if why_bits:
                 st.caption(" • ".join(why_bits))
 
+            player_match_confidence = item.get("player_match_confidence", "low")
+            if player_match_confidence == "medium":
+                st.caption("⚠️ Spelarnamnet identifierades med stavningstolerans – kontrollera titeln före köp.")
+            elif player_match_confidence == "low":
+                st.caption("⚠️ Osäker spelaridentifiering. FlipFynd tillåter inte ett tydligt köpbeslut på den här träffen.")
+
             if item.get("kommentar"):
                 st.write(item["kommentar"])
 
@@ -1090,9 +1110,16 @@ if st.session_state.get("results") is not None:
                 d1, d2 = st.columns(2)
                 with d1:
                     st.write(f"**Pris:** {item.get('pris', 0)} kr")
-                    st.write(f"**Frakt:** {item.get('frakt')} kr")
+                    shipping_raw = item.get("frakt")
+                    shipping_text = (
+                        f"{shipping_raw} kr"
+                        if shipping_raw is not None
+                        else f"okänd – {DEFAULT_UNKNOWN_SHIPPING} kr antaget i kalkylen"
+                    )
+                    st.write(f"**Frakt:** {shipping_text}")
                     st.write(f"**Spelare:** {player or 'Okänd'}")
                     st.write(f"**Spelarscore:** {item.get('player_market_score', 0)}/100")
+                    st.write(f"**Spelar-ID:** {item.get('player_match_confidence', 'low')}")
                     st.write(f"**Efterfrågan:** {demand or 'Okänd'}")
                     st.write(f"**Annonsform:** {item.get('sale_type', '')}")
 

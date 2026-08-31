@@ -3,97 +3,8 @@ import re
 from src.card_parser import parse_card_features
 from src.comments import build_comment
 from src.market_analysis import build_market_analysis
-
-
-HOCKEY_PLAYERS = {
-    "Connor Bedard": (100, "elite"),
-    "Macklin Celebrini": (98, "elite"),
-    "Ivan Demidov": (97, "elite"),
-    "Connor McDavid": (96, "elite"),
-    "Wayne Gretzky": (94, "elite"),
-    "Matthew Schaefer": (94, "elite"),
-    "Sidney Crosby": (91, "elite"),
-    "Nathan MacKinnon": (91, "elite"),
-    "Michael Misa": (91, "elite"),
-    "Nikita Kucherov": (90, "elite"),
-    "Leon Draisaitl": (89, "strong"),
-    "Cale Makar": (88, "strong"),
-    "Zayne Parekh": (88, "strong"),
-    "Zeev Buium": (87, "strong"),
-    "Auston Matthews": (87, "strong"),
-    "Alex Ovechkin": (87, "strong"),
-    "Beckett Sennecke": (86, "strong"),
-    "Lane Hutson": (86, "strong"),
-    "David Pastrnak": (85, "strong"),
-    "Porter Martone": (85, "strong"),
-    "Ryan Leonard": (84, "strong"),
-    "Jimmy Snuggerud": (84, "strong"),
-    "Anton Frondell": (83, "strong"),
-    "James Hagens": (83, "strong"),
-    "Berkly Catton": (82, "strong"),
-    "Yaroslav Askarov": (81, "strong"),
-    "Sam Dickinson": (80, "strong"),
-    "Victor Eklund": (80, "strong"),
-    "Artem Levshunov": (79, "strong"),
-    "Adam Fantilli": (78, "strong"),
-    "Juraj Slafkovsky": (68, "medium"),
-    "William Nylander": (66, "medium"),
-    "Rasmus Dahlin": (65, "medium"),
-    "Elias Pettersson": (62, "medium"),
-    "Nils Höglander": (24, "weak"),
-    "Nils Hoglander": (24, "weak"),
-}
-
-
-FOOTBALL_PLAYERS = {
-    "Lamine Yamal": (100, "elite"),
-    "Kylian Mbappé": (98, "elite"),
-    "Kylian Mbappe": (98, "elite"),
-    "Erling Haaland": (96, "elite"),
-    "Jude Bellingham": (95, "elite"),
-    "Lionel Messi": (95, "elite"),
-    "Cristiano Ronaldo": (94, "elite"),
-    "Vinícius Júnior": (93, "elite"),
-    "Vinicius Junior": (93, "elite"),
-    "Khvicha Kvaratskhelia": (92, "elite"),
-    "Désiré Doué": (92, "elite"),
-    "Desire Doue": (92, "elite"),
-    "Estêvão": (92, "elite"),
-    "Estevao": (92, "elite"),
-    "Arda Güler": (91, "elite"),
-    "Arda Guler": (91, "elite"),
-    "Franco Mastantuono": (90, "elite"),
-    "Ousmane Dembélé": (90, "elite"),
-    "Ousmane Dembele": (90, "elite"),
-    "Max Dowman": (90, "elite"),
-    "Kenan Yıldız": (89, "strong"),
-    "Kenan Yildiz": (89, "strong"),
-    "Harry Kane": (89, "strong"),
-    "Gilberto Mora": (89, "strong"),
-    "Bukayo Saka": (88, "strong"),
-    "Lennart Karl": (88, "strong"),
-    "Rodri": (87, "strong"),
-    "Pedri": (87, "strong"),
-    "Michael Olise": (87, "strong"),
-    "Pau Cubarsí": (87, "strong"),
-    "Pau Cubarsi": (87, "strong"),
-    "Raphinha": (86, "strong"),
-    "Julián Alvarez": (86, "strong"),
-    "Julian Alvarez": (86, "strong"),
-    "Nico Williams": (85, "strong"),
-    "Rayan Cherki": (85, "strong"),
-    "Warren Zaïre-Emery": (84, "strong"),
-    "Warren Zaire-Emery": (84, "strong"),
-    "Ibrahim Mbaye": (84, "strong"),
-    "Ethan Nwaneri": (83, "strong"),
-    "Lucas Bergvall": (82, "strong"),
-    "Dean Huijsen": (82, "strong"),
-    "Kobbie Mainoo": (79, "strong"),
-    "Geovany Quenda": (79, "strong"),
-    "Jobe Bellingham": (78, "strong"),
-    "Ben Doak": (76, "medium"),
-    "Quim Junyent": (72, "medium"),
-}
+from src.player_market import get_player_database, match_player, normalize_player_name
+from src.pricing import normalize_shipping, total_acquisition_cost
 
 
 HOCKEY_SETS = {
@@ -146,63 +57,15 @@ FOOTBALL_PREMIUM = {
 
 
 def normalize_name(name):
-    if not name:
-        return None
-
-    aliases = {
-        "Connor Mcdavid": "Connor McDavid",
-        "Nathan Mackinnon": "Nathan MacKinnon",
-        "Kylian Mbappe": "Kylian Mbappé",
-        "Vinicius Junior": "Vinícius Júnior",
-        "Ousmane Dembele": "Ousmane Dembélé",
-        "Arda Guler": "Arda Güler",
-        "Desire Doue": "Désiré Doué",
-        "Kenan Yildiz": "Kenan Yıldız",
-        "Pau Cubarsi": "Pau Cubarsí",
-        "Warren Zaire-Emery": "Warren Zaïre-Emery",
-    }
-
-    clean = str(
-        name
-    ).strip()
-
-    return aliases.get(
-        clean,
-        clean,
-    )
+    return normalize_player_name(name)
 
 
-def get_player_database(sport):
-    if sport == "football":
-        return FOOTBALL_PLAYERS
-
-    return HOCKEY_PLAYERS
+def detect_known_player(title, sport):
+    return match_player(title, sport).get('name')
 
 
-def detect_known_player(
-    title,
-    sport,
-):
-    text = (
-        title
-        or ""
-    ).casefold()
-
-    players = sorted(
-        get_player_database(
-            sport
-        ).keys(),
-        key=len,
-        reverse=True,
-    )
-
-    for player in players:
-        if player.casefold() in text:
-            return normalize_name(
-                player
-            )
-
-    return None
+def detect_player_match(title, sport):
+    return match_player(title, sport)
 
 
 def detect_set(
@@ -350,24 +213,21 @@ def get_features(
         or {}
     )
 
-    known_player = detect_known_player(
+    player_match = detect_player_match(
         title,
         sport,
     )
 
-    if known_player:
-        features["player_name"] = (
-            known_player
-        )
-
+    if player_match.get("name"):
+        features["player_name"] = player_match["name"]
+        features["player_match_confidence"] = player_match.get("confidence", "high")
+        features["player_match_type"] = player_match.get("match_type", "exact")
     else:
-        features["player_name"] = (
-            normalize_name(
-                features.get(
-                    "player_name"
-                )
-            )
-        )
+        # Parserns fallback kan vara användbar som texttolkning, men den ska
+        # inte behandlas som en säker marknadsidentifiering.
+        features["player_name"] = normalize_name(features.get("player_name"))
+        features["player_match_confidence"] = "low"
+        features["player_match_type"] = "parser_fallback"
 
     detected_set = detect_set(
         title,
@@ -513,6 +373,14 @@ def get_features(
 
 
 def detect_sale_type(item):
+    # Prefer a structured value if the fetcher or an imported source already
+    # provides one. The current Tradera fetcher normally falls back to raw_text.
+    explicit = str(item.get("sale_type") or "").strip().casefold()
+    if explicit in {"köp nu", "kop nu", "buy now", "buy it now"}:
+        return "Köp nu"
+    if explicit in {"auktion", "auction"}:
+        return "Auktion"
+
     text = (
         item.get(
             "raw_text",
@@ -534,6 +402,27 @@ def detect_sale_type(item):
     return "Okänd"
 
 
+def compute_entry_cost(item, total_cost):
+    """Return a conservative acquisition cost for ranking and profit math.
+
+    A Buy-now price is executable at the displayed amount. An auction price is
+    only the current/starting price and can rise before closing. We therefore
+    add a modest auction buffer so an early low bid does not masquerade as a
+    guaranteed flip margin. The original displayed total_cost is kept intact.
+    """
+    if total_cost is None:
+        return None, 0
+
+    if detect_sale_type(item) != "Auktion":
+        return float(total_cost), 0
+
+    price = float(item.get("pris") or 0)
+    # Minimum buffer matters on cheap cards; the cap prevents the heuristic
+    # from dominating expensive auctions where we lack bid-history data.
+    buffer = round(max(15.0, min(price * 0.12, 75.0)), 2)
+    return round(float(total_cost) + buffer, 2), buffer
+
+
 def get_player_profile(
     features,
     sport,
@@ -553,36 +442,188 @@ def get_player_profile(
             "name": None,
             "score": 15,
             "tier": "weak",
+            "match_confidence": "low",
         }
 
     if player_name in database:
-        score, tier = (
-            database[
-                player_name
-            ]
-        )
-
+        score, tier = database[player_name]
         return {
             "name": player_name,
             "score": score,
             "tier": tier,
+            "match_confidence": features.get("player_match_confidence", "high"),
         }
 
-    score = 45
-
-    if features.get(
-        "is_rookie"
-    ):
+    # Okända parserträffar ska inte få ett artificiellt medium-score.
+    # Hellre försiktig osäkerhet än falsk precision.
+    score = 25
+    if features.get("is_rookie"):
         score += 5
 
     return {
         "name": player_name,
-        "score": min(
-            score,
-            55,
-        ),
-        "tier": "medium",
+        "score": min(score, 35),
+        "tier": "weak",
+        "match_confidence": features.get("player_match_confidence", "low"),
     }
+
+
+
+def collectible_demand_factor(player_score):
+    """Scale premium traits by actual player demand instead of treating them as universal value.
+
+    Serial numbering, autos and memorabilia can make a card scarcer, but scarcity on a
+    weak player does not create the same resale market as scarcity on an elite name.
+    """
+    score = float(player_score or 0)
+    if score >= 85:
+        return 1.00
+    if score >= 70:
+        return 0.85
+    if score >= 55:
+        return 0.65
+    if score >= 40:
+        return 0.45
+    return 0.25
+
+
+def premium_trait_bonus(features, player_score):
+    """Return conservative title-derived premium bonus and supporting reasons.
+
+    This is deliberately not a market valuation. It only adjusts the heuristic until
+    stronger comparable-price evidence exists.
+    """
+    demand = collectible_demand_factor(player_score)
+    bonus = 0.0
+    confidence_bonus = 0.0
+    reasons = []
+
+    if features.get("is_auto"):
+        bonus += 24 * demand
+        confidence_bonus += 0.04 * demand
+        reasons.append("autograf")
+
+    if features.get("is_patch") or features.get("is_jersey"):
+        bonus += 9 * demand
+        confidence_bonus += 0.02 * demand
+        reasons.append("patch/relic")
+
+    if features.get("is_game_worn"):
+        bonus += 8 * demand
+        confidence_bonus += 0.015 * demand
+        reasons.append("game/match worn")
+
+    serial = features.get("serial_number")
+    if features.get("is_1of1"):
+        # Even a 1/1 has scarcity value, but title-only valuation is highly uncertain.
+        scarcity_factor = max(0.45, demand)
+        bonus += 40 * scarcity_factor
+        confidence_bonus += 0.025 * demand
+        reasons.append("1/1")
+    elif serial is not None:
+        if serial <= 10:
+            raw_bonus = 30
+        elif serial <= 25:
+            raw_bonus = 22
+        elif serial <= 50:
+            raw_bonus = 15
+        elif serial <= 99:
+            raw_bonus = 9
+        elif serial <= 199:
+            raw_bonus = 4
+        else:
+            raw_bonus = 1
+        bonus += raw_bonus * max(0.35, demand)
+        reasons.append(f"numrerat /{serial}")
+
+    return round(bonus), confidence_bonus, reasons
+
+
+def rookie_trait_bonus(features, player_score, player_match_confidence="low"):
+    """Conservative rookie premium tied to demand *and* rookie-program quality.
+
+    A generic RC label is only a small positive signal. Named flagship rookie
+    programs (for example Young Guns or Future Watch Auto) can add more value,
+    but only when the player market is strong. This prevents "rookie" from
+    becoming a universal shortcut to a high valuation.
+    """
+    if not features.get("is_rookie"):
+        return 0, 0.0, [], []
+
+    demand = collectible_demand_factor(player_score)
+    variant = str(features.get("rookie_variant") or "Generic Rookie")
+    tier = str(features.get("rookie_tier") or "standard").lower()
+
+    base_bonus = 10
+    variant_bonus = {
+        "iconic": 14,
+        "strong": 7,
+        "standard": 0,
+    }.get(tier, 0)
+
+    # Weak/unknown names still receive only a small fraction of any rookie premium.
+    demand_floor = 0.22 if tier == "standard" else 0.28
+    bonus = round((base_bonus + variant_bonus) * max(demand_floor, demand))
+
+    confidence_bonus = 0.0
+    reasons = ["rookie/RC"]
+    risks = []
+
+    if variant != "Generic Rookie":
+        reasons.append(f"rookieprogram: {variant}")
+
+    specific = bool(features.get("year") or features.get("set_name") or variant != "Generic Rookie")
+    if player_match_confidence in {"high", "medium"} and specific:
+        confidence_bonus = (0.025 + (0.012 if tier == "iconic" else 0.006 if tier == "strong" else 0.0)) * demand
+    else:
+        risks.append("rookieetikett är inte fullt verifierad mot år/set")
+
+    if float(player_score or 0) < 55:
+        risks.append("rookiekort på svag spelarmarknad")
+        if tier in {"iconic", "strong"}:
+            risks.append("känt rookieprogram väger inte upp svag spelarefterfrågan")
+
+    if tier == "standard" and not features.get("set_name"):
+        risks.append("generisk rookieetikett utan identifierat rookieprogram")
+
+    return bonus, confidence_bonus, reasons, risks
+
+
+def grading_trait_bonus(features, player_score):
+    """Value recognized grading conservatively instead of treating every slab equally."""
+    grade = str(features.get("grade") or "").upper().strip()
+    company = str(features.get("grading_company") or "").upper().strip()
+    if not grade:
+        return 0, 0.0, [], []
+
+    match = re.search(r"(10|9\.5|9|8\.5|8|7\.5|7|6)$", grade)
+    if not match:
+        return 0, 0.0, ["graderat"], ["graderingsnivå kunde inte tolkas säkert"]
+
+    numeric = float(match.group(1))
+    demand = collectible_demand_factor(player_score)
+    raw = 0
+
+    if company == "PSA":
+        raw = 18 if numeric >= 10 else 8 if numeric >= 9 else 2 if numeric >= 8 else 0
+    elif company == "BGS":
+        raw = 20 if numeric >= 10 else 14 if numeric >= 9.5 else 6 if numeric >= 9 else 1 if numeric >= 8.5 else 0
+    elif company == "SGC":
+        raw = 14 if numeric >= 10 else 8 if numeric >= 9.5 else 5 if numeric >= 9 else 1 if numeric >= 8 else 0
+    else:
+        return 0, 0.0, ["graderat"], ["okänt graderingsbolag ger inget automatiskt värdepåslag"]
+
+    bonus = round(raw * max(0.30, demand))
+    confidence_bonus = 0.015 * demand if raw > 0 else 0.0
+    reasons = [f"{company} {numeric:g}"]
+    risks = []
+
+    if numeric < 9:
+        risks.append("lägre grade ger begränsad premie")
+    if float(player_score or 0) < 55 and raw > 0:
+        risks.append("graderingspremie begränsas av svag spelarmarknad")
+
+    return bonus, confidence_bonus, reasons, risks
 
 
 def estimate_title_value(
@@ -602,19 +643,13 @@ def estimate_title_value(
         or 0
     )
 
-    shipping = item.get(
-        "frakt"
+    shipping = normalize_shipping(
+        item.get("frakt")
     )
 
-    shipping = (
-        0
-        if shipping is None
-        else shipping
-    )
-
-    total_cost = (
-        price
-        + shipping
+    total_cost = total_acquisition_cost(
+        price,
+        item.get("frakt"),
     )
 
     features = get_features(
@@ -647,6 +682,14 @@ def estimate_title_value(
 
     reasons = []
     risks = []
+
+    player_match_confidence = profile.get("match_confidence", "low")
+    if player_match_confidence == "medium":
+        confidence -= 0.03
+        reasons.append("spelarnamn identifierat med viss stavningstolerans")
+    elif player_match_confidence == "low":
+        confidence -= 0.10
+        risks.append("osäker spelaridentifiering")
 
     value += round(
         profile["score"]
@@ -685,97 +728,41 @@ def estimate_title_value(
             f"{set_name}"
         )
 
-    if features.get(
-        "is_rookie"
-    ):
-        value += 10
-        confidence += 0.04
+    rookie_bonus, rookie_confidence, rookie_reasons, rookie_risks = rookie_trait_bonus(
+        features,
+        profile["score"],
+        profile.get("match_confidence", "low"),
+    )
+    value += rookie_bonus
+    confidence += rookie_confidence
+    reasons.extend(rookie_reasons)
+    risks.extend(rookie_risks)
 
-        reasons.append(
-            "rookie/RC"
-        )
-
-    if features.get(
-        "is_auto"
-    ):
-        value += 24
-        confidence += 0.07
-
-        reasons.append(
-            "autograf"
-        )
-
-    if (
-        features.get(
-            "is_patch"
-        )
-        or features.get(
-            "is_jersey"
-        )
-    ):
-        value += 9
-        confidence += 0.03
-
-        reasons.append(
-            "patch/relic"
-        )
-
-    if features.get(
-        "is_game_worn"
-    ):
-        value += 8
-        confidence += 0.02
-
-        reasons.append(
-            "game/match worn"
-        )
+    premium_bonus, premium_confidence, premium_reasons = premium_trait_bonus(
+        features,
+        profile["score"],
+    )
+    value += premium_bonus
+    confidence += premium_confidence
+    reasons.extend(premium_reasons)
 
     serial = features.get(
         "serial_number"
     )
 
-    if features.get(
-        "is_1of1"
-    ):
-        value += 40
-        confidence += 0.08
-
-        reasons.append(
-            "1/1"
+    if premium_reasons and profile["score"] < 55:
+        risks.append(
+            "premiumegenskaper har begränsad värdeeffekt på svag spelarmarknad"
         )
 
-    elif serial is not None:
-        if serial <= 10:
-            value += 30
-
-        elif serial <= 25:
-            value += 22
-
-        elif serial <= 50:
-            value += 15
-
-        elif serial <= 99:
-            value += 9
-
-        elif serial <= 199:
-            value += 4
-
-        else:
-            value += 1
-
-        reasons.append(
-            f"numrerat /{serial}"
-        )
-
-    if features.get(
-        "grade"
-    ):
-        value += 8
-        confidence += 0.03
-
-        reasons.append(
-            "graderat"
-        )
+    grade_bonus, grade_confidence, grade_reasons, grade_risks = grading_trait_bonus(
+        features,
+        profile["score"],
+    )
+    value += grade_bonus
+    confidence += grade_confidence
+    reasons.extend(grade_reasons)
+    risks.extend(grade_risks)
 
     if features.get(
         "is_lot"
@@ -946,7 +933,7 @@ def compute_liquidity(
     if features.get(
         "is_rookie"
     ):
-        score += 6
+        score += 6 * collectible_demand_factor(profile["score"])
 
     if features.get(
         "is_auto"
@@ -1090,6 +1077,26 @@ def get_comp_info(
         count,
         analysis,
     )
+
+
+def compute_comp_weight(comparable_count, comp_confidence):
+    """Weight active-listing comps conservatively.
+
+    These are asking prices, not confirmed sold prices. Low-confidence local
+    comps therefore get only a small influence even when two or more exist.
+    """
+    if comparable_count < 2:
+        return 0.0
+
+    level = str(comp_confidence or "låg").casefold()
+
+    if level == "hög":
+        return 0.50 if comparable_count >= 5 else 0.40
+
+    if level == "medel":
+        return 0.40 if comparable_count >= 5 else 0.30
+
+    return 0.20 if comparable_count >= 5 else 0.15
 
 
 def compute_haircut(
@@ -1302,7 +1309,7 @@ def compute_card_quality(
     if features.get(
         "is_rookie"
     ):
-        score += 12
+        score += 12 * collectible_demand_factor(profile["score"])
 
     if features.get(
         "is_auto"
@@ -1359,25 +1366,25 @@ def compute_flip_scores(
     else:
         affordability = 0
 
+    profit_signal = min(max(profits["risk_adjusted_profit"], -50), 140)
+    roi_signal = min(max(profits.get("roi_estimate", 0) * 100, -50), 180)
+
     quick = (
-        profits[
-            "risk_adjusted_profit"
-        ]
+        profit_signal * 0.72
+        + roi_signal * 0.18
         + probability * 0.42
         + liquidity * 0.30
-        + profile["score"] * 0.22
+        + profile["score"] * 0.25
         + affordability
     )
 
     premium = (
-        profits[
-            "risk_adjusted_profit"
-        ]
-        * 0.78
+        profit_signal * 0.62
+        + roi_signal * 0.10
         + quality * 0.34
         + probability * 0.24
         + liquidity * 0.20
-        + profile["score"] * 0.20
+        + profile["score"] * 0.22
     )
 
     if "premium trap" in risks:
@@ -1448,17 +1455,42 @@ def make_decision(
     risk_adjusted,
     probability,
     player_score,
+    confidence=0.0,
+    player_match_confidence="low",
+    floor_profit=0.0,
+    roi=0.0,
+    total_cost=0.0,
 ):
+    """Turn analysis into a conservative buy/watch/skip decision.
+
+    A flip should not become a clear buy merely because the optimistic expected
+    profit is large. The decision also needs reasonable capital efficiency and
+    a tolerable downside in the conservative resale case.
+    """
+    if confidence < 0.28 or player_match_confidence == "low":
+        return "SKIP"
+
     if (
         player_score < 35
         and net_profit < 100
     ):
         return "SKIP"
 
+    capital = max(float(total_cost or 0), 1.0)
+    downside_ratio = float(floor_profit or 0) / capital
+
+    # A very poor floor case is not a buy, even if the expected case looks good.
+    if downside_ratio < -0.40:
+        if risk_adjusted >= 8 and probability >= 40 and net_profit >= 10:
+            return "KANSKE"
+        return "SKIP"
+
     if (
         risk_adjusted >= 60
         and probability >= 65
         and net_profit >= 80
+        and roi >= 0.35
+        and downside_ratio >= -0.15
     ):
         return "KÖP (starkt fynd)"
 
@@ -1466,6 +1498,8 @@ def make_decision(
         risk_adjusted >= 20
         and probability >= 55
         and net_profit >= 30
+        and roi >= 0.18
+        and downside_ratio >= -0.25
     ):
         return "KÖP"
 
@@ -1473,6 +1507,7 @@ def make_decision(
         risk_adjusted >= 8
         and probability >= 40
         and net_profit >= 10
+        and roi >= 0.08
     ):
         return "KANSKE"
 
@@ -1532,23 +1567,17 @@ def build_invalid_result(
             ),
 
         "total_cost":
-            (
-                item.get(
-                    "pris",
-                    0,
-                )
-                or 0
+            total_acquisition_cost(
+                item.get("pris"),
+                item.get("frakt"),
             )
-            + (
-                item.get(
-                    "frakt"
-                )
-                or 0
-            ),
+            or 0,
 
         "player_name": None,
         "player_market_score": 0,
         "demand_tier": "weak",
+        "player_match_confidence": "low",
+        "player_match_type": "none",
         "sport": sport,
 
         "score":
@@ -1667,6 +1696,17 @@ def analyze_core(
         sport,
     )
 
+    analysis_total_cost, auction_buffer = compute_entry_cost(
+        item,
+        total_cost,
+    )
+    sale_type = detect_sale_type(item)
+    if sale_type == "Auktion" and auction_buffer > 0:
+        risks.append("auktionspris kan stiga före avslut")
+        reasons.append(
+            f"auktion: {auction_buffer:.0f} kr säkerhetsmarginal används i fyndkalkylen"
+        )
+
     specificity = (
         compute_specificity(
             features,
@@ -1678,7 +1718,7 @@ def analyze_core(
         compute_liquidity(
             features,
             profile,
-            total_cost,
+            analysis_total_cost,
             sport,
         )
     )
@@ -1690,14 +1730,12 @@ def analyze_core(
     estimated_value = heuristic
     value_source = "heuristic_only"
 
-    # Hockey kan använda den befintliga
-    # lokala marknadsanalysen.
-    # Fotboll hålls separat så hockeycomps
-    # inte påverkar fotboll.
+    # Lokal comp-analys används för båda sporterna. Anroparen ska skicka
+    # sportfiltrerad data så hockey- och fotbollsannonser aldrig blandas.
     if (
         full
         and all_items
-        and sport == "hockey"
+        and sport in {"hockey", "football"}
     ):
         (
             comp_value,
@@ -1725,11 +1763,8 @@ def analyze_core(
             is not None
             and comparable_count >= 2
         ):
-            if comparable_count >= 5:
-                comp_weight = 0.45
-
-            else:
-                comp_weight = 0.35
+            comp_confidence = (market or {}).get("confidence", "låg")
+            comp_weight = compute_comp_weight(comparable_count, comp_confidence)
 
             estimated_value = round(
                 heuristic
@@ -1745,30 +1780,26 @@ def analyze_core(
                 "blended_current_listings"
             )
 
-            confidence = min(
-                0.92,
-                confidence
-                + (
-                    0.08
-                    if comparable_count >= 5
-                    else 0.04
-                ),
-            )
+            # Aktiva annonser är utrops-/köp nu-priser, inte bekräftade avslut.
+            # Bara medel/hög comp-kvalitet får därför höja analysens confidence.
+            if str(comp_confidence).casefold() in {"medel", "hög"}:
+                confidence = min(
+                    0.92,
+                    confidence
+                    + (
+                        0.08
+                        if comp_confidence == "hög" and comparable_count >= 5
+                        else 0.04
+                    ),
+                )
 
             reasons.append(
                 f"{comparable_count} "
                 f"lokala aktuella "
-                f"jämförelseannonser"
+                f"jämförelseannonser "
+                f"({comp_confidence} comp-kvalitet)"
             )
 
-    elif (
-        full
-        and sport == "football"
-    ):
-        reasons.append(
-            "fotboll använder separat "
-            "ranking utan hockeycomps"
-        )
 
     probability = (
         compute_sale_probability(
@@ -1777,7 +1808,7 @@ def analyze_core(
             profile,
             comparable_count,
             risks,
-            total_cost,
+            analysis_total_cost,
         )
     )
 
@@ -1800,7 +1831,7 @@ def analyze_core(
     )
 
     profits = compute_profit(
-        total_cost,
+        analysis_total_cost,
         expected_resale,
         floor_resale,
         probability,
@@ -1822,7 +1853,7 @@ def analyze_core(
         liquidity,
         quality,
         profile,
-        total_cost,
+        analysis_total_cost,
         risks,
     )
 
@@ -1840,14 +1871,15 @@ def analyze_core(
     )
 
     decision = make_decision(
-        profits[
-            "net_profit_estimate"
-        ],
-        profits[
-            "risk_adjusted_profit"
-        ],
+        profits["net_profit_estimate"],
+        profits["risk_adjusted_profit"],
         probability,
         profile["score"],
+        confidence=confidence,
+        player_match_confidence=profile.get("match_confidence", "low"),
+        floor_profit=profits["floor_profit_estimate"],
+        roi=profits["roi_estimate"],
+        total_cost=analysis_total_cost,
     )
 
     # Kommentaren ska bygga på samma beräknade analysvärden
@@ -1891,6 +1923,12 @@ def analyze_core(
         "total_cost":
             total_cost,
 
+        "analysis_total_cost":
+            analysis_total_cost,
+
+        "auction_buffer":
+            auction_buffer,
+
         "player_name":
             profile["name"],
 
@@ -1899,6 +1937,9 @@ def analyze_core(
 
         "demand_tier":
             profile["tier"],
+
+        "player_match_confidence": profile.get("match_confidence", "low"),
+        "player_match_type": features.get("player_match_type", "none"),
 
         "sport":
             sport,
@@ -2029,9 +2070,7 @@ def analyze_core(
             ),
 
         "sale_type":
-            detect_sale_type(
-                item
-            ),
+            sale_type,
 
         "reasons":
             reasons,

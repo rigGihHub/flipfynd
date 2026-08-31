@@ -1,0 +1,431 @@
+{
+  "version": "2026-08-31",
+  "hockey": {
+    "Connor Bedard": {
+      "score": 100,
+      "tier": "elite"
+    },
+    "Macklin Celebrini": {
+      "score": 98,
+      "tier": "elite"
+    },
+    "Ivan Demidov": {
+      "score": 97,
+      "tier": "elite"
+    },
+    "Connor McDavid": {
+      "score": 96,
+      "tier": "elite"
+    },
+    "Wayne Gretzky": {
+      "score": 94,
+      "tier": "elite"
+    },
+    "Matthew Schaefer": {
+      "score": 94,
+      "tier": "elite"
+    },
+    "Sidney Crosby": {
+      "score": 91,
+      "tier": "elite"
+    },
+    "Nathan MacKinnon": {
+      "score": 91,
+      "tier": "elite"
+    },
+    "Michael Misa": {
+      "score": 91,
+      "tier": "elite"
+    },
+    "Nikita Kucherov": {
+      "score": 90,
+      "tier": "elite"
+    },
+    "Leon Draisaitl": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Cale Makar": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Zayne Parekh": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Zeev Buium": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Auston Matthews": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Alex Ovechkin": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Beckett Sennecke": {
+      "score": 86,
+      "tier": "strong"
+    },
+    "Lane Hutson": {
+      "score": 86,
+      "tier": "strong"
+    },
+    "David Pastrnak": {
+      "score": 85,
+      "tier": "strong"
+    },
+    "Porter Martone": {
+      "score": 85,
+      "tier": "strong"
+    },
+    "Ryan Leonard": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Jimmy Snuggerud": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Anton Frondell": {
+      "score": 83,
+      "tier": "strong"
+    },
+    "James Hagens": {
+      "score": 83,
+      "tier": "strong"
+    },
+    "Berkly Catton": {
+      "score": 82,
+      "tier": "strong"
+    },
+    "Yaroslav Askarov": {
+      "score": 81,
+      "tier": "strong"
+    },
+    "Sam Dickinson": {
+      "score": 80,
+      "tier": "strong"
+    },
+    "Victor Eklund": {
+      "score": 80,
+      "tier": "strong"
+    },
+    "Artem Levshunov": {
+      "score": 79,
+      "tier": "strong"
+    },
+    "Adam Fantilli": {
+      "score": 78,
+      "tier": "strong"
+    },
+    "Juraj Slafkovsky": {
+      "score": 68,
+      "tier": "medium"
+    },
+    "William Nylander": {
+      "score": 66,
+      "tier": "medium"
+    },
+    "Rasmus Dahlin": {
+      "score": 65,
+      "tier": "medium"
+    },
+    "Elias Pettersson": {
+      "score": 62,
+      "tier": "medium"
+    },
+    "Mats Sundin": {
+      "score": 74,
+      "tier": "strong"
+    },
+    "Peter Forsberg": {
+      "score": 77,
+      "tier": "strong"
+    },
+    "Jaromir Jagr": {
+      "score": 82,
+      "tier": "strong"
+    },
+    "Teemu Selanne": {
+      "score": 75,
+      "tier": "strong"
+    },
+    "Mario Lemieux": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Joe Sakic": {
+      "score": 76,
+      "tier": "strong"
+    },
+    "Martin Brodeur": {
+      "score": 74,
+      "tier": "strong"
+    },
+    "Carey Price": {
+      "score": 70,
+      "tier": "strong"
+    },
+    "Quinn Hughes": {
+      "score": 79,
+      "tier": "strong"
+    },
+    "Roman Josi": {
+      "score": 67,
+      "tier": "medium"
+    },
+    "Mikko Rantanen": {
+      "score": 75,
+      "tier": "strong"
+    },
+    "Mitch Marner": {
+      "score": 72,
+      "tier": "strong"
+    },
+    "Nicklas Backstrom": {
+      "score": 63,
+      "tier": "medium"
+    },
+    "Jake Sanderson": {
+      "score": 60,
+      "tier": "medium"
+    },
+    "Matthew Knies": {
+      "score": 68,
+      "tier": "medium"
+    },
+    "Igor Shesterkin": {
+      "score": 72,
+      "tier": "strong"
+    },
+    "Nils Höglander": {
+      "score": 24,
+      "tier": "weak"
+    }
+  },
+  "football": {
+    "Lamine Yamal": {
+      "score": 100,
+      "tier": "elite"
+    },
+    "Kylian Mbappé": {
+      "score": 98,
+      "tier": "elite"
+    },
+    "Erling Haaland": {
+      "score": 96,
+      "tier": "elite"
+    },
+    "Jude Bellingham": {
+      "score": 95,
+      "tier": "elite"
+    },
+    "Lionel Messi": {
+      "score": 95,
+      "tier": "elite"
+    },
+    "Cristiano Ronaldo": {
+      "score": 94,
+      "tier": "elite"
+    },
+    "Vinícius Júnior": {
+      "score": 93,
+      "tier": "elite"
+    },
+    "Khvicha Kvaratskhelia": {
+      "score": 92,
+      "tier": "elite"
+    },
+    "Désiré Doué": {
+      "score": 92,
+      "tier": "elite"
+    },
+    "Estêvão": {
+      "score": 92,
+      "tier": "elite"
+    },
+    "Arda Güler": {
+      "score": 91,
+      "tier": "elite"
+    },
+    "Franco Mastantuono": {
+      "score": 90,
+      "tier": "elite"
+    },
+    "Ousmane Dembélé": {
+      "score": 90,
+      "tier": "elite"
+    },
+    "Max Dowman": {
+      "score": 90,
+      "tier": "elite"
+    },
+    "Kenan Yıldız": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Harry Kane": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Gilberto Mora": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Bukayo Saka": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Lennart Karl": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Rodri": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Pedri": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Michael Olise": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Pau Cubarsí": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Raphinha": {
+      "score": 86,
+      "tier": "strong"
+    },
+    "Julián Alvarez": {
+      "score": 86,
+      "tier": "strong"
+    },
+    "Nico Williams": {
+      "score": 85,
+      "tier": "strong"
+    },
+    "Rayan Cherki": {
+      "score": 85,
+      "tier": "strong"
+    },
+    "Warren Zaïre-Emery": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Ibrahim Mbaye": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Ethan Nwaneri": {
+      "score": 83,
+      "tier": "strong"
+    },
+    "Lucas Bergvall": {
+      "score": 82,
+      "tier": "strong"
+    },
+    "Dean Huijsen": {
+      "score": 82,
+      "tier": "strong"
+    },
+    "Kobbie Mainoo": {
+      "score": 79,
+      "tier": "strong"
+    },
+    "Geovany Quenda": {
+      "score": 79,
+      "tier": "strong"
+    },
+    "Jobe Bellingham": {
+      "score": 78,
+      "tier": "strong"
+    },
+    "Ben Doak": {
+      "score": 76,
+      "tier": "medium"
+    },
+    "Quim Junyent": {
+      "score": 72,
+      "tier": "medium"
+    },
+    "Florian Wirtz": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Jamal Musiala": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Cole Palmer": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Endrick": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Viktor Gyökeres": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Alexander Isak": {
+      "score": 85,
+      "tier": "strong"
+    },
+    "Phil Foden": {
+      "score": 84,
+      "tier": "strong"
+    },
+    "Mohamed Salah": {
+      "score": 90,
+      "tier": "elite"
+    },
+    "Neymar Jr": {
+      "score": 87,
+      "tier": "strong"
+    },
+    "Ronaldinho": {
+      "score": 88,
+      "tier": "strong"
+    },
+    "Zinedine Zidane": {
+      "score": 89,
+      "tier": "strong"
+    },
+    "Thierry Henry": {
+      "score": 86,
+      "tier": "strong"
+    },
+    "Wayne Rooney": {
+      "score": 83,
+      "tier": "strong"
+    },
+    "Kevin De Bruyne": {
+      "score": 86,
+      "tier": "strong"
+    }
+  },
+  "aliases": {
+    "Connor Mcdavid": "Connor McDavid",
+    "Nathan Mackinnon": "Nathan MacKinnon",
+    "Nils Hoglander": "Nils Höglander",
+    "Kylian Mbappe": "Kylian Mbappé",
+    "Vinicius Junior": "Vinícius Júnior",
+    "Ousmane Dembele": "Ousmane Dembélé",
+    "Arda Guler": "Arda Güler",
+    "Desire Doue": "Désiré Doué",
+    "Kenan Yildiz": "Kenan Yıldız",
+    "Pau Cubarsi": "Pau Cubarsí",
+    "Warren Zaire-Emery": "Warren Zaïre-Emery",
+    "Estevao": "Estêvão",
+    "Julian Alvarez": "Julián Alvarez",
+    "Viktor Gyokeres": "Viktor Gyökeres"
+  }
+}

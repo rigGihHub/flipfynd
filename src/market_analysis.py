@@ -2,22 +2,24 @@ import statistics
 from typing import List, Optional
 
 from src.card_parser import parse_card_features
+from src.pricing import total_acquisition_cost
 
-PREMIUM_SETS = {"The Cup", "SP Authentic", "Dominion", "Premier", "Ultimate Collection", "Black Diamond"}
+PREMIUM_SETS = {
+    'The Cup', 'SP Authentic', 'Dominion', 'Premier', 'Ultimate Collection', 'Black Diamond',
+    'Topps Chrome', 'Topps Finest', 'Topps Merlin', 'Panini Prizm', 'Panini Select',
+    'Topps Museum', 'Obsidian', 'Immaculate', 'National Treasures'
+}
 
 
 def _safe_total_cost(item: dict) -> Optional[float]:
-    price = item.get("pris")
-    if price is None or not isinstance(price, (int, float)) or price <= 0:
-        return None
+    """Use the same acquisition-cost rule as the main analyzer.
 
-    shipping = item.get("frakt")
-    shipping = 0 if shipping is None else shipping
-
-    if not isinstance(shipping, (int, float)):
-        shipping = 0
-
-    return float(price + shipping)
+    Missing/invalid shipping must never silently become 0 in comp analysis,
+    otherwise local comparison prices look artificially cheap relative to the
+    main ranking.
+    """
+    total = total_acquisition_cost(item.get("pris"), item.get("frakt"))
+    return float(total) if total is not None else None
 
 
 def _normalize_features(item: dict) -> dict:
