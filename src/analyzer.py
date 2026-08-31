@@ -1514,6 +1514,47 @@ def make_decision(
     return "SKIP"
 
 
+def build_decision_diagnostics(
+    decision,
+    net_profit,
+    risk_adjusted,
+    probability,
+    player_score,
+    confidence,
+    player_match_confidence,
+    floor_profit,
+    roi,
+    total_cost,
+):
+    """Explain the most relevant gaps to the normal KÖP threshold."""
+    if decision in {"KÖP", "KÖP (starkt fynd)"}:
+        return []
+
+    diagnostics = []
+    capital = max(float(total_cost or 0), 1.0)
+    downside_ratio = float(floor_profit or 0) / capital
+
+    if confidence < 0.28:
+        diagnostics.append(f"Analyssäkerhet {confidence:.0%}; minst 28 % krävs för ett köpbeslut.")
+    if player_match_confidence == "low":
+        diagnostics.append("Spelaren är inte identifierad tillräckligt säkert för ett köpbeslut.")
+    if player_score < 35 and net_profit < 100:
+        diagnostics.append(f"Spelarefterfrågan är låg ({player_score}/100) och vinsten kompenserar inte risken.")
+    if downside_ratio < -0.25:
+        diagnostics.append(f"Konservativt scenario motsvarar {downside_ratio:.0%} av inköpskostnaden; KÖP kräver minst -25 %.")
+    if risk_adjusted < 20:
+        diagnostics.append(f"Riskjusterad vinst {risk_adjusted:.0f} kr; KÖP kräver minst 20 kr.")
+    if probability < 55:
+        diagnostics.append(f"Säljchans {probability:.0f} %; KÖP kräver minst 55 %.")
+    if net_profit < 30:
+        diagnostics.append(f"Förväntad nettovinst {net_profit:.0f} kr; KÖP kräver minst 30 kr.")
+    if roi < 0.18:
+        diagnostics.append(f"Förväntad ROI {roi:.0%}; KÖP kräver minst 18 %.")
+
+    # Keep the UI focused on the blockers that matter most.
+    return diagnostics[:5]
+
+
 def compute_exit_speed(
     liquidity,
     probability,
@@ -1882,6 +1923,19 @@ def analyze_core(
         total_cost=analysis_total_cost,
     )
 
+    decision_diagnostics = build_decision_diagnostics(
+        decision,
+        profits["net_profit_estimate"],
+        profits["risk_adjusted_profit"],
+        probability,
+        profile["score"],
+        confidence,
+        profile.get("match_confidence", "low"),
+        profits["floor_profit_estimate"],
+        profits["roi_estimate"],
+        analysis_total_cost,
+    )
+
     # Kommentaren ska bygga på samma beräknade analysvärden
     # som returneras till användaren. Tidigare skickades originalannonsen
     # in här, vilket gjorde att build_comment ofta föll tillbaka på
@@ -1928,6 +1982,12 @@ def analyze_core(
 
         "auction_buffer":
             auction_buffer,
+
+        "sale_type":
+            sale_type,
+
+        "decision_diagnostics":
+            decision_diagnostics,
 
         "player_name":
             profile["name"],

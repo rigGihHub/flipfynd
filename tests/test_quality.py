@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from src.analyzer import analyze_item, collectible_demand_factor, compute_comp_weight, compute_entry_cost, detect_sale_type, estimate_title_value, get_features, grading_trait_bonus, make_decision, premium_trait_bonus, rookie_trait_bonus
+from src.analyzer import analyze_item, build_decision_diagnostics, collectible_demand_factor, compute_comp_weight, compute_entry_cost, detect_sale_type, estimate_title_value, get_features, grading_trait_bonus, make_decision, premium_trait_bonus, rookie_trait_bonus
 from src.player_market import load_player_market, match_player, normalize_player_name
 from src.pricing import DEFAULT_UNKNOWN_SHIPPING, normalize_shipping, total_acquisition_cost
 from src.market_analysis import _safe_total_cost
@@ -275,6 +275,42 @@ class RookieProgramHierarchyTests(unittest.TestCase):
         bonus, _, _, risks = rookie_trait_bonus(features, 30, "high")
         self.assertLess(bonus, 12)
         self.assertIn("känt rookieprogram väger inte upp svag spelarefterfrågan", risks)
+
+
+class DecisionDiagnosticsTests(unittest.TestCase):
+    def test_skip_explains_buy_threshold_gaps(self):
+        diagnostics = build_decision_diagnostics(
+            "SKIP",
+            net_profit=5,
+            risk_adjusted=2,
+            probability=35,
+            player_score=80,
+            confidence=0.8,
+            player_match_confidence="high",
+            floor_profit=-10,
+            roi=0.05,
+            total_cost=100,
+        )
+        joined = " ".join(diagnostics)
+        self.assertIn("Riskjusterad vinst", joined)
+        self.assertIn("Säljchans", joined)
+        self.assertIn("nettovinst", joined)
+        self.assertIn("ROI", joined)
+
+    def test_analyzed_auction_exposes_display_and_analysis_cost(self):
+        item = {
+            "titel": "Connor McDavid Baskort UD MVP",
+            "pris": 1,
+            "frakt": 29,
+            "raw_text": "Ledande bud 1 kr",
+            "source_category": "hockey",
+            "lank": "https://example.invalid/auction-ui",
+        }
+        result = analyze_item(item, sport="hockey", strategy_mode="quick_flip", mode="fast")
+        self.assertEqual(result["sale_type"], "Auktion")
+        self.assertEqual(result["total_cost"], 30)
+        self.assertEqual(result["analysis_total_cost"], 45)
+        self.assertEqual(result["auction_buffer"], 15)
 
 
 if __name__ == "__main__":

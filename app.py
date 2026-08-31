@@ -49,7 +49,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.4.8"
+APP_VERSION = "v0.4.9"
 
 
 BASE_DIR = (
@@ -104,6 +104,20 @@ def format_last_fetch_time(value):
         return dt.astimezone().strftime("%Y-%m-%d %H:%M")
     except Exception:
         return str(value)
+
+
+def get_dataset_timestamp():
+    """Fallback when an older fetch created data before summary metadata existed."""
+    try:
+        if not DATA_PATH.exists():
+            return None
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(
+            DATA_PATH.stat().st_mtime,
+            tz=timezone.utc,
+        ).isoformat()
+    except OSError:
+        return None
 
 def get_data():
     return load_data(
@@ -901,9 +915,16 @@ _last_values = [
     for info in _fetch_state_summary.get("categories", {}).values()
     if info.get("last_fetch_at")
 ]
-_latest_fetch = format_last_fetch_time(max(_last_values)) if _last_values else "Aldrig"
+if _last_values:
+    _latest_fetch = format_last_fetch_time(max(_last_values))
+    _latest_label = "senast hämtat"
+else:
+    _dataset_timestamp = get_dataset_timestamp()
+    _latest_fetch = format_last_fetch_time(_dataset_timestamp) if _dataset_timestamp else "Aldrig"
+    _latest_label = "data senast ändrad" if _dataset_timestamp else "senast hämtat"
+
 st.caption(
-    (f"{len(data):,} annonser i analysunderlaget • senast uppdaterat {_latest_fetch}")
+    (f"{len(data):,} annonser i analysunderlaget • {_latest_label} {_latest_fetch}")
     .replace(",", " ")
 )
 
@@ -1064,6 +1085,9 @@ if st.session_state.get("results") is not None:
             decision_help = "Risk, låg efterfrågan eller för liten marginal gör kortet svagt för vidareförsäljning."
 
         total_cost = item.get("total_cost", 0) or 0
+        analysis_total_cost = item.get("analysis_total_cost", total_cost) or total_cost
+        sale_type = item.get("sale_type", "Okänd") or "Okänd"
+        auction_buffer = item.get("auction_buffer", 0) or 0
         expected = item.get("expected_resale", 0) or 0
         floor = item.get("floor_resale", 0) or 0
         best_case = item.get("best_case_resale", 0) or 0
@@ -1080,7 +1104,14 @@ if st.session_state.get("results") is not None:
 
             m1, m2 = st.columns(2)
             with m1:
-                st.metric("Köp för", f"{total_cost:.0f} kr")
+                if sale_type == "Auktion":
+                    st.metric("Aktuellt pris inkl. frakt", f"{total_cost:.0f} kr")
+                    st.caption(
+                        f"Fyndkalkylen räknar på {analysis_total_cost:.0f} kr"
+                        + (f" inklusive {auction_buffer:.0f} kr auktionsbuffert." if auction_buffer else ".")
+                    )
+                else:
+                    st.metric("Köp för inkl. frakt", f"{total_cost:.0f} kr")
             with m2:
                 st.metric("Möjlig nettovinst", f"{net_profit:.0f} kr")
 
@@ -1113,6 +1144,12 @@ if st.session_state.get("results") is not None:
                 st.caption("⚠️ Spelarnamnet identifierades med stavningstolerans – kontrollera titeln före köp.")
             elif player_match_confidence == "low":
                 st.caption("⚠️ Osäker spelaridentifiering. FlipFynd tillåter inte ett tydligt köpbeslut på den här träffen.")
+
+            decision_diagnostics = item.get("decision_diagnostics") or []
+            if decision_diagnostics and raw_decision in {"SKIP", "KANSKE"}:
+                with st.expander("Varför når kortet inte KÖP?"):
+                    for diagnostic in decision_diagnostics:
+                        st.write(f"• {diagnostic}")
 
             if item.get("kommentar"):
                 st.write(item["kommentar"])
