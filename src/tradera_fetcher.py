@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 import time
 from pathlib import Path
 from urllib.parse import urljoin
@@ -505,6 +506,57 @@ def extract_item(
     }
 
 
+def _find_system_chromium():
+    """Returnera sökväg till system-Chromium om en sådan finns.
+
+    Streamlit Community Cloud kan installera Chromium via packages.txt.
+    Lokalt lämnas detta normalt till Playwrights egen browser-bundle.
+    """
+    candidates = [
+        "chromium",
+        "chromium-browser",
+        "google-chrome",
+        "google-chrome-stable",
+    ]
+
+    for candidate in candidates:
+        path = shutil.which(candidate)
+        if path:
+            return path
+
+    return None
+
+
+def _launch_chromium(playwright, headless=True):
+    """Starta Chromium robust både lokalt och på Streamlit Cloud."""
+    system_chromium = _find_system_chromium()
+
+    launch_kwargs = {
+        "headless": headless,
+        "args": [
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+        ],
+    }
+
+    if system_chromium:
+        launch_kwargs["executable_path"] = system_chromium
+
+    try:
+        return playwright.chromium.launch(**launch_kwargs)
+    except Exception as exc:
+        message = str(exc)
+
+        if "Executable doesn't exist" in message or "playwright install" in message:
+            raise RuntimeError(
+                "Chromium saknas i körmiljön. På Streamlit Community Cloud "
+                "ska packages.txt innehålla 'chromium'. Efter ändringen krävs "
+                "en full redeploy så Linux-paketet installeras."
+            ) from exc
+
+        raise
+
+
 def fetch_tradera_category(
     category_name,
     start_page=1,
@@ -537,10 +589,9 @@ def fetch_tradera_category(
     logs = []
 
     with sync_playwright() as playwright:
-        browser = (
-            playwright.chromium.launch(
-                headless=headless
-            )
+        browser = _launch_chromium(
+            playwright,
+            headless=headless,
         )
 
         page = browser.new_page(
