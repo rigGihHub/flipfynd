@@ -37,8 +37,8 @@ from src.tradera_fetcher import (
 
 
 st.set_page_config(
-    page_title=
-        "Tradera Fyndscanner",
+    page_title="FlipFynd",
+    page_icon="🃏",
     layout="wide",
 )
 
@@ -58,6 +58,22 @@ FETCH_LOG_PATH = (
     BASE_DIR
     / "tradera_fetch_live.log"
 )
+
+
+def read_fetch_log_tail(max_lines=12):
+    """Returnera de sista raderna från hämtloggen utan att krascha UI:t."""
+    try:
+        if not FETCH_LOG_PATH.exists():
+            return ""
+
+        lines = FETCH_LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+
+        return "\n".join(lines[-max_lines:])
+    except OSError:
+        return ""
 
 
 SPORT_LABELS = {
@@ -389,11 +405,15 @@ def update_fetch_status():
             "fetch_status"
         ] = "failed"
 
+        log_tail = read_fetch_log_tail()
+
         st.session_state[
             "fetch_last_message"
         ] = (
-            "Hämtningen "
-            "misslyckades."
+            "Hämtningen misslyckades. "
+            "Öppna hämtloggen nedan för detaljer."
+            if log_tail
+            else "Hämtningen misslyckades."
         )
 
 
@@ -790,11 +810,11 @@ if (
 
 
 st.title(
-    "Tradera Fyndscanner"
+    "🃏 FlipFynd"
 )
 
 st.caption(
-    "Hockey + fotboll"
+    "Hitta undervärderade hockey- och fotbollskort för vidareförsäljning."
 )
 
 
@@ -806,6 +826,12 @@ if st.session_state.get(
             "fetch_last_message"
         ]
     )
+
+if st.session_state.get("fetch_status") == "failed":
+    log_tail = read_fetch_log_tail()
+    if log_tail:
+        with st.expander("Visa hämtfel"):
+            st.code(log_tail, language="text")
 
 
 fetch_state = (

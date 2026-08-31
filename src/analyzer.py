@@ -1850,9 +1850,26 @@ def analyze_core(
         profile["score"],
     )
 
+    # Kommentaren ska bygga på samma beräknade analysvärden
+    # som returneras till användaren. Tidigare skickades originalannonsen
+    # in här, vilket gjorde att build_comment ofta föll tillbaka på
+    # standardvärden för efterfrågan, likviditet och riskjusterad vinst.
+    comment_context = dict(item)
+    comment_context.update({
+        "demand_tier": profile["tier"],
+        "sale_probability": probability,
+        "liquidity_score": liquidity,
+        "risk_adjusted_profit": profits["risk_adjusted_profit"],
+        "quick_flip_score": quick_score,
+        "premium_flip_score": premium_score,
+        "value_source": value_source,
+        "comparable_count": comparable_count,
+        "risk_flags": risks,
+    })
+
     try:
         comment = build_comment(
-            item,
+            comment_context,
             expected_resale,
             confidence,
             reasons,

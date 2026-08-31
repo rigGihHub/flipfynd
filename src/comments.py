@@ -22,10 +22,10 @@ def build_comment(item, estimated_value, confidence, reasons):
         parts.append("Total kostnad är mycket låg, vilket begränsar nedsidan.")
     elif total_cost <= 35:
         parts.append("Total kostnad är låg nog för att annonsen kan vara värd en närmare kontroll.")
-    elif total_cost >= 250:
-        parts.append("Total kostnad är ganska hög, så annonsen måste bära sig på verklig efterfrågan och inte bara på titelns premiumsignal.")
     elif total_cost >= 500:
         parts.append("Det här är en dyr ingång för flip, vilket höjer kravet på stark spelarefterfrågan och säker exit.")
+    elif total_cost >= 250:
+        parts.append("Total kostnad är ganska hög, så annonsen måste bära sig på verklig efterfrågan och inte bara på titelns premiumsignal.")
 
     # Signaler
     if reasons:
@@ -94,7 +94,7 @@ def build_comment(item, estimated_value, confidence, reasons):
     # Datakälla / comps
     if value_source == "heuristic_only":
         parts.append("Värdet bygger främst på heuristik från titel och signaler, inte på stark lokal comp-data.")
-    elif value_source == "blended":
+    elif str(value_source).startswith("blended"):
         if comparable_count >= 6:
             parts.append("Bedömningen stöds delvis av flera liknande lokala annonser, vilket gör den något mer robust.")
         elif comparable_count >= 2:
