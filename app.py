@@ -49,7 +49,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.4.7"
+APP_VERSION = "v0.4.8"
 
 
 BASE_DIR = (
@@ -94,6 +94,17 @@ SPORT_LABELS = {
 @st.cache_data(
     show_spinner=False
 )
+
+def format_last_fetch_time(value):
+    if not value:
+        return "Aldrig"
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return dt.astimezone().strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(value)
+
 def get_data():
     return load_data(
         str(DATA_PATH)
@@ -298,7 +309,6 @@ def ensure_state():
 
 def start_fetch(
     category,
-    pages,
     headless,
     mode,
 ):
@@ -307,8 +317,6 @@ def start_fetch(
         "fetch_tradera_pages.py",
         "--category",
         category,
-        "--pages",
-        str(pages),
         "--mode",
         mode,
         "--output",
@@ -363,7 +371,7 @@ def start_fetch(
 
     st.session_state[
         "fetch_target_pages"
-    ] = pages
+    ] = 0
 
     st.session_state[
         "fetch_last_message"
@@ -887,7 +895,17 @@ if not isinstance(data, list):
     data = []
 
 st.subheader("Hitta fynd")
-st.caption(f"{len(data):,} annonser finns i analysunderlaget.".replace(",", " "))
+_fetch_state_summary = load_fetch_state()
+_last_values = [
+    info.get("last_fetch_at")
+    for info in _fetch_state_summary.get("categories", {}).values()
+    if info.get("last_fetch_at")
+]
+_latest_fetch = format_last_fetch_time(max(_last_values)) if _last_values else "Aldrig"
+st.caption(
+    (f"{len(data):,} annonser i analysunderlaget • senast uppdaterat {_latest_fetch}")
+    .replace(",", " ")
+)
 
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)
@@ -1151,31 +1169,27 @@ fetch_state = load_fetch_state()
 st.divider()
 with st.expander("⚙️ Administration & data"):
     st.caption(
-        "Här finns tekniska funktioner för att uppdatera Tradera-underlaget. Vanliga användare behöver normalt inte ändra dessa inställningar."
+        "Uppdatera Tradera-underlaget. FlipFynd går automatiskt sida för sida – du behöver inte välja antal sidor."
     )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        category = st.selectbox(
-            "Sport/kategori att hämta",
-            list(CATEGORY_URLS.keys()),
-            key="admin_category",
-        )
+    category = st.selectbox(
+        "Sport/kategori att hämta",
+        list(CATEGORY_URLS.keys()),
+        key="admin_category",
+    )
 
     info = fetch_state.get("categories", {}).get(category, {})
-    loaded_pages = info.get("loaded_pages", [])
-    max_loaded = info.get("max_page_loaded", 0)
+    last_fetch = format_last_fetch_time(info.get("last_fetch_at"))
+    last_new = int(info.get("last_new_items", 0) or 0)
+    last_pages = int(info.get("last_pages_scanned", 0) or 0)
+    last_stop = info.get("last_stop_reason", "")
 
-    with col2:
-        pages = st.selectbox(
-            "Hämta upp till sida",
-            list(range(10, 101, 10)),
-            key="admin_pages",
+    st.write(f"**Senast uppdaterad:** {last_fetch}")
+    if info.get("last_fetch_at"):
+        st.caption(
+            f"Senaste körningen: {last_pages} sidor genomsökta • {last_new} nya annonser"
+            + (f" • stopp: {last_stop}" if last_stop else "")
         )
-
-    st.write("**Inlästa sidor:** " + format_loaded_pages(loaded_pages))
-    if max_loaded:
-        st.caption(f"Nästa sida vid fortsatt hämtning: {max_loaded + 1}")
 
     with st.expander("Avancerade hämtningsinställningar"):
         headless = st.checkbox(
@@ -1185,10 +1199,14 @@ with st.expander("⚙️ Administration & data"):
         )
         mode_label = st.radio(
             "Hämtläge",
-            ["Bygg vidare", "Börja om från sida 1"],
+            ["Smart uppdatering", "Full genomsökning"],
             key="admin_mode",
+            help=(
+                "Smart uppdatering börjar på sida 1 och stoppar efter tre hela sidor utan nya annonser. "
+                "Full genomsökning fortsätter tills Tradera inte visar fler annonser, med en säkerhetsgräns på 250 sidor."
+            ),
         )
-        mode = "incremental" if mode_label == "Bygg vidare" else "full"
+        mode = "incremental" if mode_label == "Smart uppdatering" else "full"
 
     b1, b2 = st.columns(2)
     with b1:
@@ -1198,7 +1216,7 @@ with st.expander("⚙️ Administration & data"):
             use_container_width=True,
             disabled=st.session_state["fetch_status"] == "running",
         ):
-            start_fetch(category, pages, headless, mode)
+            start_fetch(category, headless, mode)
             st.rerun()
 
     with b2:

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -220,25 +221,27 @@ def mark_page_loaded(
         )
     )
 
-    pages.add(
-        int(page_number)
-    )
+    pages.add(int(page_number))
+    category_info["loaded_pages"] = sorted(pages)
+    category_info["max_page_loaded"] = max(category_info["loaded_pages"]) if category_info["loaded_pages"] else 0
+    save_fetch_state(state)
 
-    category_info["loaded_pages"] = sorted(
-        pages
-    )
 
-    category_info["max_page_loaded"] = (
-        max(
-            category_info["loaded_pages"]
-        )
-        if category_info["loaded_pages"]
-        else 0
-    )
-
-    save_fetch_state(
-        state
-    )
+def record_fetch_summary(
+    category_name,
+    pages_scanned,
+    items_seen,
+    new_items,
+    stop_reason,
+):
+    state = load_fetch_state()
+    category_info = state["categories"].setdefault(category_name, {})
+    category_info["last_fetch_at"] = datetime.now(timezone.utc).isoformat()
+    category_info["last_pages_scanned"] = int(pages_scanned)
+    category_info["last_items_seen"] = int(items_seen)
+    category_info["last_new_items"] = int(new_items)
+    category_info["last_stop_reason"] = str(stop_reason or "")
+    save_fetch_state(state)
 
 
 def format_loaded_pages(pages):
@@ -600,164 +603,144 @@ def _launch_chromium(playwright, headless=True):
 def fetch_tradera_category(
     category_name,
     start_page=1,
-    end_page=10,
+    end_page=None,
     headless=True,
+    known_links=None,
+    stop_after_known_pages=3,
+    safety_max_pages=250,
 ):
+    """Fetch a Tradera category page-by-page.
+
+    When end_page is None the crawler continues automatically until Tradera
+    returns no listings, a page repeats, several consecutive pages contain no
+    previously unseen listings, or the safety limit is reached.
+    """
     if category_name not in CATEGORY_URLS:
-        raise ValueError(
-            f"Okänd kategori: "
-            f"{category_name}"
-        )
+        raise ValueError(f"Okänd kategori: {category_name}")
 
     try:
-        from playwright.sync_api import (
-            sync_playwright
-        )
-
+        from playwright.sync_api import sync_playwright
     except ImportError as exc:
-        raise RuntimeError(
-            "Playwright saknas."
-        ) from exc
+        raise RuntimeError("Playwright saknas.") from exc
 
-    base_url = (
-        CATEGORY_URLS[
-            category_name
-        ]
-    )
-
+    base_url = CATEGORY_URLS[category_name]
     all_items = []
     logs = []
+    known_links = {str(link) for link in (known_links or set()) if link}
+    seen_this_run = set()
+    page_signatures = set()
+    consecutive_known_pages = 0
+    pages_scanned = 0
+    stop_reason = ""
+
+    if end_page is not None:
+        final_page = max(int(start_page), int(end_page))
+    else:
+        final_page = int(start_page) + max(1, int(safety_max_pages)) - 1
 
     with sync_playwright() as playwright:
-        browser = _launch_chromium(
-            playwright,
-            headless=headless,
-        )
+        browser = _launch_chromium(playwright, headless=headless)
+        page = browser.new_page(viewport={"width": 1440, "height": 1800})
 
-        page = browser.new_page(
-            viewport={
-                "width": 1440,
-                "height": 1800,
-            }
-        )
-
-        for page_number in range(
-            start_page,
-            end_page + 1,
-        ):
-            url = build_page_url(
-                base_url,
-                page_number,
-            )
-
-            message = (
-                f"Öppnar "
-                f"{category_name} "
-                f"sida {page_number}"
-            )
-
-            logs.append(
-                message
-            )
-
-            print(
-                message,
-                flush=True,
-            )
+        for page_number in range(int(start_page), final_page + 1):
+            url = build_page_url(base_url, page_number)
+            message = f"Öppnar {category_name} sida {page_number}"
+            logs.append(message)
+            print(message, flush=True)
 
             try:
-                page.goto(
-                    url,
-                    wait_until="domcontentloaded",
-                    timeout=60000,
-                )
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(1800)
 
-                page.wait_for_timeout(
-                    1800
-                )
-
-                anchors = page.locator(
-                    'a[href*="/item/"]'
-                )
-
+                anchors = page.locator('a[href*="/item/"]')
                 count = anchors.count()
-
                 page_items = []
-                seen_links = set()
+                page_links = []
 
-                for index in range(
-                    count
-                ):
-                    item = extract_item(
-                        anchors.nth(index),
-                        category_name,
-                        page_number,
-                    )
-
+                for index in range(count):
+                    item = extract_item(anchors.nth(index), category_name, page_number)
                     if not item:
                         continue
-
-                    if (
-                        item["lank"]
-                        in seen_links
-                    ):
+                    link = item.get("lank")
+                    if not link or link in page_links:
                         continue
+                    page_links.append(link)
+                    if link in seen_this_run:
+                        continue
+                    seen_this_run.add(link)
+                    page_items.append(item)
 
-                    seen_links.add(
-                        item["lank"]
-                    )
+                pages_scanned += 1
 
-                    page_items.append(
-                        item
-                    )
+                # An empty result page is Tradera's natural end marker.
+                if not page_links:
+                    stop_reason = f"inga annonser på sida {page_number}"
+                    message = f"Sida {page_number}: inga annonser – slut på resultat"
+                    logs.append(message)
+                    print(message, flush=True)
+                    break
 
-                all_items.extend(
-                    page_items
-                )
+                signature = tuple(page_links)
+                if signature in page_signatures:
+                    stop_reason = f"upprepad resultatsida vid sida {page_number}"
+                    message = f"Sida {page_number}: samma annonser som tidigare sida – stoppar"
+                    logs.append(message)
+                    print(message, flush=True)
+                    break
+                page_signatures.add(signature)
 
-                mark_page_loaded(
-                    category_name,
-                    page_number,
-                )
+                all_items.extend(page_items)
+                mark_page_loaded(category_name, page_number)
+
+                unseen_on_page = sum(1 for link in page_links if link not in known_links)
+                if known_links and unseen_on_page == 0:
+                    consecutive_known_pages += 1
+                else:
+                    consecutive_known_pages = 0
 
                 message = (
-                    f"Sida "
-                    f"{page_number}: "
-                    f"{len(page_items)} annonser"
+                    f"Sida {page_number}: {len(page_items)} annonser, "
+                    f"{unseen_on_page} nya jämfört med sparad data"
                 )
+                logs.append(message)
+                print(message, flush=True)
 
-                logs.append(
-                    message
-                )
-
-                print(
-                    message,
-                    flush=True,
-                )
+                # Smart incremental stop: once several whole pages only contain
+                # listings already present locally, deeper pages are unlikely to
+                # add fresh listings. Full scans pass stop_after_known_pages=0.
+                if (
+                    end_page is None
+                    and stop_after_known_pages
+                    and known_links
+                    and consecutive_known_pages >= int(stop_after_known_pages)
+                ):
+                    stop_reason = f"{consecutive_known_pages} sidor i rad utan nya annonser"
+                    message = f"Stoppar smart uppdatering: {stop_reason}."
+                    logs.append(message)
+                    print(message, flush=True)
+                    break
 
             except Exception as exc:
-                message = (
-                    f"Fel på sida "
-                    f"{page_number}: "
-                    f"{exc}"
-                )
+                message = f"Fel på sida {page_number}: {exc}"
+                logs.append(message)
+                print(message, flush=True)
+                # Do not silently skip through many pages after a navigation error.
+                stop_reason = f"fel på sida {page_number}"
+                break
 
-                logs.append(
-                    message
-                )
-
-                print(
-                    message,
-                    flush=True,
-                )
-
-            time.sleep(
-                0.3
-            )
+            time.sleep(0.3)
+        else:
+            stop_reason = f"säkerhetsgräns {safety_max_pages} sidor" if end_page is None else f"angiven slutsida {end_page}"
 
         browser.close()
 
-    return (
-        all_items,
-        logs,
+    new_count = sum(1 for item in all_items if item.get("lank") not in known_links)
+    record_fetch_summary(
+        category_name,
+        pages_scanned=pages_scanned,
+        items_seen=len(all_items),
+        new_items=new_count,
+        stop_reason=stop_reason,
     )
+    return all_items, logs
+
