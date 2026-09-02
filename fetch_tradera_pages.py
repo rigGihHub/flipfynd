@@ -13,25 +13,47 @@ from src.tradera_fetcher import (
     record_fetch_progress,
     finish_fetch_category,
     finish_fetch_run,
+    prune_active_items,
+    SMART_MAX_PAGES,
+    MARKET_BATCH_PAGES,
+    get_market_sync_status,
+    mark_market_batch,
+    SMART_STOP_AFTER_KNOWN_PAGES,
 )
 
 
-def fetch_one_category(category, mode, headed, output_path, safety_max_pages, detail_limit=12):
+def fetch_one_category(category, mode, headed, output_path, safety_max_pages, detail_limit=6, smart_max_pages=SMART_MAX_PAGES, market_batch_pages=MARKET_BATCH_PAGES):
     old_items = load_items(output_path)
     known_links = {item.get("lank") for item in old_items if item.get("lank")}
 
-    stop_after_known_pages = 3 if mode == "incremental" else 0
-    print(
-        f"Startar {'smart uppdatering' if mode == 'incremental' else 'full genomsökning'}: "
-        f"{category}, sida 1 och framåt",
-        flush=True,
-    )
+    stop_after_known_pages = SMART_STOP_AFTER_KNOWN_PAGES if mode == "incremental" else 0
+    if mode == "market_batch":
+        sync = get_market_sync_status(category)
+        if sync["complete"]:
+            print(f"Marknaden redan komplett för {category} – hoppar över.", flush=True)
+            return 0, 0, len(old_items)
+        start_page = sync["next_page"]
+        end_page = start_page + max(1, int(market_batch_pages)) - 1
+        print(
+            f"Startar marknadsomgång: {category}, sida {start_page}-{end_page}",
+            flush=True,
+        )
+    else:
+        start_page = 1
+        end_page = None
+        print(
+            f"Startar {'smart uppdatering' if mode == 'incremental' else 'full genomsökning'}: "
+            f"{category}, sida 1 och framåt",
+            flush=True,
+        )
 
     start_fetch_category(category)
 
     def persist_page(**progress):
         current_items = load_items(output_path)
         merged_page = merge_items(current_items, progress["page_items"])
+        # Keep the full archive on disk. Interactive analysis applies its own
+        # bounded working set, so older market pages are not deleted.
         save_items(merged_page, output_path)
         record_fetch_progress(
             category_name=category,
@@ -47,19 +69,31 @@ def fetch_one_category(category, mode, headed, output_path, safety_max_pages, de
 
     new_items, logs = fetch_tradera_category(
         category_name=category,
-        start_page=1,
-        end_page=None,
+        start_page=start_page,
+        end_page=end_page,
         headless=not headed,
         known_links=known_links,
         stop_after_known_pages=stop_after_known_pages,
         safety_max_pages=max(10, safety_max_pages),
         page_callback=persist_page,
-        detail_limit=detail_limit,
+        detail_limit=(min(detail_limit, 2) if mode == "market_batch" else detail_limit),
+        smart_max_pages=(smart_max_pages if mode == "incremental" else None),
     )
 
     merged_items = merge_items(load_items(output_path), new_items)
     save_items(merged_items, output_path)
     truly_new = sum(1 for item in new_items if item.get("lank") not in known_links)
+
+    if mode == "market_batch":
+        info = load_fetch_state().get("categories", {}).get(category, {})
+        reason = str(info.get("last_stop_reason") or "")
+        scanned = int(info.get("last_pages_scanned", 0) or 0)
+        actual_end = start_page + max(0, scanned - 1)
+        complete = (
+            reason.startswith("inga annonser")
+            or reason.startswith("upprepad resultatsida")
+        )
+        mark_market_batch(category, start_page, actual_end, reason, complete=complete)
 
     print(f"Nya annonser ({category}): {truly_new}", flush=True)
     print(f"Annonser lästa ({category}): {len(new_items)}", flush=True)
@@ -88,15 +122,27 @@ def main():
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--category", choices=list(CATEGORY_URLS.keys()))
     scope.add_argument("--all-categories", action="store_true")
-    parser.add_argument("--mode", choices=["incremental", "full"], default="incremental")
+    parser.add_argument("--mode", choices=["incremental", "market_batch", "full"], default="incremental")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--output", default="tradera_data.json")
     parser.add_argument("--safety-max-pages", type=int, default=250)
     parser.add_argument(
         "--detail-limit",
         type=int,
-        default=12,
+        default=6,
         help="Max antal prioriterade annonser per kategori som öppnas för detaljberikning.",
+    )
+    parser.add_argument(
+        "--market-batch-pages",
+        type=int,
+        default=MARKET_BATCH_PAGES,
+        help="Antal Tradera-sidor per steg i Läs in hela marknaden.",
+    )
+    parser.add_argument(
+        "--smart-max-pages",
+        type=int,
+        default=SMART_MAX_PAGES,
+        help="Max antal sidor per sport i Smart uppdatering. Full genomsökning påverkas inte.",
     )
     args = parser.parse_args()
 
@@ -119,6 +165,8 @@ def main():
                 output_path=output_path,
                 safety_max_pages=args.safety_max_pages,
                 detail_limit=max(0, args.detail_limit),
+                smart_max_pages=max(1, args.smart_max_pages),
+                market_batch_pages=max(1, args.market_batch_pages),
             )
             total_new += new_count
             total_seen += seen_count

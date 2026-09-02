@@ -55,6 +55,12 @@ from src.tradera_fetcher import (
     clear_all_loaded_data,
     format_loaded_pages,
     load_fetch_state,
+    prune_active_items,
+    SMART_MAX_PAGES,
+    MAX_ACTIVE_ITEMS_PER_CATEGORY,
+    MARKET_BATCH_PAGES,
+    get_market_sync_status,
+    reset_market_sync,
 )
 
 
@@ -65,7 +71,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.1"
+APP_VERSION = "v0.11.3"
 
 
 BASE_DIR = (
@@ -595,8 +601,15 @@ def analyze_data(
     patch_only,
     auto_only,
 ):
+    raw_total_items = len(data)
+    # Keep interactive analysis bounded even if an older cloud runtime still
+    # contains a very large crawl. This is a CPU guard, not a ranking signal.
+    data = prune_active_items(data, max_per_category=MAX_ACTIVE_ITEMS_PER_CATEGORY)
     debug = {
         "total_items":
+            raw_total_items,
+
+        "performance_items":
             len(data),
 
         "after_sport":
@@ -1163,6 +1176,18 @@ st.caption(
     ).replace(",", " ")
 )
 
+if len(data) > MAX_ACTIVE_ITEMS_PER_CATEGORY * 2:
+    st.info(
+        "⚡ Prestandaskydd aktivt: FlipFynd analyserar den senaste begränsade delen av marknaden "
+        "i stället för att CPU-analysera hela den äldre masshämtningen på en gång."
+    )
+
+if _sport_counts["hockey"] == 0 and _sport_counts["football"] > 100:
+    st.warning(
+        "🏒 Hockeydata saknas i nuvarande dataset. Nästa smarta uppdatering validerar sport direkt "
+        "mot Traderas kategori-id och stoppar fel sport från att blandas in."
+    )
+
 _detail_enriched_count = sum(
     1 for _item in data
     if _item.get("detail_enrichment_status") == "ok"
@@ -1230,6 +1255,39 @@ else:
         ):
             start_fetch("__all__", True, "incremental")
             st.rerun()
+
+    sync_h = get_market_sync_status("Hockey - NHL")
+    sync_f = get_market_sync_status("Fotboll")
+    if not (sync_h["complete"] and sync_f["complete"]):
+        st.markdown(
+            '<div class="ff-data-card"><h3>📡 MARKNADSSCANNER</h3>'
+            '<p>Läs in hela Tradera-marknaden stegvis utan en stor CPU-topp. Varje omgång fortsätter där föregående slutade.</p></div>',
+            unsafe_allow_html=True,
+        )
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            st.caption(
+                f"🏒 Hockey • nästa sida {sync_h['next_page']}"
+                + (" • KLAR" if sync_h["complete"] else "")
+            )
+        with c2:
+            st.caption(
+                f"⚽ Fotboll • nästa sida {sync_f['next_page']}"
+                + (" • KLAR" if sync_f["complete"] else "")
+            )
+        with c3:
+            if st.button(
+                "▶ Läs nästa omgång",
+                use_container_width=True,
+                disabled=_fetch_status == "running",
+                key="top_market_batch",
+            ):
+                start_fetch("__all__", True, "market_batch")
+                st.rerun()
+        st.caption(
+            f"En omgång läser högst {MARKET_BATCH_PAGES} sidor per sport. Alla annonser sparas; "
+            f"själva fyndanalysen arbetar fortfarande med högst {MAX_ACTIVE_ITEMS_PER_CATEGORY} nyare annonser per sport för att hålla appen snabb."
+        )
 
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)
@@ -2387,7 +2445,8 @@ st.divider()
 with st.expander("⚙️ Administration & data"):
     st.caption(
         "Standardvalet uppdaterar både hockey och fotboll automatiskt. "
-        "FlipFynd går sida för sida – du behöver inte välja antal sidor."
+        f"Smart uppdatering läser högst {SMART_MAX_PAGES} av de nyaste sidorna per sport och stoppar tidigare "
+        "när marknaden redan är känd. Det håller Streamlit-belastningen nere."
     )
 
     category_infos = fetch_state.get("categories", {})
@@ -2422,14 +2481,19 @@ with st.expander("⚙️ Administration & data"):
         )
         mode_label = st.radio(
             "Hämtläge",
-            ["Smart uppdatering", "Full genomsökning"],
+            ["Smart uppdatering", "Läs nästa marknadsomgång", "Full genomsökning"],
             key="admin_mode",
             help=(
-                "Smart uppdatering börjar på sida 1 och stoppar efter tre hela sidor utan nya annonser. "
-                "Full genomsökning fortsätter tills Tradera inte visar fler annonser, med en säkerhetsgräns på 250 sidor per sport."
+                f"Smart uppdatering börjar på sida 1, stoppar efter två hela sidor utan nya annonser och läser "
+                f"max {SMART_MAX_PAGES} sidor per sport. Läs nästa marknadsomgång fortsätter i block om {MARKET_BATCH_PAGES} sidor och sparar hela marknaden. "
+                "Full genomsökning är endast för felsökning och kan vara tung på Streamlit Cloud."
             ),
         )
-        mode = "incremental" if mode_label == "Smart uppdatering" else "full"
+        mode = (
+            "incremental" if mode_label == "Smart uppdatering"
+            else "market_batch" if mode_label == "Läs nästa marknadsomgång"
+            else "full"
+        )
         single_category = st.selectbox(
             "Uppdatera endast en sport",
             list(CATEGORY_URLS.keys()),
@@ -2465,6 +2529,18 @@ with st.expander("⚙️ Administration & data"):
         ):
             stop_fetch()
             st.rerun()
+
+    sync_cols = st.columns(2)
+    for idx, category_name in enumerate(CATEGORY_URLS.keys()):
+        sync = get_market_sync_status(category_name)
+        sport_name = "Hockey" if "Hockey" in category_name else "Fotboll"
+        with sync_cols[idx]:
+            state_text = "KLAR" if sync["complete"] else f"nästa sida {sync['next_page']}"
+            st.caption(f"📡 {sport_name}: {state_text} • inlästa sidor: {format_loaded_pages(sync['loaded_pages'])}")
+
+    if st.button("↺ Börja om full marknadsläsning", use_container_width=True, disabled=st.session_state["fetch_status"] == "running"):
+        reset_market_sync()
+        st.success("Marknadsscannerns fortsättningspunkt är återställd. Sparade annonser är kvar.")
 
     with st.expander("Importera verifierade sålda comps"):
         st.caption(

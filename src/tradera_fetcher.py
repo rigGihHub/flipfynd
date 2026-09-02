@@ -23,6 +23,16 @@ CATEGORY_URLS = {
     "Fotboll": "https://www.tradera.com/category/293311",
 }
 
+CATEGORY_IDS = {
+    "293316": "Hockey - NHL",
+    "293311": "Fotboll",
+}
+
+SMART_MAX_PAGES = 12
+SMART_STOP_AFTER_KNOWN_PAGES = 2
+MAX_ACTIVE_ITEMS_PER_CATEGORY = 1500
+MARKET_BATCH_PAGES = 12
+
 
 def normalize_space(value):
     return re.sub(
@@ -30,6 +40,52 @@ def normalize_space(value):
         " ",
         str(value or ""),
     ).strip()
+
+
+
+
+def infer_category_from_item_url(url, fallback=None):
+    """Infer sport category from Tradera's item URL when possible.
+
+    Item URLs include the category id, e.g. /item/293316/... for hockey.
+    This gives us a second guard against a redirect or caller/category mismatch.
+    """
+    match = re.search(r"/item/(\d+)/", str(url or ""))
+    if match:
+        return CATEGORY_IDS.get(match.group(1), fallback)
+    return fallback
+
+
+def prune_active_items(items, max_per_category=MAX_ACTIVE_ITEMS_PER_CATEGORY):
+    """Bound the active-listing dataset so cloud analysis stays lightweight.
+
+    Lower Tradera page numbers are newer because the category scan starts from
+    the newest listings. We keep the newest bounded slice independently per
+    sport and preserve unknown categories in a small fallback bucket.
+    """
+    limit = max(1, int(max_per_category or MAX_ACTIVE_ITEMS_PER_CATEGORY))
+    buckets = {}
+    for pos, item in enumerate(items or []):
+        clone = dict(item)
+        category = infer_category_from_item_url(
+            clone.get("lank"),
+            clone.get("source_category") or "Okänd",
+        )
+        clone["source_category"] = category
+        page = clone.get("sida")
+        try:
+            page_num = int(page)
+        except (TypeError, ValueError):
+            page_num = 999999
+        enriched = 0 if clone.get("detail_enrichment_status") == "ok" else 1
+        buckets.setdefault(category, []).append((page_num, enriched, pos, clone))
+
+    kept = []
+    for category, rows in buckets.items():
+        category_limit = limit if category in CATEGORY_URLS else min(limit, 300)
+        rows.sort(key=lambda row: (row[0], row[1], row[2]))
+        kept.extend(row[3] for row in rows[:category_limit])
+    return kept
 
 
 def parse_price(text):
@@ -387,6 +443,53 @@ def format_loaded_pages(pages):
     )
 
 
+def get_market_sync_status(category_name):
+    """Return resumable full-market crawl status for one sport."""
+    state = load_fetch_state()
+    info = state.setdefault("categories", {}).setdefault(category_name, {})
+    loaded_pages = sorted({int(p) for p in info.get("loaded_pages", []) if str(p).isdigit()})
+    max_loaded = max(loaded_pages) if loaded_pages else 0
+    next_page = int(info.get("market_next_page", max_loaded + 1) or (max_loaded + 1))
+    return {
+        "loaded_pages": loaded_pages,
+        "max_page_loaded": max_loaded,
+        "next_page": max(1, next_page),
+        "complete": bool(info.get("market_complete", False)),
+        "completed_at": info.get("market_completed_at"),
+        "last_batch_start": info.get("market_last_batch_start"),
+        "last_batch_end": info.get("market_last_batch_end"),
+    }
+
+
+def mark_market_batch(category_name, start_page, end_page, stop_reason="", complete=False):
+    state = load_fetch_state()
+    info = state.setdefault("categories", {}).setdefault(category_name, {})
+    info["market_last_batch_start"] = int(start_page)
+    info["market_last_batch_end"] = int(end_page)
+    info["market_next_page"] = int(end_page) + 1
+    if complete:
+        info["market_complete"] = True
+        info["market_completed_at"] = _utc_now_iso()
+    elif str(stop_reason or "").startswith("inga annonser"):
+        info["market_complete"] = True
+        info["market_completed_at"] = _utc_now_iso()
+    save_fetch_state(state)
+
+
+def reset_market_sync(category_name=None):
+    """Restart the resumable market scan without deleting already saved ads."""
+    state = load_fetch_state()
+    names = [category_name] if category_name else list(CATEGORY_URLS.keys())
+    for name in names:
+        info = state.setdefault("categories", {}).setdefault(name, {})
+        info["market_next_page"] = 1
+        info["market_complete"] = False
+        info.pop("market_completed_at", None)
+        info.pop("market_last_batch_start", None)
+        info.pop("market_last_batch_end", None)
+    save_fetch_state(state)
+
+
 def load_items(
     path=DATA_PATH,
 ):
@@ -643,7 +746,7 @@ def extract_item(
         "image_urls": image_urls,
         "image_alts": image_alts,
         "sida": page_number,
-        "source_category": category_name,
+        "source_category": infer_category_from_item_url(href, category_name),
     }
 
 
@@ -741,10 +844,11 @@ def fetch_tradera_category(
     end_page=None,
     headless=True,
     known_links=None,
-    stop_after_known_pages=3,
+    stop_after_known_pages=SMART_STOP_AFTER_KNOWN_PAGES,
     safety_max_pages=250,
     page_callback=None,
-    detail_limit=12,
+    detail_limit=6,
+    smart_max_pages=SMART_MAX_PAGES,
 ):
     """Fetch a Tradera category page-by-page.
 
@@ -773,7 +877,10 @@ def fetch_tradera_category(
     if end_page is not None:
         final_page = max(int(start_page), int(end_page))
     else:
-        final_page = int(start_page) + max(1, int(safety_max_pages)) - 1
+        effective_pages = max(1, int(safety_max_pages))
+        if stop_after_known_pages and smart_max_pages:
+            effective_pages = min(effective_pages, max(1, int(smart_max_pages)))
+        final_page = int(start_page) + effective_pages - 1
 
     with sync_playwright() as playwright:
         browser = _launch_chromium(playwright, headless=headless)
@@ -797,6 +904,11 @@ def fetch_tradera_category(
                 for index in range(count):
                     item = extract_item(anchors.nth(index), category_name, page_number)
                     if not item:
+                        continue
+                    if item.get("source_category") != category_name:
+                        # Never silently ingest another sport through a redirect
+                        # or malformed category page. This also makes sport counts
+                        # trustworthy in the UI.
                         continue
                     link = item.get("lank")
                     if not link or link in page_links:
@@ -875,9 +987,12 @@ def fetch_tradera_category(
                 stop_reason = f"fel på sida {page_number}"
                 break
 
-            time.sleep(0.3)
+            time.sleep(0.08)
         else:
-            stop_reason = f"säkerhetsgräns {safety_max_pages} sidor" if end_page is None else f"angiven slutsida {end_page}"
+            if end_page is None and stop_after_known_pages and smart_max_pages:
+                stop_reason = f"smart sidgräns {min(int(safety_max_pages), int(smart_max_pages))} sidor"
+            else:
+                stop_reason = f"säkerhetsgräns {safety_max_pages} sidor" if end_page is None else f"angiven slutsida {end_page}"
 
         detail_summary = {"attempted": 0, "enriched": 0, "failed": 0}
         if int(detail_limit or 0) > 0 and all_items:
