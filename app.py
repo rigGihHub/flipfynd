@@ -65,7 +65,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.10.8"
+APP_VERSION = "v0.11.1"
 
 
 BASE_DIR = (
@@ -169,12 +169,14 @@ def get_dataset_timestamp():
     except OSError:
         return None
 
+@st.cache_data(show_spinner=False)
 def get_data():
     return load_data(
         str(DATA_PATH)
     )
 
 
+@st.cache_data(show_spinner=False)
 def get_sold_comp_data():
     return load_sold_comps(str(SOLD_COMPS_PATH))
 
@@ -376,6 +378,7 @@ def start_fetch(
     headless,
     mode,
 ):
+    """Starta Tradera-hämtning utan att ett startfel kraschar hela appen."""
     command = [
         sys.executable,
         "fetch_tradera_pages.py",
@@ -394,62 +397,49 @@ def start_fetch(
     ])
 
     if not headless:
-        command.append(
-            "--headed"
-        )
-
-    log_file = open(
-        FETCH_LOG_PATH,
-        "w",
-        encoding="utf-8",
-    )
+        command.append("--headed")
 
     creationflags = 0
+    if sys.platform.startswith("win"):
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
-    if sys.platform.startswith(
-        "win"
-    ):
-        creationflags = (
-            subprocess
-            .CREATE_NEW_PROCESS_GROUP
+    try:
+        log_file = open(
+            FETCH_LOG_PATH,
+            "w",
+            encoding="utf-8",
         )
+        process = subprocess.Popen(
+            command,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(BASE_DIR),
+            creationflags=creationflags,
+        )
+    except Exception as exc:
+        try:
+            log_file.close()
+        except Exception:
+            pass
+        st.session_state["fetch_process"] = None
+        st.session_state["fetch_status"] = "failed"
+        st.session_state["fetch_last_message"] = (
+            "Tradera-hämtningen kunde inte startas. "
+            f"Teknisk orsak: {type(exc).__name__}: {exc}"
+        )
+        return False
 
-    process = subprocess.Popen(
-        command,
-        stdout=log_file,
-        stderr=
-            subprocess.STDOUT,
-        text=True,
-        cwd=str(
-            BASE_DIR
-        ),
-        creationflags=
-            creationflags,
-    )
-
-    st.session_state[
-        "fetch_process"
-    ] = process
-
-    st.session_state[
-        "fetch_status"
-    ] = "running"
-
-    st.session_state[
-        "fetch_category"
-    ] = category
-
-    st.session_state[
-        "fetch_target_pages"
-    ] = 0
-
-    st.session_state[
-        "fetch_last_message"
-    ] = (
+    st.session_state["fetch_process"] = process
+    st.session_state["fetch_status"] = "running"
+    st.session_state["fetch_category"] = category
+    st.session_state["fetch_target_pages"] = 0
+    st.session_state["fetch_last_message"] = (
         "Hämtar hockey och fotboll..."
         if category == "__all__"
         else f"Hämtar {category}..."
     )
+    return True
 
 
 def update_fetch_status():
@@ -939,15 +929,106 @@ if (
 st.markdown(
     """
     <style>
+    :root {
+        --ff-ink: #16171a;
+        --ff-paper: #f4ead7;
+        --ff-cream: #fff6e5;
+        --ff-orange: #e86f3b;
+        --ff-teal: #2f8f83;
+        --ff-gold: #e1ad4d;
+        --ff-panel: #202329;
+        --ff-panel-2: #292d34;
+        --ff-line: rgba(244, 234, 215, 0.20);
+    }
+    .stApp {
+        background:
+            linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px),
+            #111317;
+        background-size: 24px 24px;
+    }
+    .block-container {
+        max-width: 1500px;
+        padding-top: 1.5rem;
+    }
     .ff-hero {
-        padding: 0.2rem 0 0.8rem 0;
+        position: relative;
+        overflow: hidden;
+        border: 2px solid var(--ff-paper);
+        border-radius: 6px;
+        padding: 1.05rem 1.25rem 1rem 1.25rem;
+        margin: 0.1rem 0 0.75rem 0;
+        background: linear-gradient(135deg, #1b1d22 0%, #22262b 100%);
+        box-shadow: 7px 7px 0 rgba(232,111,59,.34);
+    }
+    .ff-hero:before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 7px;
+        background: linear-gradient(90deg, var(--ff-orange) 0 35%, var(--ff-gold) 35% 58%, var(--ff-teal) 58% 100%);
     }
     .ff-hero h1 {
-        margin-bottom: 0.15rem;
+        margin: 0.15rem 0 0.2rem 0;
+        color: var(--ff-cream);
+        letter-spacing: .02em;
+        font-size: clamp(2rem, 4vw, 3.35rem);
+        line-height: 1;
+        text-shadow: 3px 3px 0 rgba(232,111,59,.38);
+    }
+    .ff-kicker {
+        color: var(--ff-gold);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: .77rem;
+        font-weight: 800;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        margin-bottom: .35rem;
     }
     .ff-muted {
-        color: #8b949e;
-        font-size: 0.92rem;
+        color: #c9c1b5;
+        font-size: 0.94rem;
+        max-width: 850px;
+    }
+    .ff-status-strip {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: .78rem;
+        letter-spacing: .04em;
+        color: #d6cdbf;
+        margin: .2rem 0 .8rem 0;
+    }
+    h1, h2, h3 {
+        letter-spacing: -.015em;
+    }
+    div[data-testid="stForm"], div[data-testid="stExpander"] {
+        border-color: var(--ff-line);
+        border-radius: 6px;
+    }
+    div[data-testid="stMetric"] {
+        border: 1px solid var(--ff-line) !important;
+        border-radius: 5px !important;
+        padding: 0.6rem 0.7rem !important;
+        background: rgba(255,246,229,.025);
+        box-shadow: 3px 3px 0 rgba(47,143,131,.10);
+    }
+    div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {
+        border-radius: 4px;
+        border-width: 1px;
+        font-weight: 760;
+        letter-spacing: .015em;
+        min-height: 2.65rem;
+    }
+    div[data-testid="stButton"] > button[kind="primary"] {
+        background: var(--ff-orange);
+        border-color: #ffad73;
+        color: #16171a;
+        box-shadow: 4px 4px 0 #7d3c27;
+    }
+    div[data-testid="stButton"] > button[kind="primary"]:hover {
+        background: #f47f49;
+        border-color: var(--ff-cream);
+        transform: translate(-1px,-1px);
+        box-shadow: 5px 5px 0 #7d3c27;
     }
     .ff-decision {
         font-size: 1.05rem;
@@ -960,10 +1041,56 @@ st.markdown(
         line-height: 1.3;
         margin-bottom: 0.45rem;
     }
-    div[data-testid="stMetric"] {
-        border: 1px solid rgba(128, 128, 128, 0.22);
-        border-radius: 0.65rem;
-        padding: 0.55rem 0.65rem;
+
+    .ff-result-head {
+        position: relative;
+        border: 2px solid var(--ff-paper);
+        border-bottom: 5px solid var(--ff-orange);
+        border-radius: 7px;
+        padding: .85rem 1rem .8rem 1rem;
+        margin: .1rem 0 .65rem 0;
+        background:
+            repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0 8px, transparent 8px 16px),
+            linear-gradient(135deg, #22262c, #191c20);
+        box-shadow: 6px 6px 0 rgba(47,143,131,.20);
+    }
+    .ff-result-topline { display:flex; gap:.55rem; align-items:center; flex-wrap:wrap; margin-bottom:.45rem; }
+    .ff-rank-chip, .ff-decision-chip, .ff-score-chip {
+        display:inline-block; padding:.18rem .46rem; border:1px solid var(--ff-paper); border-radius:3px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size:.73rem; font-weight:900; letter-spacing:.06em; text-transform:uppercase;
+    }
+    .ff-rank-chip { background:var(--ff-gold); color:#171717; border-color:#ffd984; }
+    .ff-score-chip { background:var(--ff-teal); color:#081917; border-color:#74d2c7; }
+    .ff-decision-chip.buy { background:#6ecb8b; color:#102015; border-color:#b5f0c6; }
+    .ff-decision-chip.watch { background:#f0c75e; color:#251f0a; border-color:#ffe7a3; }
+    .ff-decision-chip.skip { background:#d66d61; color:#26100e; border-color:#f0a39a; }
+    .ff-result-title { color:var(--ff-cream); font-weight:850; font-size:1.22rem; line-height:1.25; margin:.15rem 0 .25rem 0; }
+    .ff-result-sub { color:#c9c1b5; font-size:.82rem; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+    .ff-quick-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.45rem; margin:.65rem 0 .5rem 0; }
+    .ff-quick-cell { border:1px solid var(--ff-line); background:rgba(255,246,229,.035); padding:.5rem .55rem; min-height:62px; }
+    .ff-quick-label { color:#aaa298; font-size:.67rem; text-transform:uppercase; letter-spacing:.08em; }
+    .ff-quick-value { color:var(--ff-cream); font-size:1rem; font-weight:850; margin-top:.08rem; }
+    .ff-retro-rule { height:5px; margin:.6rem 0 .15rem 0; background:linear-gradient(90deg,var(--ff-orange) 0 38%,var(--ff-gold) 38% 66%,var(--ff-teal) 66% 100%); }
+    @media (max-width: 800px) {
+        .ff-quick-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .ff-result-title { font-size:1.08rem; }
+    }
+
+    .ff-data-card {
+        border: 2px solid var(--ff-gold);
+        border-radius: 6px;
+        padding: 1rem 1.1rem 0.45rem 1.1rem;
+        margin: 0.55rem 0 1rem 0;
+        background: linear-gradient(135deg, rgba(225,173,77,.10), rgba(47,143,131,.07));
+        box-shadow: 5px 5px 0 rgba(225,173,77,.14);
+    }
+    .ff-data-card h3 {
+        margin: 0 0 0.25rem 0;
+    }
+    .ff-data-card p {
+        margin: 0 0 0.65rem 0;
+        color: #d1c8bb;
     }
     @media (max-width: 640px) {
         .ff-card-title { font-size: 1.05rem; }
@@ -977,30 +1104,22 @@ st.markdown(
 st.markdown(
     """
     <div class="ff-hero">
-      <h1>🃏 FlipFynd</h1>
+      <div class="ff-kicker">COLLECTOR MARKET SCANNER // EST. 2026</div>
+      <h1>🃏 FLIPFYND</h1>
       <div class="ff-muted">Hitta samlarkort med potential för vidareförsäljning – rankade efter pris, efterfrågan, säljsannolikhet och möjlig vinst.</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
-st.caption(f"{APP_VERSION} • Hockey + fotboll")
+st.markdown(f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; HOCKEY + FOTBOLL &nbsp;•&nbsp; TRADERA SCANNER</div>', unsafe_allow_html=True)
 
 if st.session_state.get("fetch_last_message"):
     message = st.session_state["fetch_last_message"]
     if st.session_state.get("fetch_status") == "finished":
         st.success(message)
-    elif st.session_state.get("fetch_status") == "failed":
-        st.error(message)
-    else:
+    elif st.session_state.get("fetch_status") == "running":
         live_message = fetch_progress_message()
         st.info(live_message or message)
-
-if st.session_state.get("fetch_status") == "failed":
-    log_tail = read_fetch_log_tail()
-    if log_tail:
-        with st.expander("Visa tekniska detaljer om hämtfelet"):
-            st.code(log_tail, language="text")
-
 
 data = get_data()
 if not isinstance(data, list):
@@ -1053,6 +1172,64 @@ if _detail_enriched_count:
         f"🔍 {_detail_enriched_count} annonser har berikats från själva Tradera-annonsen "
         "med extra beskrivning, bilder och metadata när det varit möjligt."
     )
+
+_fetch_status = st.session_state.get("fetch_status", "idle")
+_has_data = len(data) > 0
+
+if not _has_data:
+    st.markdown(
+        """
+        <div class="ff-data-card">
+          <h3>📥 Börja här – hämta annonser från Tradera</h3>
+          <p>FlipFynd har inga annonser inlästa ännu. Hämta hockey och fotboll först; därefter kan appen söka och ranka fynd.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if _fetch_status == "running":
+        st.info(fetch_progress_message() or "Hämtningen pågår… Nya annonser visas automatiskt när de sparas.")
+        if st.button("⏹ Avbryt hämtning", use_container_width=True, key="top_stop_fetch"):
+            stop_fetch()
+            st.rerun()
+    else:
+        primary_label = (
+            "🔄 Försök hämta annonser igen"
+            if _fetch_status == "failed"
+            else "🔄 Hämta hockey + fotboll från Tradera"
+        )
+        if st.button(
+            primary_label,
+            type="primary",
+            use_container_width=True,
+            key="top_fetch_all",
+        ):
+            start_fetch("__all__", True, "incremental")
+            st.rerun()
+        st.caption("Smart uppdatering används automatiskt. Du behöver inte välja sidor eller göra några tekniska inställningar.")
+
+    if _fetch_status == "failed":
+        st.error(
+            st.session_state.get("fetch_last_message")
+            or "Tradera-hämtningen misslyckades. Försök igen eller öppna de tekniska detaljerna nedan."
+        )
+        log_tail = read_fetch_log_tail()
+        if log_tail:
+            with st.expander("Tekniska detaljer – använd detta om felet återkommer"):
+                st.code(log_tail, language="text")
+else:
+    top_left, top_right = st.columns([4, 1])
+    with top_left:
+        st.caption("✅ Annonsdata finns inläst. Du kan söka fynd direkt eller uppdatera marknaden.")
+    with top_right:
+        if st.button(
+            "🔄 Uppdatera annonser",
+            use_container_width=True,
+            disabled=_fetch_status == "running",
+            key="top_refresh_data",
+        ):
+            start_fetch("__all__", True, "incremental")
+            st.rerun()
 
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)
@@ -1140,9 +1317,10 @@ with st.form("analysis_form"):
     full_limit = 12
 
     run = st.form_submit_button(
-        "🔎 Hitta fynd",
+        "🔎 Hitta fynd" if _has_data else "📥 Hämta annonser först",
         type="primary",
         use_container_width=True,
+        disabled=not _has_data,
     )
 
 
@@ -1191,9 +1369,14 @@ if st.session_state.get("results") is not None:
             )
 
     if not visible:
-        st.info(
-            "Inga annonser matchar dina filter just nu. Prova en högre budget, lägre analyssäkerhet eller bredare sökning."
-        )
+        if not data:
+            st.warning(
+                "Inga annonser är inlästa ännu. Hämta annonser från Tradera först – dina filter är inte problemet."
+            )
+        else:
+            st.info(
+                "Inga inlästa annonser matchar dina filter just nu. Prova en högre budget, lägre analyssäkerhet eller bredare sökning."
+            )
 
     # Opportunity Radar reduces the analysed market to a short action queue.
     radar_groups = {name: [] for name in ("AGERA NU", "BEVAKA", "UNDERSÖK", "IGNORERA")}
@@ -1533,12 +1716,28 @@ if st.session_state.get("results") is not None:
         sale_probability = item.get("sale_probability", 0) or 0
 
         with st.container(border=True):
-            st.markdown(f'<div class="ff-decision">#{index} · {decision_label}</div>', unsafe_allow_html=True)
-            st.caption(decision_help)
-            st.markdown(
-                f'<div class="ff-card-title">{item.get("titel", "")}</div>',
-                unsafe_allow_html=True,
-            )
+            decision_class = "buy" if raw_decision.startswith("KÖP") else ("watch" if raw_decision == "KANSKE" else "skip")
+            decision_text = "STARKT FYND" if raw_decision == "KÖP (starkt fynd)" else ("KÖP" if raw_decision == "KÖP" else ("BEVAKA" if raw_decision == "KANSKE" else "HOPPA ÖVER"))
+            score_value = float(item.get("deal_score", 0) or 0)
+            quick_price_label = "AKTUELLT" if sale_type == "Auktion" else "KÖP FÖR"
+            quick_resale = f"{floor:.0f}–{expected:.0f} kr" if floor and expected and floor != expected else f"{expected:.0f} kr"
+            result_html = f"""<div class="ff-result-head">
+                    <div class="ff-result-topline">
+                      <span class="ff-rank-chip">RANK #{index:02d}</span>
+                      <span class="ff-decision-chip {decision_class}">{decision_text}</span>
+                      <span class="ff-score-chip">FYND {score_value:.0f}/100</span>
+                    </div>
+                    <div class="ff-result-title">{item.get('titel', '')}</div>
+                    <div class="ff-result-sub">{decision_help}</div>
+                    <div class="ff-quick-grid">
+                      <div class="ff-quick-cell"><div class="ff-quick-label">{quick_price_label}</div><div class="ff-quick-value">{total_cost:.0f} kr</div></div>
+                      <div class="ff-quick-cell"><div class="ff-quick-label">REALISTISKT VÄRDE</div><div class="ff-quick-value">{quick_resale}</div></div>
+                      <div class="ff-quick-cell"><div class="ff-quick-label">MÖJLIG NETTOVINST</div><div class="ff-quick-value">{net_profit:.0f} kr</div></div>
+                      <div class="ff-quick-cell"><div class="ff-quick-label">SÄLJCHANS</div><div class="ff-quick-value">{sale_probability:.0f}%</div></div>
+                    </div>
+                    <div class="ff-retro-rule"></div>
+                  </div>"""
+            st.markdown(result_html, unsafe_allow_html=True)
 
             if item.get("visual_image_urls"):
                 img_cols = st.columns(min(3, len(item.get("visual_image_urls")[:3])))
