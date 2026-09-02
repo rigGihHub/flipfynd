@@ -19,6 +19,7 @@ from src.tradera_fetcher import (
     get_market_sync_status,
     mark_market_batch,
     SMART_STOP_AFTER_KNOWN_PAGES,
+    get_smart_refresh_plan,
 )
 
 
@@ -27,7 +28,15 @@ def fetch_one_category(category, mode, headed, output_path, safety_max_pages, de
     known_links = {item.get("lank") for item in old_items if item.get("lank")}
 
     stop_after_known_pages = SMART_STOP_AFTER_KNOWN_PAGES if mode == "incremental" else 0
-    if mode == "market_batch":
+    if mode == "scheduled_refresh":
+        plan = get_smart_refresh_plan(category)
+        if not plan.get("due"):
+            print(f"Smart refresh: inget behöver uppdateras för {category}.", flush=True)
+            return 0, 0, len(old_items)
+        start_page = int(plan["start_page"])
+        end_page = int(plan["end_page"])
+        print(f"Smart refresh: {category}, sida {start_page}-{end_page} • {plan.get('reason', '')}", flush=True)
+    elif mode == "market_batch":
         sync = get_market_sync_status(category)
         if sync["complete"]:
             print(f"Marknaden redan komplett för {category} – hoppar över.", flush=True)
@@ -76,7 +85,7 @@ def fetch_one_category(category, mode, headed, output_path, safety_max_pages, de
         stop_after_known_pages=stop_after_known_pages,
         safety_max_pages=max(10, safety_max_pages),
         page_callback=persist_page,
-        detail_limit=(min(detail_limit, 2) if mode == "market_batch" else detail_limit),
+        detail_limit=(0 if mode == "scheduled_refresh" else min(detail_limit, 2) if mode == "market_batch" else detail_limit),
         smart_max_pages=(smart_max_pages if mode == "incremental" else None),
     )
 
@@ -122,7 +131,7 @@ def main():
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--category", choices=list(CATEGORY_URLS.keys()))
     scope.add_argument("--all-categories", action="store_true")
-    parser.add_argument("--mode", choices=["incremental", "market_batch", "full"], default="incremental")
+    parser.add_argument("--mode", choices=["incremental", "scheduled_refresh", "market_batch", "full"], default="incremental")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--output", default="tradera_data.json")
     parser.add_argument("--safety-max-pages", type=int, default=250)

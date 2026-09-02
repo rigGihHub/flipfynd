@@ -60,6 +60,8 @@ from src.tradera_fetcher import (
     MAX_ACTIVE_ITEMS_PER_CATEGORY,
     MARKET_BATCH_PAGES,
     get_market_sync_status,
+    get_market_coverage_status,
+    get_smart_refresh_plan,
     reset_market_sync,
 )
 
@@ -71,7 +73,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.3"
+APP_VERSION = "v0.11.5"
 
 
 BASE_DIR = (
@@ -132,6 +134,18 @@ def format_last_fetch_time(value):
         return dt.astimezone().strftime("%Y-%m-%d %H:%M")
     except Exception:
         return str(value)
+
+
+def format_freshness_age(age_hours):
+    if age_hours is None:
+        return "okänd ålder"
+    if age_hours < 1:
+        minutes = max(1, int(round(age_hours * 60)))
+        return f"ca {minutes} min sedan"
+    if age_hours < 24:
+        return f"ca {int(round(age_hours))} h sedan"
+    days = max(1, int(round(age_hours / 24)))
+    return f"ca {days} dygn sedan"
 
 
 def fetch_progress_message():
@@ -1243,51 +1257,109 @@ if not _has_data:
             with st.expander("Tekniska detaljer – använd detta om felet återkommer"):
                 st.code(log_tail, language="text")
 else:
-    top_left, top_right = st.columns([4, 1])
+    top_left, top_right = st.columns([3, 1])
     with top_left:
-        st.caption("✅ Annonsdata finns inläst. Du kan söka fynd direkt eller uppdatera marknaden.")
+        st.caption("✅ Annonsdata finns inläst. Du kan söka fynd direkt eller göra en snabb kontroll av de nyaste annonserna.")
+        st.caption("**🔄 Uppdatera annonser** = börjar från sida 1 och letar efter nya/förändrade annonser. Den är snabb och är knappen du normalt använder varje dag.")
     with top_right:
         if st.button(
             "🔄 Uppdatera annonser",
             use_container_width=True,
             disabled=_fetch_status == "running",
             key="top_refresh_data",
+            help="Snabb uppdatering av de nyaste Tradera-sidorna. Den fortsätter inte den djupa fullmarknadsläsningen.",
         ):
             start_fetch("__all__", True, "incremental")
             st.rerun()
 
-    sync_h = get_market_sync_status("Hockey - NHL")
-    sync_f = get_market_sync_status("Fotboll")
-    if not (sync_h["complete"] and sync_f["complete"]):
-        st.markdown(
-            '<div class="ff-data-card"><h3>📡 MARKNADSSCANNER</h3>'
-            '<p>Läs in hela Tradera-marknaden stegvis utan en stor CPU-topp. Varje omgång fortsätter där föregående slutade.</p></div>',
-            unsafe_allow_html=True,
-        )
-        c1, c2, c3 = st.columns([2, 2, 1])
-        with c1:
+    coverage_h = get_market_coverage_status("Hockey - NHL")
+    coverage_f = get_market_coverage_status("Fotboll")
+    refresh_h = get_smart_refresh_plan("Hockey - NHL")
+    refresh_f = get_smart_refresh_plan("Fotboll")
+    st.markdown(
+        '<div class="ff-data-card"><h3>📡 MARKNADSSCANNER</h3>'
+        '<p>Bygg upp hela Tradera-marknaden i små omgångar. Den här scannern är separat från den snabba dagliga uppdateringen.</p></div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2 = st.columns(2)
+    for col, icon, label, coverage in [
+        (c1, "🏒", "Hockey", coverage_h),
+        (c2, "⚽", "Fotboll", coverage_f),
+    ]:
+        with col:
+            st.markdown(f"**{icon} {label}**")
+            st.write(coverage["coverage_label"])
+            if coverage["complete"]:
+                st.caption(f"✅ Full täckning • {coverage['loaded_page_count']} sidor inlästa")
+            else:
+                st.caption(f"Nästa omgång börjar på sida {coverage['next_page']} • {coverage['loaded_page_count']} sidor sparade")
+            freshness_icon = "🟢" if coverage["freshness"] == "fresh" else ("🟡" if coverage["freshness"] == "aging" else "🔴" if coverage["freshness"] == "stale" else "⚪")
+            st.caption(f"{freshness_icon} {coverage['freshness_label']} • {format_freshness_age(coverage['age_hours'])}")
+            if coverage["missing_pages"]:
+                preview = ", ".join(str(p) for p in coverage["missing_pages"][:8])
+                more = " …" if len(coverage["missing_pages"]) > 8 else ""
+                st.caption(f"⚠️ Luckor i sidtäckningen: {preview}{more}")
+
+    if not (coverage_h["complete"] and coverage_f["complete"]):
+        action_left, action_right = st.columns([3, 1])
+        with action_left:
             st.caption(
-                f"🏒 Hockey • nästa sida {sync_h['next_page']}"
-                + (" • KLAR" if sync_h["complete"] else "")
+                f"**▶ Läs nästa omgång** = fortsätter där fullmarknadsscannern slutade och läser högst {MARKET_BATCH_PAGES} nya sidor per sport. "
+                "Använd den flera gånger tills respektive sport visar **Hela marknaden inläst**. Redan sparade annonser behålls."
             )
-        with c2:
-            st.caption(
-                f"⚽ Fotboll • nästa sida {sync_f['next_page']}"
-                + (" • KLAR" if sync_f["complete"] else "")
-            )
-        with c3:
+        with action_right:
             if st.button(
                 "▶ Läs nästa omgång",
                 use_container_width=True,
                 disabled=_fetch_status == "running",
                 key="top_market_batch",
+                help="Fortsätt fullmarknadsläsningen från nästa ej lästa sida. Detta är tyngre än en vanlig uppdatering.",
             ):
                 start_fetch("__all__", True, "market_batch")
                 st.rerun()
-        st.caption(
-            f"En omgång läser högst {MARKET_BATCH_PAGES} sidor per sport. Alla annonser sparas; "
-            f"själva fyndanalysen arbetar fortfarande med högst {MAX_ACTIVE_ITEMS_PER_CATEGORY} nyare annonser per sport för att hålla appen snabb."
-        )
+    else:
+        st.success("✅ Fullmarknadsscannern har nått slutet för både hockey och fotboll. Använd normalt bara Uppdatera annonser för att hålla de nyaste sidorna färska.")
+
+    st.caption(
+        f"Alla inlästa annonser sparas. Själva fyndanalysen arbetar fortfarande med högst {MAX_ACTIVE_ITEMS_PER_CATEGORY} nyare annonser per sport åt gången för att hålla appen snabb."
+    )
+
+    st.markdown(
+        '<div class="ff-data-card"><h3>⏱ SMART REFRESH</h3>'
+        '<p>FlipFynd prioriterar automatiskt vilka redan inlästa sidor som behöver läsas om. Nya sidor kontrolleras oftare, djupa äldre sidor mer sällan.</p></div>',
+        unsafe_allow_html=True,
+    )
+    r1, r2 = st.columns(2)
+    for col, icon, label, plan in [
+        (r1, "🏒", "Hockey", refresh_h),
+        (r2, "⚽", "Fotboll", refresh_f),
+    ]:
+        with col:
+            if plan.get("due"):
+                st.markdown(f"**{icon} {label}: behöver uppdateras**")
+                st.caption(f"Sida {plan['start_page']}–{plan['end_page']} • {plan.get('reason','')}")
+            else:
+                st.markdown(f"**{icon} {label}: tillräckligt färsk**")
+                wait = plan.get("next_due_hours")
+                if wait is not None:
+                    st.caption(f"Nästa område blir aktuellt om cirka {max(0, round(wait, 1))} timmar.")
+                else:
+                    st.caption("Ingen ny uppdatering behövs just nu.")
+
+    st.caption(
+        "**⚡ Uppdatera det som behövs** = läser bara ett litet sidblock som faktiskt blivit gammalt. "
+        "Sida 1–5 kontrolleras ungefär var 2:e timme, 6–20 var 8:e timme, 21–60 dagligen och djupare sidor ungefär var tredje dag. "
+        "Detta är CPU-snålast när hela marknaden redan är inläst stegvis."
+    )
+    if st.button(
+        "⚡ Uppdatera det som behövs",
+        use_container_width=True,
+        disabled=_fetch_status == "running" or not (refresh_h.get("due") or refresh_f.get("due")),
+        key="top_smart_refresh",
+        help="Uppdaterar bara det äldsta prioriterade sidblocket per sport. Den läser inte om hela marknaden.",
+    ):
+        start_fetch("__all__", True, "scheduled_refresh")
+        st.rerun()
 
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)
@@ -2481,16 +2553,18 @@ with st.expander("⚙️ Administration & data"):
         )
         mode_label = st.radio(
             "Hämtläge",
-            ["Smart uppdatering", "Läs nästa marknadsomgång", "Full genomsökning"],
+            ["Smart uppdatering", "Smart refresh – bara gamla sidor", "Läs nästa marknadsomgång", "Full genomsökning"],
             key="admin_mode",
             help=(
                 f"Smart uppdatering börjar på sida 1, stoppar efter två hela sidor utan nya annonser och läser "
-                f"max {SMART_MAX_PAGES} sidor per sport. Läs nästa marknadsomgång fortsätter i block om {MARKET_BATCH_PAGES} sidor och sparar hela marknaden. "
+                f"max {SMART_MAX_PAGES} sidor per sport. Smart refresh läser bara ett gammalt prioriterat sidblock. "
+                f"Läs nästa marknadsomgång fortsätter i block om {MARKET_BATCH_PAGES} sidor och sparar hela marknaden. "
                 "Full genomsökning är endast för felsökning och kan vara tung på Streamlit Cloud."
             ),
         )
         mode = (
             "incremental" if mode_label == "Smart uppdatering"
+            else "scheduled_refresh" if mode_label == "Smart refresh – bara gamla sidor"
             else "market_batch" if mode_label == "Läs nästa marknadsomgång"
             else "full"
         )
@@ -2500,6 +2574,12 @@ with st.expander("⚙️ Administration & data"):
             key="admin_category",
             help="Använd bara detta när du specifikt vill uppdatera en enda sport.",
         )
+
+    st.caption(
+        "**Uppdatera alla sporter** kör valt hämtläge för både hockey och fotboll. "
+        "**Endast vald sport** gör samma sak men bara för sporten i rullistan. "
+        "**Avbryt hämtning** stoppar en pågående körning utan att radera redan sparade annonser."
+    )
 
     b1, b2, b3 = st.columns([2, 1, 1])
     with b1:
@@ -2538,6 +2618,7 @@ with st.expander("⚙️ Administration & data"):
             state_text = "KLAR" if sync["complete"] else f"nästa sida {sync['next_page']}"
             st.caption(f"📡 {sport_name}: {state_text} • inlästa sidor: {format_loaded_pages(sync['loaded_pages'])}")
 
+    st.caption("**↺ Börja om full marknadsläsning** flyttar bara scannerns startpunkt tillbaka till sida 1. Den raderar inte annonser som redan finns sparade.")
     if st.button("↺ Börja om full marknadsläsning", use_container_width=True, disabled=st.session_state["fetch_status"] == "running"):
         reset_market_sync()
         st.success("Marknadsscannerns fortsättningspunkt är återställd. Sparade annonser är kvar.")

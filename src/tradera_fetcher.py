@@ -282,6 +282,8 @@ def mark_page_loaded(
     pages.add(int(page_number))
     category_info["loaded_pages"] = sorted(pages)
     category_info["max_page_loaded"] = max(category_info["loaded_pages"]) if category_info["loaded_pages"] else 0
+    page_loaded_at = category_info.setdefault("page_loaded_at", {})
+    page_loaded_at[str(int(page_number))] = _utc_now_iso()
     save_fetch_state(state)
 
 
@@ -443,6 +445,92 @@ def format_loaded_pages(pages):
     )
 
 
+
+
+REFRESH_BANDS = [
+    (1, 5, 2),
+    (6, 20, 8),
+    (21, 60, 24),
+    (61, None, 72),
+]
+SMART_REFRESH_MAX_PAGES = 8
+
+
+def _page_refresh_interval_hours(page_number):
+    page_number = int(page_number)
+    for start, end, hours in REFRESH_BANDS:
+        if page_number >= start and (end is None or page_number <= end):
+            return hours
+    return 72
+
+
+def get_smart_refresh_plan(category_name, now=None, max_pages=SMART_REFRESH_MAX_PAGES):
+    """Choose a small due refresh block, prioritizing newest market pages.
+
+    Pages 1-5 refresh every 2h, 6-20 every 8h, 21-60 every 24h and
+    deeper pages every 72h. Unknown page timestamps count as due.
+    """
+    state = load_fetch_state()
+    info = state.setdefault("categories", {}).setdefault(category_name, {})
+    loaded_pages = sorted({int(p) for p in info.get("loaded_pages", []) if str(p).isdigit()})
+    page_loaded_at = info.get("page_loaded_at", {}) if isinstance(info.get("page_loaded_at", {}), dict) else {}
+    now_dt = now or datetime.now(timezone.utc)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+    now_dt = now_dt.astimezone(timezone.utc)
+
+    if not loaded_pages:
+        return {
+            "due": True, "start_page": 1, "end_page": min(int(max_pages), 5),
+            "reason": "Ingen marknadsdata ännu", "tier": "nyaste", "due_pages": [],
+        }
+
+    due_pages = []
+    ages = {}
+    for page in loaded_pages:
+        loaded_at = _parse_iso_datetime(page_loaded_at.get(str(page)) or page_loaded_at.get(page))
+        age_hours = None if loaded_at is None else (now_dt - loaded_at).total_seconds() / 3600.0
+        ages[page] = age_hours
+        if age_hours is None or age_hours >= _page_refresh_interval_hours(page):
+            due_pages.append(page)
+
+    if not due_pages:
+        next_due = None
+        next_page = None
+        for page in loaded_pages:
+            age = ages.get(page)
+            if age is None:
+                continue
+            remaining = max(0.0, _page_refresh_interval_hours(page) - age)
+            if next_due is None or remaining < next_due:
+                next_due, next_page = remaining, page
+        return {
+            "due": False, "start_page": None, "end_page": None,
+            "reason": "Alla inlästa sidområden är tillräckligt färska",
+            "next_due_hours": next_due, "next_due_page": next_page, "due_pages": [],
+        }
+
+    first = min(due_pages)
+    interval = _page_refresh_interval_hours(first)
+    tier_end = 5 if first <= 5 else 20 if first <= 20 else 60 if first <= 60 else max(loaded_pages)
+    due_set = set(due_pages)
+    block = [first]
+    for page in range(first + 1, min(tier_end, first + int(max_pages) - 1) + 1):
+        if page in due_set:
+            block.append(page)
+        else:
+            break
+    end = block[-1]
+    tier = "nyaste" if first <= 5 else "nära toppen" if first <= 20 else "mellan" if first <= 60 else "djup"
+    age = ages.get(first)
+    age_text = "saknar tidsstämpel" if age is None else f"{age:.1f} h gammal"
+    return {
+        "due": True, "start_page": first, "end_page": end, "tier": tier,
+        "interval_hours": interval, "due_pages": due_pages,
+        "reason": f"Sida {first} är {age_text}; {tier}-området uppdateras var {interval} h",
+    }
+
+
 def get_market_sync_status(category_name):
     """Return resumable full-market crawl status for one sport."""
     state = load_fetch_state()
@@ -460,6 +548,87 @@ def get_market_sync_status(category_name):
         "last_batch_end": info.get("market_last_batch_end"),
     }
 
+
+
+def _parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        text = str(value).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def get_market_coverage_status(category_name, now=None):
+    """Summarize full-market coverage and freshness without inventing a total page count."""
+    state = load_fetch_state()
+    info = state.setdefault("categories", {}).setdefault(category_name, {})
+    sync = get_market_sync_status(category_name)
+    loaded_pages = sync["loaded_pages"]
+    page_loaded_at = info.get("page_loaded_at", {}) if isinstance(info.get("page_loaded_at", {}), dict) else {}
+
+    contiguous_to = 0
+    loaded_set = set(loaded_pages)
+    while contiguous_to + 1 in loaded_set:
+        contiguous_to += 1
+
+    missing_within_range = [p for p in range(1, (max(loaded_pages) if loaded_pages else 0) + 1) if p not in loaded_set]
+
+    latest_candidates = [
+        _parse_iso_datetime(info.get("last_fetch_at")),
+        _parse_iso_datetime(info.get("market_completed_at")),
+    ]
+    latest_candidates.extend(_parse_iso_datetime(v) for v in page_loaded_at.values())
+    latest_candidates = [v for v in latest_candidates if v is not None]
+    latest = max(latest_candidates) if latest_candidates else None
+
+    now_dt = now or datetime.now(timezone.utc)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+    age_hours = ((now_dt.astimezone(timezone.utc) - latest).total_seconds() / 3600.0) if latest else None
+
+    if age_hours is None:
+        freshness = "unknown"
+        freshness_label = "Ingen färskhetsdata"
+    elif age_hours <= 6:
+        freshness = "fresh"
+        freshness_label = "Färsk"
+    elif age_hours <= 24:
+        freshness = "aging"
+        freshness_label = "Behöver snart uppdateras"
+    else:
+        freshness = "stale"
+        freshness_label = "Gammal – uppdatera"
+
+    if sync["complete"]:
+        coverage_label = "Hela marknaden inläst"
+        coverage_percent = 100
+    elif contiguous_to:
+        coverage_label = f"Sida 1–{contiguous_to} inläst, marknadsslutet ännu inte nått"
+        coverage_percent = None
+    elif loaded_pages:
+        coverage_label = f"{len(loaded_pages)} sidor inlästa, men täckningen är inte sammanhängande från sida 1"
+        coverage_percent = None
+    else:
+        coverage_label = "Ingen full marknadstäckning ännu"
+        coverage_percent = 0
+
+    return {
+        **sync,
+        "loaded_page_count": len(loaded_pages),
+        "contiguous_to": contiguous_to,
+        "missing_pages": missing_within_range,
+        "coverage_label": coverage_label,
+        "coverage_percent": coverage_percent,
+        "last_updated_at": latest.isoformat() if latest else None,
+        "age_hours": age_hours,
+        "freshness": freshness,
+        "freshness_label": freshness_label,
+    }
 
 def mark_market_batch(category_name, start_page, end_page, stop_reason="", complete=False):
     state = load_fetch_state()
