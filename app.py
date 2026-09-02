@@ -50,21 +50,23 @@ from src.pricing import (
     total_acquisition_cost,
 )
 
-from src.tradera_fetcher import (
-    CATEGORY_URLS,
-    clear_all_loaded_data,
-    format_loaded_pages,
-    load_fetch_state,
-    prune_active_items,
-    reconcile_market_state_with_items,
-    SMART_MAX_PAGES,
-    MAX_ACTIVE_ITEMS_PER_CATEGORY,
-    MARKET_BATCH_PAGES,
-    get_market_sync_status,
-    get_market_coverage_status,
-    get_smart_refresh_plan,
-    reset_market_sync,
-)
+from src import tradera_fetcher as _tradera_fetcher
+from src.fetcher_compat import build_fetcher_api
+
+_FETCHER = build_fetcher_api(_tradera_fetcher)
+CATEGORY_URLS = _FETCHER.CATEGORY_URLS
+clear_all_loaded_data = _FETCHER.clear_all_loaded_data
+format_loaded_pages = _FETCHER.format_loaded_pages
+load_fetch_state = _FETCHER.load_fetch_state
+prune_active_items = _FETCHER.prune_active_items
+reconcile_market_state_with_items = _FETCHER.reconcile_market_state_with_items
+SMART_MAX_PAGES = _FETCHER.SMART_MAX_PAGES
+MAX_ACTIVE_ITEMS_PER_CATEGORY = _FETCHER.MAX_ACTIVE_ITEMS_PER_CATEGORY
+MARKET_BATCH_PAGES = _FETCHER.MARKET_BATCH_PAGES
+get_market_sync_status = _FETCHER.get_market_sync_status
+get_market_coverage_status = _FETCHER.get_market_coverage_status
+get_smart_refresh_plan = _FETCHER.get_smart_refresh_plan
+reset_market_sync = _FETCHER.reset_market_sync
 
 
 st.set_page_config(
@@ -74,7 +76,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.6"
+APP_VERSION = "v0.11.7"
 
 
 BASE_DIR = (
