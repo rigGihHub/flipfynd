@@ -45,6 +45,7 @@ from src.dynamic_max_bid import build_dynamic_max_bid
 from src.exact_identity_gate import build_exact_identity_gate
 from src.buy_now_hunter import build_buy_now_opportunity
 from src.ending_soon_hunter import build_ending_soon_opportunity
+from src.find_diagnostics import summarize_no_find_reasons
 from src.detail_evidence_fusion import build_detail_evidence_fusion
 
 from src.pricing import (
@@ -79,7 +80,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.11"
+APP_VERSION = "v0.11.12"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1626,9 +1627,19 @@ if st.session_state.get("results") is not None:
     else:
         st.subheader(f"Bästa kandidaterna ({len(visible)})")
         if visible:
+            analysed_total = int(st.session_state.get("debug", {}).get("final_results", len(st.session_state["results"])) or 0)
             st.info(
-                "Inget kort når FlipFynds köpgräns just nu. De bäst rankade kandidaterna visas ändå så att du kan bedöma marknaden."
+                f"🔎 {analysed_total} {sport_label.lower()}annonser analyserade – inget är tillräckligt säkert för KÖP ännu. "
+                "Här nedanför visas de kandidater som ligger närmast."
             )
+            why = summarize_no_find_reasons(st.session_state["results"])
+            if why.get("reasons"):
+                st.markdown("### Varför blir det inga KÖP?")
+                cols_why = st.columns(min(3, len(why["reasons"])))
+                for idx_reason, reason in enumerate(why["reasons"][:6]):
+                    with cols_why[idx_reason % len(cols_why)]:
+                        st.metric(reason["label"], reason["count"])
+                st.caption("Varje annons räknas under sin viktigaste nuvarande spärr. Detta ändrar inte analysen – det förklarar bara den.")
 
     if not visible:
         if not data:
@@ -1652,70 +1663,65 @@ if st.session_state.get("results") is not None:
             search=search,
         )
 
-    # Opportunity Radar reduces the analysed market to a short action queue.
-    radar_groups = {name: [] for name in ("AGERA NU", "BEVAKA", "UNDERSÖK", "IGNORERA")}
+    # Opportunity Radar 2.0: only surface listings that are actually worth time.
+    radar_groups = {name: [] for name in ("AGERA NU", "BEVAKA", "NÄRA FYND", "BEHÖVER VERIFIERAS")}
     for candidate in filtered:
-        radar_groups.setdefault(candidate.get("opportunity_action", "IGNORERA"), []).append(candidate)
+        action = candidate.get("opportunity_action", "IGNORERA")
+        deal = float(candidate.get("deal_score", 0) or 0)
+        identity_status = candidate.get("exact_identity_gate_status")
+        if action == "AGERA NU" and deal >= 40:
+            radar_groups["AGERA NU"].append(candidate)
+        elif action == "BEVAKA" and deal >= 25:
+            radar_groups["BEVAKA"].append(candidate)
+        elif deal >= 20:
+            radar_groups["NÄRA FYND"].append(candidate)
+        elif candidate.get("visual_verification_required") or identity_status in {"LÅST", "GRANSKA"}:
+            radar_groups["BEHÖVER VERIFIERAS"].append(candidate)
+
     for group in radar_groups.values():
-        group.sort(key=lambda x: x.get("opportunity_priority_score", 0), reverse=True)
+        group.sort(key=lambda x: (x.get("opportunity_priority_score", 0), x.get("deal_score", 0)), reverse=True)
 
-    actionable = radar_groups["AGERA NU"] + radar_groups["BEVAKA"] + radar_groups["UNDERSÖK"]
-    actionable.sort(key=lambda x: x.get("opportunity_priority_score", 0), reverse=True)
+    radar_main = radar_groups["AGERA NU"] + radar_groups["BEVAKA"] + radar_groups["NÄRA FYND"]
+    radar_main.sort(key=lambda x: (x.get("opportunity_priority_score", 0), x.get("deal_score", 0)), reverse=True)
 
-    buy_now_candidates = []
-    for candidate in filtered:
-        bn = build_buy_now_opportunity(candidate)
-        if bn.get("eligible"):
-            buy_now_candidates.append((bn, candidate))
-    buy_now_candidates.sort(key=lambda pair: pair[0].get("score", 0), reverse=True)
-    if buy_now_candidates:
-        st.subheader("⚡ Köp nu – agera direkt")
-        st.caption("Här visas bara Köp nu-annonser med tillräckligt stark befintlig värdering och identitet. Hunter-motorn skapar inte egna priser eller maxbud.")
-        for bn, candidate in buy_now_candidates[:5]:
-            cols_bn = st.columns([1, 4, 2])
-            cols_bn[0].metric("Köp nu-score", f"{bn['score']}/100")
-            cols_bn[1].markdown(f"**{candidate.get('titel','Okänt kort')}**  \n{bn.get('label','')}")
-            cols_bn[2].metric("Totalpris", f"{float(candidate.get('total_cost') or 0):.0f} kr")
-            if bn.get("reasons"):
-                st.caption(" • ".join(bn["reasons"]))
-    ending_soon_candidates = []
-    for candidate in filtered:
-        es = build_ending_soon_opportunity(candidate)
-        if es.get("eligible"):
-            ending_soon_candidates.append((es, candidate))
-    ending_soon_candidates.sort(key=lambda pair: pair[0].get("score", 0), reverse=True)
-    if ending_soon_candidates:
-        st.subheader("⏰ Slutar snart – under säkert maxbud")
-        st.caption("Här visas bara auktioner där återstående tid kan tolkas säkert och nuvarande totalpris fortfarande ligger under ett befintligt verifierat maxbud. Motorn gissar aldrig sluttid eller maxbud.")
-        for es, candidate in ending_soon_candidates[:5]:
-            cols_es = st.columns([1, 4, 2])
-            cols_es[0].metric("Timing-score", f"{es['score']}/100")
-            cols_es[1].markdown(f"**{candidate.get('titel','Okänt kort')}**  \n{es.get('label','')}")
-            cols_es[2].metric("Tid kvar", f"{int(es.get('remaining_minutes') or 0)} min")
-            if es.get("reasons"):
-                st.caption(" • ".join(es["reasons"]))
-            if candidate.get("lank"):
-                st.markdown(f"[Öppna på Tradera]({candidate.get('lank')})")
-
-    if actionable:
+    if radar_main or radar_groups["BEHÖVER VERIFIERAS"]:
         st.subheader("📡 Opportunity Radar")
-        st.caption("FlipFynd kokar ned marknaden till vad som är värt din tid just nu. Radarn ändrar inte värdering, maxbud eller köpbeslut.")
-        cols = st.columns(3)
+        st.caption("Här visas bara sådant som faktiskt förtjänar din tid. Osäkra kort ligger separat som verifieringsjobb och presenteras inte som fynd.")
+        cols = st.columns(4)
         cols[0].metric("🚨 Agera nu", len(radar_groups["AGERA NU"]))
         cols[1].metric("👀 Bevaka", len(radar_groups["BEVAKA"]))
-        cols[2].metric("🔎 Undersök", len(radar_groups["UNDERSÖK"]))
-        for candidate in actionable[:5]:
-            action = candidate.get("opportunity_action")
-            st.write(f"**{action} · {candidate.get('titel', 'Okänd annons')}**")
+        cols[2].metric("🟠 Nära fynd", len(radar_groups["NÄRA FYND"]))
+        cols[3].metric("🔎 Verifiera", len(radar_groups["BEHÖVER VERIFIERAS"]))
+
+        for candidate in radar_main[:6]:
+            if candidate in radar_groups["AGERA NU"]:
+                label = "AGERA NU"
+            elif candidate in radar_groups["BEVAKA"]:
+                label = "BEVAKA"
+            else:
+                label = "NÄRA FYND"
+            risk = candidate.get("risk_score")
+            risk_text = "ej bedömd" if (risk in (None, 0) and float(candidate.get("deal_score", 0) or 0) == 0) else f"{float(risk or 0):.0f}/100"
+            st.write(f"**{label} · {candidate.get('titel', 'Okänd annons')}**")
             st.caption(
                 f"Prioritet {candidate.get('opportunity_priority_score', 0):.0f}/100 · "
-                f"Fyndpoäng {candidate.get('deal_score', 0):.0f}/100 · "
-                f"Risk {candidate.get('risk_score', 0):.0f}/100"
+                f"Fyndpoäng {candidate.get('deal_score', 0):.0f}/100 · Risk {risk_text}"
             )
             if candidate.get("opportunity_reasons"):
                 st.caption(" • ".join(candidate.get("opportunity_reasons")[:2]))
             if candidate.get("lank"):
                 st.markdown(f"[Öppna på Tradera]({candidate.get('lank')})")
+
+        verification = radar_groups["BEHÖVER VERIFIERAS"]
+        if verification:
+            with st.expander(f"🔎 Behöver verifieras ({len(verification)})", expanded=False):
+                st.caption("Detta är inte fynd. De ligger här endast för att kortidentiteten eller bilderna kan behöva kontrolleras.")
+                for candidate in verification[:8]:
+                    st.write(f"**{candidate.get('titel', 'Okänd annons')}**")
+                    reason = (candidate.get("opportunity_reasons") or candidate.get("visual_edge_reasons") or ["Otillräckligt underlag"])[0]
+                    st.caption(reason)
+                    if candidate.get("lank"):
+                        st.markdown(f"[Öppna på Tradera]({candidate.get('lank')})")
         st.divider()
 
     visual_candidates = [
@@ -2054,10 +2060,18 @@ if st.session_state.get("results") is not None:
             st.markdown(result_html, unsafe_allow_html=True)
 
             if item.get("visual_image_urls"):
-                img_cols = st.columns(min(3, len(item.get("visual_image_urls")[:3])))
-                for img_col, img_url in zip(img_cols, item.get("visual_image_urls")[:3]):
-                    with img_col:
-                        st.image(img_url, use_container_width=True)
+                image_urls = item.get("visual_image_urls")[:3]
+                img_col, info_col = st.columns([1, 3])
+                with img_col:
+                    st.image(image_urls[0], use_container_width=True)
+                with info_col:
+                    st.caption("Kortbild – liten förhandsvisning. Öppna bildgalleriet om du vill granska detaljer.")
+                    if len(image_urls) > 1:
+                        with st.expander(f"🖼️ Visa fler bilder ({len(image_urls)})", expanded=False):
+                            gallery_cols = st.columns(len(image_urls))
+                            for gallery_col, img_url in zip(gallery_cols, image_urls):
+                                with gallery_col:
+                                    st.image(img_url, use_container_width=True)
             if item.get("visual_verification_required"):
                 st.info(
                     f"👁️ {item.get('visual_edge_label', 'Bildkontroll')} · "
@@ -2066,18 +2080,38 @@ if st.session_state.get("results") is not None:
                 )
                 st.caption("Visual Edge är en granskningssignal. Bildinnehållet är ännu inte automatiskt verifierat av modellen.")
 
+            shipping_raw = item.get("frakt")
+            shipping_known = isinstance(shipping_raw, (int, float)) and shipping_raw >= 0
+            shipping_used = float(shipping_raw) if shipping_known else 29.0
             m1, m2 = st.columns(2)
             with m1:
                 if sale_type == "Auktion":
-                    st.metric("Aktuellt pris inkl. frakt", f"{total_cost:.0f} kr")
+                    label = "Aktuellt totalpris" if shipping_known else "Aktuellt pris + antagen frakt"
+                    st.metric(label, f"{total_cost:.0f} kr")
+                    if shipping_known:
+                        st.caption(f"Annonspris {float(item.get('pris') or 0):.0f} kr + faktisk frakt {shipping_used:.0f} kr.")
+                    else:
+                        st.caption("Frakten kunde inte läsas säkert från annonsen. FlipFynd använder tills vidare 29 kr – detta är ett antagande, inte Traderas faktiska frakt.")
                     st.caption(
-                        f"Fyndkalkylen räknar på {analysis_total_cost:.0f} kr"
+                        f"Auktionskalkylen räknar konservativt på {analysis_total_cost:.0f} kr"
                         + (f" inklusive {auction_buffer:.0f} kr auktionsbuffert." if auction_buffer else ".")
                     )
                 else:
-                    st.metric("Köp för inkl. frakt", f"{total_cost:.0f} kr")
+                    label = "Köp för totalt" if shipping_known else "Köppris + antagen frakt"
+                    st.metric(label, f"{total_cost:.0f} kr")
+                    if not shipping_known:
+                        st.caption("Frakten är okänd; 29 kr används endast som försiktigt kalkylantagande.")
             with m2:
-                st.metric("Möjlig nettovinst", f"{net_profit:.0f} kr")
+                st.metric("Prognos nettovinst", f"{net_profit:.0f} kr")
+                breakdown = item.get("profit_breakdown") or {}
+                if breakdown:
+                    st.caption(
+                        f"{breakdown.get('resale_price', 0):.0f} kr försäljning − "
+                        f"{breakdown.get('acquisition_cost', 0):.0f} kr inköp − "
+                        f"{breakdown.get('selling_fee', 0):.0f} kr Traderaavgift − "
+                        f"{breakdown.get('packaging', 0):.0f} kr emballage = {net_profit:.0f} kr."
+                    )
+                    st.caption("Återförsäljningsfrakten antas betalas separat av köparen och dras därför inte från kortets marginal.")
 
             max_total_price = item.get("max_total_price")
             max_item_price = item.get("max_item_price")

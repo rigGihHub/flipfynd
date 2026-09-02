@@ -1939,29 +1939,37 @@ def compute_resale_ranges(
     )
 
 
+def _tradera_private_selling_fee(sale_price):
+    """Current default resale fee model for a Swedish private Tradera seller.
+
+    Tradera's public price list states 10% of the sale price, minimum 3 SEK
+    and maximum 200 SEK. Shipping is assumed to be charged separately to the
+    buyer, so it is not treated as a seller loss in the card-margin model.
+    """
+    price = max(0.0, float(sale_price or 0))
+    if price <= 0:
+        return 0.0
+    return min(200.0, max(3.0, price * 0.10))
+
+
 def compute_profit(
     total_cost,
     expected_resale,
     floor_resale,
     probability,
 ):
-    outbound_shipping = (
-        18
-        if expected_resale <= 200
-        else 36
-    )
-
-    selling_fee = round(
-        expected_resale
-        * 0.08
-    )
-
-    packaging = 3
+    # Acquisition cost already includes the shipping paid when buying the card.
+    # On a normal Tradera resale the buyer pays the stated outbound shipping,
+    # therefore outbound postage is cash-flow neutral and must not be deducted
+    # again from the card margin. Packaging remains a small real seller cost.
+    outbound_shipping = 0.0
+    selling_fee = _tradera_private_selling_fee(expected_resale)
+    floor_selling_fee = _tradera_private_selling_fee(floor_resale)
+    packaging = 3.0
 
     net_profit = (
         expected_resale
         - total_cost
-        - outbound_shipping
         - selling_fee
         - packaging
     )
@@ -1969,11 +1977,7 @@ def compute_profit(
     floor_profit = (
         floor_resale
         - total_cost
-        - outbound_shipping
-        - round(
-            floor_resale
-            * 0.08
-        )
+        - floor_selling_fee
         - packaging
     )
 
@@ -2014,6 +2018,16 @@ def compute_profit(
                 roi,
                 2,
             ),
+
+        "profit_breakdown": {
+            "resale_price": round(float(expected_resale or 0), 2),
+            "acquisition_cost": round(float(total_cost or 0), 2),
+            "selling_fee": round(float(selling_fee or 0), 2),
+            "packaging": round(float(packaging or 0), 2),
+            "outbound_shipping_cost": round(float(outbound_shipping or 0), 2),
+            "outbound_shipping_assumption": "Köparen betalar frakten separat",
+            "selling_fee_assumption": "Tradera privat: 10 %, minst 3 kr, max 200 kr",
+        },
     }
 
 

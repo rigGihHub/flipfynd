@@ -91,6 +91,27 @@ def parse_detail_text(body_text):
     lower = text.lower()
     result = {}
 
+    # Prefer the shipping amount shown on the item detail page. This is more
+    # authoritative than the category-card text and avoids presenting the
+    # conservative 29 SEK fallback as if it were an observed shipping price.
+    if "fri frakt" in lower:
+        result["detail_shipping"] = 0
+        result["detail_shipping_source"] = "Tradera-annons"
+    else:
+        shipping_patterns = [
+            r"frakt(?:\s+från)?\s*:?\s*(\d[\d\s.]*)\s*kr",
+            r"leverans(?:kostnad)?\s*:?\s*(\d[\d\s.]*)\s*kr",
+        ]
+        for pattern in shipping_patterns:
+            match = re.search(pattern, lower, flags=re.IGNORECASE)
+            if match:
+                try:
+                    result["detail_shipping"] = int(match.group(1).replace(" ", "").replace(".", ""))
+                    result["detail_shipping_source"] = "Tradera-annons"
+                    break
+                except ValueError:
+                    pass
+
     bid_patterns = [
         r"(\d+)\s+bud\b",
         r"bud\s*\(?\s*(\d+)\s*\)?",
@@ -232,6 +253,9 @@ def enrich_listing_detail(page, item, timeout_ms=30000):
             parsed["detail_image_urls"] = list(dict.fromkeys(existing + page_images))[:16]
 
         enriched.update({k: v for k, v in parsed.items() if v not in (None, "", [])})
+        if parsed.get("detail_shipping") is not None:
+            enriched["frakt"] = parsed.get("detail_shipping")
+            enriched["shipping_source"] = parsed.get("detail_shipping_source") or "Tradera-annons"
         enriched["detail_enriched_at"] = datetime.now(timezone.utc).isoformat()
         enriched["detail_enrichment_status"] = "ok"
         enriched.pop("detail_enrichment_error", None)
