@@ -56,6 +56,7 @@ from src.tradera_fetcher import (
     format_loaded_pages,
     load_fetch_state,
     prune_active_items,
+    reconcile_market_state_with_items,
     SMART_MAX_PAGES,
     MAX_ACTIVE_ITEMS_PER_CATEGORY,
     MARKET_BATCH_PAGES,
@@ -73,7 +74,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.5"
+APP_VERSION = "v0.11.6"
 
 
 BASE_DIR = (
@@ -190,10 +191,11 @@ def get_dataset_timestamp():
         return None
 
 @st.cache_data(show_spinner=False)
-def get_data():
-    return load_data(
-        str(DATA_PATH)
-    )
+def get_data(data_version=None):
+    # data_version is intentionally part of the cache key. The Tradera fetcher
+    # writes page-by-page, so a no-argument cache could otherwise keep showing
+    # an old dataset until the subprocess finishes.
+    return load_data(str(DATA_PATH))
 
 
 @st.cache_data(show_spinner=False)
@@ -620,29 +622,23 @@ def analyze_data(
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
     data = prune_active_items(data, max_per_category=MAX_ACTIVE_ITEMS_PER_CATEGORY)
     debug = {
-        "total_items":
-            raw_total_items,
-
-        "performance_items":
-            len(data),
-
-        "after_sport":
-            0,
-
-        "after_search_price":
-            0,
-
-        "fast_candidates":
-            0,
-
-        "full_analysis":
-            0,
-
-        "cache_hits":
-            0,
-
-        "final_results":
-            0,
+        "total_items": raw_total_items,
+        "performance_items": len(data),
+        "after_sport": 0,
+        "valid_price": 0,
+        "within_budget": 0,
+        "after_search": 0,
+        "after_sale_type": 0,
+        "after_feature_filters": 0,
+        "missing_or_invalid_price": 0,
+        "over_budget": 0,
+        "search_miss": 0,
+        "sale_type_miss": 0,
+        "feature_filter_miss": 0,
+        "fast_candidates": 0,
+        "full_analysis": 0,
+        "cache_hits": 0,
+        "final_results": 0,
     }
 
     candidates = []
@@ -714,37 +710,30 @@ def analyze_data(
         )
 
         if (
-            not isinstance(
-                price,
-                (
-                    int,
-                    float,
-                ),
-            )
+            not isinstance(price, (int, float))
             or price <= 0
         ):
+            debug["missing_or_invalid_price"] += 1
             continue
+
+        debug["valid_price"] += 1
 
         total_cost = total_acquisition_cost(
             price,
             item.get("frakt"),
         )
 
-        if (
-            total_cost is None
-            or total_cost > max_price
-        ):
+        if total_cost is None or total_cost > max_price:
+            debug["over_budget"] += 1
             continue
 
-        if not item_matches_search(
-            item,
-            search,
-        ):
+        debug["within_budget"] += 1
+
+        if not item_matches_search(item, search):
+            debug["search_miss"] += 1
             continue
 
-        debug[
-            "after_search_price"
-        ] += 1
+        debug["after_search"] += 1
 
         fast = analyze_item(
             item,
@@ -755,48 +744,26 @@ def analyze_data(
         )
 
         if (
-            sale_type
-            == "Endast auktioner"
-            and fast.get(
-                "sale_type"
-            )
-            != "Auktion"
+            sale_type == "Endast auktioner"
+            and fast.get("sale_type") != "Auktion"
+        ) or (
+            sale_type == "Endast Köp nu"
+            and fast.get("sale_type") != "Köp nu"
         ):
+            debug["sale_type_miss"] += 1
             continue
 
-        if (
-            sale_type
-            == "Endast Köp nu"
-            and fast.get(
-                "sale_type"
-            )
-            != "Köp nu"
-        ):
-            continue
+        debug["after_sale_type"] += 1
 
         if (
-            numbered_only
-            and not is_numbered(
-                item
-            )
+            (numbered_only and not is_numbered(item))
+            or (patch_only and not is_patch(item))
+            or (auto_only and not is_auto(item))
         ):
+            debug["feature_filter_miss"] += 1
             continue
 
-        if (
-            patch_only
-            and not is_patch(
-                item
-            )
-        ):
-            continue
-
-        if (
-            auto_only
-            and not is_auto(
-                item
-            )
-        ):
-            continue
+        debug["after_feature_filters"] += 1
 
         attention = detect_market_attention(
             f"{item.get('titel', '')} {item.get('raw_text', '') or ''}",
@@ -1148,11 +1115,37 @@ if st.session_state.get("fetch_last_message"):
         live_message = fetch_progress_message()
         st.info(live_message or message)
 
-data = get_data()
+data = get_data(get_data_version())
 if not isinstance(data, list):
     data = []
 
+# Repair legacy market coverage only when the saved page-state is clearly
+# inconsistent with the category ids in the listings themselves.
+try:
+    repaired_categories = reconcile_market_state_with_items(data)
+except Exception:
+    repaired_categories = []
+
+_current_dataset_version = get_data_version()
+_previous_result_version = st.session_state.get("results_data_version")
+if (
+    st.session_state.get("results") is not None
+    and _previous_result_version
+    and _previous_result_version != _current_dataset_version
+):
+    st.session_state["results"] = None
+    st.session_state["debug"] = None
+    st.session_state["results_stale_notice"] = True
+
 st.subheader("Hitta fynd")
+if repaired_categories:
+    st.info(
+        "🧭 Marknadstäckningen har rättats för "
+        + ", ".join(repaired_categories)
+        + ". Gammal sidstatus stämde inte med annonslänkarna och har därför byggts om från verifierad data."
+    )
+if st.session_state.pop("results_stale_notice", False):
+    st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det gamla sökresultatet rensades så att du inte ser en inaktuell nolla.")
 _fetch_state_summary = load_fetch_state()
 _last_values = [
     info.get("last_fetch_at")
@@ -1361,6 +1354,40 @@ else:
         start_fetch("__all__", True, "scheduled_refresh")
         st.rerun()
 
+def render_search_pipeline(debug, sport_label, max_price, search):
+    """Explain where listings disappear without guessing about the market."""
+    if not isinstance(debug, dict):
+        return
+    stages = [
+        ("Dataset", int(debug.get("total_items", 0) or 0)),
+        ("Efter prestandaskydd", int(debug.get("performance_items", 0) or 0)),
+        (f"{sport_label}", int(debug.get("after_sport", 0) or 0)),
+        ("Har giltigt pris", int(debug.get("valid_price", 0) or 0)),
+        (f"Inom budget {int(max_price)} kr", int(debug.get("within_budget", 0) or 0)),
+        ("Matchar sökning", int(debug.get("after_search", 0) or 0)),
+        ("Rätt annonsform", int(debug.get("after_sale_type", 0) or 0)),
+        ("Efter specialfilter", int(debug.get("after_feature_filters", 0) or 0)),
+        ("Analyserade kandidater", int(debug.get("final_results", 0) or 0)),
+    ]
+    st.markdown("### 🔎 Sållning – var försvinner annonserna?")
+    st.caption("Varje steg visar hur många annonser som återstår. Då ser du om problemet är data, budget, sökning eller ett filter.")
+    cols = st.columns(3)
+    for idx, (label, value) in enumerate(stages):
+        cols[idx % 3].metric(label, value)
+
+    sport_count = int(debug.get("after_sport", 0) or 0)
+    if sport_count and int(debug.get("valid_price", 0) or 0) == 0:
+        st.error("Alla annonser för vald sport saknar ett användbart pris. Det pekar på ett inläsnings-/parserfel, inte på dina sökfilter.")
+    elif int(debug.get("valid_price", 0) or 0) and int(debug.get("within_budget", 0) or 0) == 0:
+        st.warning("Alla annonser med giltigt pris ligger över vald totalbudget. Höj budgeten för att se kandidater.")
+    elif int(debug.get("within_budget", 0) or 0) and int(debug.get("after_search", 0) or 0) == 0 and str(search or "").strip():
+        st.warning("Budgeten släpper igenom annonser, men ingen matchar söktexten. Prova kortare eller tom sökning.")
+    elif int(debug.get("after_search", 0) or 0) and int(debug.get("after_sale_type", 0) or 0) == 0:
+        st.warning("Annonsform-filtret sorterar bort allt. Välj Alla för att kontrollera marknaden.")
+    elif int(debug.get("after_sale_type", 0) or 0) and int(debug.get("after_feature_filters", 0) or 0) == 0:
+        st.warning("Ett specialfilter – numrerat, patch/relic eller autograf – sorterar bort alla annonser.")
+
+
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)
 
@@ -1471,6 +1498,7 @@ if run:
 
     st.session_state["results"] = results
     st.session_state["debug"] = debug
+    st.session_state["results_data_version"] = get_data_version()
 
 
 if st.session_state.get("results") is not None:
@@ -1503,10 +1531,22 @@ if st.session_state.get("results") is not None:
             st.warning(
                 "Inga annonser är inlästa ännu. Hämta annonser från Tradera först – dina filter är inte problemet."
             )
+        elif st.session_state.get("debug", {}).get("final_results", 0) == 0:
+            st.warning(
+                "FlipFynd hittade inga analyserbara kandidater. Öppna sållningen nedan – den visar exakt vilket steg som tar bort annonserna."
+            )
         else:
             st.info(
-                "Inga inlästa annonser matchar dina filter just nu. Prova en högre budget, lägre analyssäkerhet eller bredare sökning."
+                "Annonser passerade grundfiltren men inga syns efter visningsfiltren. Kontrollera analyssäkerhet och 'Visa även svaga kandidater'."
             )
+
+    with st.expander("🔎 Visa varför annonser sorterades bort", expanded=not bool(visible)):
+        render_search_pipeline(
+            st.session_state.get("debug", {}),
+            sport_label=sport_label,
+            max_price=max_price,
+            search=search,
+        )
 
     # Opportunity Radar reduces the analysed market to a short action queue.
     radar_groups = {name: [] for name in ("AGERA NU", "BEVAKA", "UNDERSÖK", "IGNORERA")}

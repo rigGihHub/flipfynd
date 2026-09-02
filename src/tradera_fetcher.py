@@ -659,6 +659,69 @@ def reset_market_sync(category_name=None):
     save_fetch_state(state)
 
 
+
+def reconcile_market_state_with_items(items):
+    """Repair obviously stale legacy coverage using verified Tradera category ids.
+
+    This is intentionally conservative: it only rewrites a category when the
+    state claims deep coverage (>= 50 pages) while the saved listings for that
+    same verified category only contain pages within the first 12 pages. This
+    targets the old cross-sport state bug without discarding plausible coverage.
+    """
+    state = load_fetch_state()
+    categories = state.setdefault("categories", {})
+    observed = {name: set() for name in CATEGORY_URLS}
+
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        category = infer_category_from_item_url(item.get("lank"), None)
+        if category not in observed:
+            continue
+        try:
+            page = int(item.get("sida"))
+        except (TypeError, ValueError):
+            continue
+        if page >= 1:
+            observed[category].add(page)
+
+    repaired = []
+    for category, pages in observed.items():
+        if not pages:
+            continue
+        info = categories.setdefault(category, {})
+        loaded_pages = sorted({int(p) for p in info.get("loaded_pages", []) if str(p).isdigit()})
+        if not loaded_pages:
+            continue
+        claimed_max = max(loaded_pages)
+        observed_max = max(pages)
+        if claimed_max < 50 or observed_max > 12 or claimed_max <= observed_max + 20:
+            continue
+
+        verified_pages = sorted(pages)
+        info["loaded_pages"] = verified_pages
+        timestamps = info.get("page_loaded_at", {})
+        if isinstance(timestamps, dict):
+            info["page_loaded_at"] = {
+                str(page): timestamps.get(str(page))
+                for page in verified_pages
+                if timestamps.get(str(page))
+            }
+        info["market_next_page"] = observed_max + 1
+        info["market_complete"] = False
+        info.pop("market_completed_at", None)
+        info.pop("market_last_batch_start", None)
+        info.pop("market_last_batch_end", None)
+        info["coverage_repaired_at"] = _utc_now_iso()
+        info["coverage_repair_reason"] = (
+            f"legacy state claimed page {claimed_max}, verified listing URLs only support pages 1–{observed_max}"
+        )
+        repaired.append(category)
+
+    if repaired:
+        save_fetch_state(state)
+    return repaired
+
 def load_items(
     path=DATA_PATH,
 ):
