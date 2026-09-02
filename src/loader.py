@@ -20,3 +20,11 @@ def load_data(path: str = "tradera_data.json") -> list:
         return data
 
     return []
+
+def load_sold_comps(path: str = "data/sold_comps.json") -> list:
+    """Load optional historical sold-comparable records.
+
+    The file is intentionally separate from live Tradera listings so sold
+    evidence can never accidentally appear as an active buy candidate.
+    """
+    return load_data(path)

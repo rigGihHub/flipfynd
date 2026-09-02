@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "purpose": "Structural demand priors for review prioritization only; never price multipliers.",
+  "archetypes": {
+    "base_or_unknown": {"structure_score": 20, "label": "Bas/okänd struktur"},
+    "known_program": {"structure_score": 35, "label": "Känt program/insert"},
+    "parallel": {"structure_score": 50, "label": "Parallel"},
+    "numbered_or_auto": {"structure_score": 65, "label": "Numrerad/autografstruktur"},
+    "ssp_or_premium": {"structure_score": 78, "label": "SSP/premiumstruktur"},
+    "low_numbered_or_grail": {"structure_score": 90, "label": "Lågnumrerad/grailstruktur"},
+    "one_of_one": {"structure_score": 96, "label": "1/1-struktur"}
+  },
+  "rookie_bonuses": {
+    "0": 0,
+    "2": 5,
+    "3": 7,
+    "4": 10,
+    "5": 12
+  },
+  "guardrails": [
+    "Player demand is a prior, not a market price.",
+    "Structural rarity without player demand must not be treated as liquid demand.",
+    "No sold comps means uncertain market evidence, not automatically low demand.",
+    "The engine may prioritize full analysis but must not raise valuation, profit or max bid."
+  ]
+}

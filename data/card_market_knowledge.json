@@ -1,0 +1,1206 @@
+{
+  "version": "2026-09-02-v0.10.6",
+  "purpose": "Authoritative product/checklist knowledge used to recognize card structures that deserve attention. It is not a price guide: rarity/chase labels can prioritize deeper analysis but may never create a monetary value without market comps.",
+  "sources": [
+    {
+      "id": "ud_series1_2526",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2025-26-ud-series-1-checklist/",
+      "notes": "Official checklist confirms Young Guns plus Deluxe /250, Exclusives /100 and High Gloss /10 structures."
+    },
+    {
+      "id": "ud_opc_platinum_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-o-pee-chee-platinum-checklist/",
+      "notes": "Official checklist confirms OPC Platinum numbered parallels including Violet Pixels /299, Seismic Gold /50, Orange Checkers /25 and Emerald Surge /10."
+    },
+    {
+      "id": "ud_metal_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-skybox-metal-universe-checklist/",
+      "notes": "Official checklist confirms Precious Metal Gems (PMG) Red /100, Green /10 and Gold 1/1 structures."
+    },
+    {
+      "id": "ud_spgu_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-sp-game-used-checklist/",
+      "notes": "Official checklist confirms premium memorabilia parallels and low serial-numbered patch structures."
+    },
+    {
+      "id": "topps_finest_2425",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-finest-soccer",
+      "notes": "Official product page calls Prized Footballers Fusion Variations and The Man chase cards and confirms Marks of Excellence on-card autographs."
+    },
+    {
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2025-26-sp-authentic-checklist/",
+      "notes": "Official checklist confirms Future Watch rookies/autographs, serial numbering and Future Watch Auto Patch structures.",
+      "id": "legacy_6"
+    },
+    {
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-2025-the-cup-checklist/",
+      "notes": "Official checklist confirms The Cup Rookie Auto Patch, low-numbered parallels and 1/1 structures.",
+      "id": "legacy_7"
+    },
+    {
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-chrome-uefa-club-competitions",
+      "notes": "Official product page confirms Chrome UCC rookie/star structure and named chase inserts/parallels.",
+      "id": "legacy_8"
+    },
+    {
+      "publisher": "Topps",
+      "url": "https://www.topps.com/products/2024-25-topps-chrome%C2%AE-uefa-club-competitions-hobby-box",
+      "notes": "Official product page identifies Helix, Munich at Night, autographs and Marks of Excellence as chase content.",
+      "id": "legacy_9"
+    },
+    {
+      "publisher": "Topps",
+      "url": "https://www.topps.com/products/2024-25-topps-merlin-ucc-hobby-box",
+      "notes": "Official product page confirms Merlin autographs, numbered parallels and refractor parallels.",
+      "id": "legacy_10"
+    },
+    {
+      "publisher": "Panini",
+      "url": "https://www.paniniamerica.net/2025-panini-prizm-k-league-trading-card-box-hobby.html",
+      "notes": "Official product page identifies Prizm parallels and ultra-rare Downtown, Color Blast and Manga cards.",
+      "id": "legacy_11"
+    },
+    {
+      "id": "ud_series1_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-ud-series-1-hockey-checklist/",
+      "notes": "Official checklist confirms Clear Cut acetate parallels including Clear Cut Young Guns, with Young Guns Clear Cut listed at 1:144 Hobby."
+    },
+    {
+      "id": "ud_clearcut_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-clear-cut-hockey-checklist/",
+      "notes": "Official checklist confirms autograph-led Clear Cut structures including High Gloss /10 and Outburst /25 parallels, plus rookie autograph variants."
+    },
+    {
+      "id": "topps_chrome_ucc_2425",
+      "publisher": "Topps",
+      "url": "https://in.topps.com/pages/in-topps-chrome-uefa-club-competitions",
+      "notes": "Official Topps page explicitly identifies Helix and Munich at Night as ultra-rare/desirable chase inserts and Marks of Excellence as on-card autographs."
+    },
+    {
+      "id": "topps_merlin_2425",
+      "publisher": "Topps",
+      "url": "https://in.topps.com/pages/topps-ucc-merlin",
+      "notes": "Official Topps page confirms 2024-25 Merlin numbered parallels, autograph content, European Knights Autographs and Marks of Excellence."
+    },
+    {
+      "id": "topps_finest_ucc_2425",
+      "publisher": "Topps",
+      "url": "https://uk.topps.com/pages/topps-finest-soccer",
+      "notes": "Official Topps page identifies Prized Footballers Fusion Variations and The Man as chase cards and confirms Finest First Class Rookies Autographs."
+    },
+    {
+      "id": "panini_prizm_kleague_2025",
+      "publisher": "Panini",
+      "url": "https://www.paniniamerica.net/2025-panini-prizm-k-league-trading-card-box-hobby",
+      "notes": "Official Panini page identifies White Tiger, Genesis, Downtown, Color Blast and Manga structures in Prizm soccer."
+    },
+    {
+      "id": "panini_prizm_epl_2223",
+      "publisher": "Panini",
+      "url": "https://blog.paniniamerica.net/wp-content/uploads/2023/03/22-23-Prizm-Premier-League-PIS-Hobby.pdf",
+      "notes": "Official Panini product information identifies Black 1/1 and ultra-rare Color Blast in Prizm Premier League."
+    },
+    {
+      "id": "ud_spa_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-sp-authentic-checklist/",
+      "notes": "Official checklist confirms Autographed Future Watch rookies /999, Future Watch Auto Patch structures and Black Auto Material 1/1 parallels."
+    },
+    {
+      "id": "ud_artifacts_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-artifacts-checklist/",
+      "notes": "Official checklist confirms numbered rookie parallels, rookie autos /5 and Masterful Artifacts 1/1 parallels."
+    },
+    {
+      "id": "ud_blackdiamond_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-black-diamond-checklist/",
+      "notes": "Official checklist confirms Exquisite Collection rookies /399, rookie patches /99 and dual-swatch rookie gold parallels /25."
+    },
+    {
+      "id": "ud_stature_2425",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2024-25-stature-checklist/",
+      "notes": "Official checklist confirms low-numbered Stature rookie auto/memorabilia parallels including Gold /5 and Purple /3 structures."
+    },
+    {
+      "id": "topps_museum_ucc_2425",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/products/2024-25-topps-museum-collection-ucc-hobby-box",
+      "notes": "Official product page identifies Supreme Script Autograph/Autograph Relic Book cards, Kit-Construction Triple Relics Autograph Book, UEFA Respect/Foundation Patch Book cards and two Grail cards."
+    },
+    {
+      "id": "topps_chrome_euro_2024",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/products/2024-topps-chrome-r-uefa-euro-hobby-box-sealed-case-1",
+      "notes": "Official product page identifies Berlin at Night as rare chase content, Euro Final Goal Net Relic autographs and a 1/1 Merlins Euro Match Ball Signatures card."
+    },
+    {
+      "id": "topps_reverence_ucc_2425",
+      "publisher": "Topps",
+      "url": "https://uk.topps.com/products/2024-25-topps-reverence-uefa-club-competitions",
+      "notes": "Official product page identifies Crowned Legend Jewel Autograph Relic as a case-level chase and describes jewel autograph relic structures."
+    },
+    {
+      "id": "ud_series2_2526",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/2025-26-upper-deck-series-2/",
+      "notes": "Official product page confirms Young Guns Exclusives /100, High Gloss /10, Clear Cut, Outburst Red /25 and Outburst Gold 1/1."
+    },
+    {
+      "id": "topps_chrome_pl_2026",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-chrome-premier-league",
+      "notes": "Official product page names Chrome Anime, Helix, Triple Platinum, Genius Chrome, Give Him His Flowers and Locked In as premium case pulls."
+    },
+    {
+      "id": "topps_inception_ucc_2526",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-inception-ucc",
+      "notes": "Official product page confirms Inception UCC as a premium autograph/relic-focused release with autograph patch content."
+    },
+    {
+      "id": "topps_museum_ucc_2526",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-museum-ucc",
+      "notes": "Official product page confirms one autograph, one relic and one autograph-relic per hobby box plus Museum Roll of Honor insert."
+    }
+  ],
+  "signals": [
+    {
+      "label": "Bound by Origin Autograph Book",
+      "sport": "football",
+      "patterns": [
+        "bound by origin",
+        "autograph"
+      ],
+      "category": "autograph_program",
+      "rarity_signal": "book_autograph",
+      "confidence": "high",
+      "attention_priority": 5,
+      "source_id": "topps_finest_2425",
+      "product_family": "Topps Finest UEFA"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "color blast"
+      ],
+      "label": "Prizm Color Blast",
+      "category": "ssp_insert",
+      "rarity_signal": "ultra_rare_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Chase – Color Blast"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "downtown"
+      ],
+      "label": "Prizm Downtown",
+      "category": "ssp_insert",
+      "rarity_signal": "ultra_rare_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Chase – Downtown"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "manga"
+      ],
+      "label": "Prizm Manga",
+      "category": "ssp_insert",
+      "rarity_signal": "ultra_rare_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Chase – Manga"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "helix"
+      ],
+      "label": "Topps Chrome Helix",
+      "category": "ssp_insert",
+      "rarity_signal": "ultra_rare_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "product_family": "Topps Chrome UEFA",
+      "program_family": "Topps Chrome Chase Inserts"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "munich at night"
+      ],
+      "label": "Topps Chrome Munich at Night",
+      "category": "ssp_insert",
+      "rarity_signal": "ultra_rare_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "product_family": "Topps Chrome UEFA",
+      "program_family": "Topps Chrome Chase Inserts"
+    },
+    {
+      "label": "Finest First Class Rookies Autograph",
+      "sport": "football",
+      "patterns": [
+        "finest first class rookies",
+        "autograph"
+      ],
+      "category": "rookie_auto",
+      "rarity_signal": "rookie_autograph_program",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_finest_2425",
+      "product_family": "Topps Finest UEFA"
+    },
+    {
+      "label": "Finest Prized Footballers Fusion",
+      "sport": "football",
+      "patterns": [
+        "prized footballers",
+        "fusion"
+      ],
+      "category": "ssp_insert",
+      "rarity_signal": "chase_variation",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_finest_2425",
+      "product_family": "Topps Finest UEFA"
+    },
+    {
+      "label": "Finest The Man",
+      "sport": "football",
+      "patterns": [
+        "the man"
+      ],
+      "category": "ssp_insert",
+      "rarity_signal": "chase_insert",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_finest_2425",
+      "product_family": "Topps Finest UEFA"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "marks of excellence"
+      ],
+      "label": "Marks of Excellence",
+      "category": "autograph_program",
+      "rarity_signal": "on_card_auto_program",
+      "confidence": "high",
+      "attention_priority": 4,
+      "product_family": "Topps Chrome UEFA",
+      "program_family": "Topps Chrome Autographs"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "purple mojo"
+      ],
+      "label": "Purple Mojo",
+      "category": "parallel",
+      "rarity_signal": "low_numbered_parallel",
+      "confidence": "medium",
+      "attention_priority": 4,
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Parallel Family"
+    },
+    {
+      "label": "Finest Idols",
+      "sport": "football",
+      "patterns": [
+        "finest idols"
+      ],
+      "category": "insert",
+      "rarity_signal": "limited_insert",
+      "confidence": "high",
+      "attention_priority": 3,
+      "source_id": "topps_finest_2425",
+      "product_family": "Topps Finest UEFA"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "budapest at night"
+      ],
+      "label": "Topps Chrome Budapest at Night",
+      "category": "ssp_insert",
+      "rarity_signal": "rare_insert",
+      "confidence": "high",
+      "attention_priority": 3,
+      "product_family": "Topps Chrome UEFA",
+      "program_family": "Topps Chrome Chase Inserts"
+    },
+    {
+      "sport": "football",
+      "patterns": [
+        "merlin",
+        "atomic refractor"
+      ],
+      "label": "Merlin Atomic Refractor",
+      "category": "parallel",
+      "rarity_signal": "product_parallel",
+      "confidence": "medium",
+      "attention_priority": 2,
+      "product_family": "Topps Merlin UEFA",
+      "program_family": "Topps Merlin Parallels"
+    },
+    {
+      "sport": "hockey",
+      "patterns": [
+        "future watch auto patch",
+        "limited auto material"
+      ],
+      "label": "Future Watch Auto Patch",
+      "category": "rookie_patch_auto",
+      "rarity_signal": "premium_numbered_rookie",
+      "confidence": "high",
+      "attention_priority": 5,
+      "product_family": "SP Authentic",
+      "program_family": "Future Watch"
+    },
+    {
+      "label": "High Gloss",
+      "sport": "hockey",
+      "patterns": [
+        "high gloss"
+      ],
+      "category": "parallel",
+      "rarity_signal": "very_low_numbered_parallel",
+      "confidence": "high",
+      "print_run": 10,
+      "attention_priority": 5,
+      "source_id": "ud_series1_2526",
+      "product_family": "Upper Deck Series"
+    },
+    {
+      "label": "OPC Platinum Emerald Surge",
+      "sport": "hockey",
+      "patterns": [
+        "emerald surge"
+      ],
+      "category": "parallel",
+      "rarity_signal": "very_low_numbered_parallel",
+      "confidence": "high",
+      "print_run": 10,
+      "attention_priority": 5,
+      "source_id": "ud_opc_platinum_2425",
+      "product_family": "O-Pee-Chee Platinum",
+      "program_family": "OPC Platinum Parallels"
+    },
+    {
+      "label": "PMG Gold 1/1",
+      "sport": "hockey",
+      "patterns": [
+        "precious metal gem",
+        "gold"
+      ],
+      "category": "parallel",
+      "rarity_signal": "one_of_one_pmg",
+      "confidence": "high",
+      "print_run": 1,
+      "attention_priority": 5,
+      "source_id": "ud_metal_2425",
+      "product_family": "Skybox Metal Universe",
+      "program_family": "Precious Metal Gems"
+    },
+    {
+      "label": "PMG Green",
+      "sport": "hockey",
+      "patterns": [
+        "precious metal gem",
+        "green"
+      ],
+      "category": "parallel",
+      "rarity_signal": "very_low_numbered_pmg",
+      "confidence": "high",
+      "print_run": 10,
+      "attention_priority": 5,
+      "source_id": "ud_metal_2425",
+      "product_family": "Skybox Metal Universe",
+      "program_family": "Precious Metal Gems"
+    },
+    {
+      "sport": "hockey",
+      "patterns": [
+        "the cup",
+        "rookie auto patch"
+      ],
+      "label": "The Cup Rookie Auto Patch",
+      "category": "rookie_patch_auto",
+      "rarity_signal": "premium_numbered_rookie",
+      "confidence": "medium",
+      "attention_priority": 5,
+      "product_family": "The Cup"
+    },
+    {
+      "sport": "hockey",
+      "patterns": [
+        "black auto material",
+        "gold foil parallel"
+      ],
+      "label": "The Cup low-numbered parallel",
+      "category": "parallel",
+      "rarity_signal": "very_low_numbered",
+      "confidence": "medium",
+      "attention_priority": 5,
+      "product_family": "The Cup"
+    },
+    {
+      "label": "Young Guns High Gloss",
+      "sport": "hockey",
+      "patterns": [
+        "young guns",
+        "high gloss"
+      ],
+      "category": "rookie_parallel",
+      "rarity_signal": "very_low_numbered_flagship_rookie",
+      "confidence": "high",
+      "print_run": 10,
+      "attention_priority": 5,
+      "source_id": "ud_series1_2526",
+      "product_family": "Upper Deck Series",
+      "program_family": "Young Guns"
+    },
+    {
+      "sport": "hockey",
+      "label": "Future Watch Autograph",
+      "category": "rookie_auto",
+      "rarity_signal": "numbered_rookie_auto",
+      "confidence": "high",
+      "attention_priority": 4,
+      "product_family": "SP Authentic",
+      "program_family": "Future Watch",
+      "patterns_any": [
+        "future watch autograph",
+        "autographed future watch",
+        "future watch auto"
+      ]
+    },
+    {
+      "label": "OPC Platinum Orange Checkers",
+      "sport": "hockey",
+      "patterns": [
+        "orange checkers"
+      ],
+      "category": "parallel",
+      "rarity_signal": "very_low_numbered_parallel",
+      "confidence": "high",
+      "print_run": 25,
+      "attention_priority": 4,
+      "source_id": "ud_opc_platinum_2425",
+      "product_family": "O-Pee-Chee Platinum",
+      "program_family": "OPC Platinum Parallels"
+    },
+    {
+      "label": "OPC Platinum Seismic Gold",
+      "sport": "hockey",
+      "patterns": [
+        "seismic gold"
+      ],
+      "category": "parallel",
+      "rarity_signal": "low_numbered_parallel",
+      "confidence": "high",
+      "print_run": 50,
+      "attention_priority": 4,
+      "source_id": "ud_opc_platinum_2425",
+      "product_family": "O-Pee-Chee Platinum",
+      "program_family": "OPC Platinum Parallels"
+    },
+    {
+      "label": "PMG Red",
+      "sport": "hockey",
+      "patterns": [
+        "precious metal gem",
+        "red"
+      ],
+      "category": "parallel",
+      "rarity_signal": "low_numbered_pmg",
+      "confidence": "high",
+      "print_run": 100,
+      "attention_priority": 4,
+      "source_id": "ud_metal_2425",
+      "product_family": "Skybox Metal Universe",
+      "program_family": "Precious Metal Gems"
+    },
+    {
+      "label": "Premium Memorabilia Patch",
+      "sport": "hockey",
+      "patterns": [
+        "premium memorabilia",
+        "patch"
+      ],
+      "category": "memorabilia",
+      "rarity_signal": "low_numbered_patch_program",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "ud_spgu_2425"
+    },
+    {
+      "label": "Young Guns Exclusives",
+      "sport": "hockey",
+      "patterns": [
+        "young guns",
+        "exclusive"
+      ],
+      "category": "rookie_parallel",
+      "rarity_signal": "low_numbered_flagship_rookie",
+      "confidence": "high",
+      "print_run": 100,
+      "attention_priority": 4,
+      "source_id": "ud_series1_2526",
+      "product_family": "Upper Deck Series",
+      "program_family": "Young Guns"
+    },
+    {
+      "label": "PMG",
+      "sport": "hockey",
+      "patterns": [
+        "pmg"
+      ],
+      "category": "parallel_family",
+      "rarity_signal": "important_parallel_family",
+      "confidence": "medium",
+      "attention_priority": 3,
+      "source_id": "ud_metal_2425",
+      "product_family": "Skybox Metal Universe",
+      "program_family": "Precious Metal Gems"
+    },
+    {
+      "label": "Upper Deck Exclusives",
+      "sport": "hockey",
+      "patterns": [
+        "exclusive"
+      ],
+      "category": "parallel",
+      "rarity_signal": "low_numbered_parallel",
+      "confidence": "medium",
+      "print_run": 100,
+      "attention_priority": 3,
+      "source_id": "ud_series1_2526",
+      "product_family": "Upper Deck Series"
+    },
+    {
+      "label": "Young Guns Deluxe",
+      "sport": "hockey",
+      "patterns": [
+        "young guns",
+        "deluxe"
+      ],
+      "category": "rookie_parallel",
+      "rarity_signal": "numbered_flagship_rookie",
+      "confidence": "high",
+      "print_run": 250,
+      "attention_priority": 3,
+      "source_id": "ud_series1_2526",
+      "product_family": "Upper Deck Series",
+      "program_family": "Young Guns"
+    },
+    {
+      "label": "OPC Platinum Violet Pixels",
+      "sport": "hockey",
+      "patterns": [
+        "violet pixels"
+      ],
+      "category": "parallel",
+      "rarity_signal": "numbered_parallel",
+      "confidence": "high",
+      "print_run": 299,
+      "attention_priority": 2,
+      "source_id": "ud_opc_platinum_2425",
+      "product_family": "O-Pee-Chee Platinum",
+      "program_family": "OPC Platinum Parallels"
+    },
+    {
+      "sport": "hockey",
+      "patterns": [
+        "young guns"
+      ],
+      "label": "Young Guns",
+      "category": "rookie_program",
+      "rarity_signal": "flagship_rookie",
+      "confidence": "high",
+      "attention_priority": 2,
+      "product_family": "Upper Deck Series",
+      "program_family": "Young Guns"
+    },
+    {
+      "label": "Young Guns Clear Cut",
+      "sport": "hockey",
+      "patterns": [
+        "clear cut",
+        "young guns"
+      ],
+      "category": "rookie_parallel",
+      "rarity_signal": "acetate_parallel",
+      "confidence": "high",
+      "attention_priority": 5,
+      "source_id": "ud_series1_2425",
+      "product_family": "Upper Deck Series",
+      "program_family": "Young Guns"
+    },
+    {
+      "label": "Clear Cut High Gloss Auto /10",
+      "sport": "hockey",
+      "patterns": [
+        "clear cut",
+        "high gloss"
+      ],
+      "category": "autograph_parallel",
+      "rarity_signal": "numbered_10",
+      "confidence": "high",
+      "print_run": 10,
+      "attention_priority": 5,
+      "source_id": "ud_clearcut_2425",
+      "product_family": "Upper Deck Clear Cut",
+      "program_family": "Clear Cut Autograph Parallels"
+    },
+    {
+      "label": "Clear Cut Outburst Auto /25",
+      "sport": "hockey",
+      "patterns": [
+        "clear cut",
+        "outburst"
+      ],
+      "category": "autograph_parallel",
+      "rarity_signal": "numbered_25",
+      "confidence": "high",
+      "print_run": 25,
+      "attention_priority": 5,
+      "source_id": "ud_clearcut_2425",
+      "product_family": "Upper Deck Clear Cut",
+      "program_family": "Clear Cut Autograph Parallels"
+    },
+    {
+      "label": "Prizm White Tiger",
+      "sport": "football",
+      "patterns": [
+        "white tiger"
+      ],
+      "category": "parallel",
+      "rarity_signal": "case_level_signal",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "panini_prizm_kleague_2025",
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Parallel Family"
+    },
+    {
+      "label": "Prizm Genesis",
+      "sport": "football",
+      "patterns": [
+        "genesis"
+      ],
+      "category": "parallel",
+      "rarity_signal": "case_level_signal",
+      "confidence": "high",
+      "attention_priority": 5,
+      "source_id": "panini_prizm_kleague_2025",
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Parallel Family"
+    },
+    {
+      "label": "Prizm Black 1/1",
+      "sport": "football",
+      "patterns": [
+        "prizm",
+        "black",
+        "1/1"
+      ],
+      "category": "parallel",
+      "rarity_signal": "one_of_one",
+      "confidence": "high",
+      "print_run": 1,
+      "attention_priority": 5,
+      "source_id": "panini_prizm_epl_2223",
+      "product_family": "Prizm Football",
+      "program_family": "Prizm Parallel Family"
+    },
+    {
+      "label": "Merlin European Knights Autograph",
+      "sport": "football",
+      "patterns": [
+        "european knights",
+        "autograph"
+      ],
+      "category": "autograph_program",
+      "rarity_signal": "autograph",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_merlin_2425",
+      "product_family": "Topps Merlin UEFA",
+      "program_family": "Topps Merlin Autographs"
+    },
+    {
+      "label": "Future Watch Autograph /999",
+      "sport": "hockey",
+      "patterns": [
+        "future watch",
+        "autograph"
+      ],
+      "category": "rookie_auto",
+      "rarity_signal": "numbered_rookie_auto",
+      "confidence": "high",
+      "print_run": 999,
+      "attention_priority": 4,
+      "knowledge_tier": 4,
+      "product_family": "SP Authentic",
+      "program_family": "Future Watch Autograph",
+      "importance_reason": "SP Authentic Future Watch Autographs are an official numbered rookie-autograph program. Exact player, season and card number should be matched before comps are trusted.",
+      "source_id": "ud_spa_2425"
+    },
+    {
+      "label": "Future Watch Auto Patch /100",
+      "sport": "hockey",
+      "patterns": [
+        "future watch",
+        "auto patch"
+      ],
+      "category": "rookie_patch_auto",
+      "rarity_signal": "premium_numbered_rookie",
+      "confidence": "high",
+      "print_run": 100,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "SP Authentic",
+      "program_family": "Future Watch Auto Patch",
+      "importance_reason": "The official checklist shows Future Watch Auto Patch cards as a separate numbered rookie patch-autograph structure. They should not be compared with regular Future Watch autos.",
+      "source_id": "ud_spa_2425"
+    },
+    {
+      "label": "Future Watch Black Auto Material 1/1",
+      "sport": "hockey",
+      "patterns": [
+        "future watch",
+        "black auto material"
+      ],
+      "category": "rookie_patch_auto",
+      "rarity_signal": "one_of_one_rookie_patch_auto",
+      "confidence": "high",
+      "print_run": 1,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "SP Authentic",
+      "program_family": "Future Watch Auto Patch",
+      "importance_reason": "Black Auto Material Future Watch parallels are documented 1/1 structures, so exact identity is critical before any price comparison.",
+      "source_id": "ud_spa_2425"
+    },
+    {
+      "label": "Artifacts Rookie Black Auto /5",
+      "sport": "hockey",
+      "patterns": [
+        "artifacts",
+        "black",
+        "rookie",
+        "auto"
+      ],
+      "category": "rookie_auto",
+      "rarity_signal": "very_low_numbered_rookie_auto",
+      "confidence": "high",
+      "print_run": 5,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "Artifacts",
+      "program_family": "Artifacts Rookie Auto",
+      "source_id": "ud_artifacts_2425"
+    },
+    {
+      "label": "Masterful Artifacts 1/1",
+      "sport": "hockey",
+      "patterns": [
+        "masterful artifacts"
+      ],
+      "category": "parallel",
+      "rarity_signal": "one_of_one",
+      "confidence": "high",
+      "print_run": 1,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "Artifacts",
+      "program_family": "Masterful Artifacts",
+      "source_id": "ud_artifacts_2425"
+    },
+    {
+      "label": "Exquisite Collection Rookie /399",
+      "sport": "hockey",
+      "patterns": [
+        "exquisite collection",
+        "rookie"
+      ],
+      "category": "rookie_program",
+      "rarity_signal": "numbered_premium_rookie",
+      "confidence": "high",
+      "print_run": 399,
+      "attention_priority": 4,
+      "knowledge_tier": 4,
+      "product_family": "Black Diamond",
+      "program_family": "Exquisite Collection Rookies",
+      "source_id": "ud_blackdiamond_2425"
+    },
+    {
+      "label": "Exquisite Rookie Patch /99",
+      "sport": "hockey",
+      "patterns": [
+        "exquisite",
+        "rookie patch"
+      ],
+      "category": "rookie_patch_auto",
+      "rarity_signal": "numbered_rookie_patch",
+      "confidence": "high",
+      "print_run": 99,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "Black Diamond",
+      "program_family": "Exquisite Rookie Patch",
+      "source_id": "ud_blackdiamond_2425"
+    },
+    {
+      "label": "Exquisite Dual Swatch Rookie Gold /25",
+      "sport": "hockey",
+      "patterns": [
+        "exquisite",
+        "dual swatch",
+        "rookie",
+        "gold"
+      ],
+      "category": "memorabilia",
+      "rarity_signal": "low_numbered_rookie_patch",
+      "confidence": "high",
+      "print_run": 25,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "Black Diamond",
+      "program_family": "Exquisite Dual Swatch Rookies",
+      "source_id": "ud_blackdiamond_2425"
+    },
+    {
+      "label": "Stature Rookie Auto Memorabilia Gold /5",
+      "sport": "hockey",
+      "patterns": [
+        "stature",
+        "gold",
+        "rookie",
+        "auto"
+      ],
+      "category": "rookie_patch_auto",
+      "rarity_signal": "very_low_numbered_rookie_auto_mem",
+      "confidence": "high",
+      "print_run": 5,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "Stature",
+      "program_family": "Rookie Auto Memorabilia",
+      "source_id": "ud_stature_2425"
+    },
+    {
+      "label": "Stature Purple Memorabilia /3",
+      "sport": "hockey",
+      "patterns": [
+        "stature",
+        "purple",
+        "memorabilia"
+      ],
+      "category": "memorabilia",
+      "rarity_signal": "very_low_numbered_memorabilia",
+      "confidence": "high",
+      "print_run": 3,
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "product_family": "Stature",
+      "program_family": "Memorabilia Parallel",
+      "source_id": "ud_stature_2425"
+    },
+    {
+      "sport": "hockey",
+      "label": "The Cup Emblems of Endorsements /15",
+      "patterns": [
+        "emblems of endorsements"
+      ],
+      "category": "autograph_relic",
+      "rarity_signal": "low_numbered_dual_patch_auto",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "print_run": 15,
+      "source_id": "legacy_7",
+      "product_family": "The Cup",
+      "program_family": "Emblems of Endorsements",
+      "importance_reason": "The Cup checklist documents Emblems of Endorsements as an autograph + dual-patch program /15; exact program and player matter for comps."
+    },
+    {
+      "sport": "hockey",
+      "label": "The Cup Enshrinements /25",
+      "patterns": [
+        "enshrinements"
+      ],
+      "category": "autograph_program",
+      "rarity_signal": "low_numbered_autograph",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "print_run": 25,
+      "source_id": "legacy_7",
+      "product_family": "The Cup",
+      "program_family": "Enshrinements"
+    },
+    {
+      "sport": "football",
+      "label": "Museum Supreme Script Autograph Relic Book",
+      "patterns": [
+        "supreme script",
+        "autograph relic",
+        "book"
+      ],
+      "category": "book_card",
+      "rarity_signal": "premium_book_auto_relic",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_museum_ucc_2425",
+      "product_family": "Topps Museum Collection UCC",
+      "program_family": "Supreme Script"
+    },
+    {
+      "sport": "football",
+      "label": "Museum Kit-Construction Triple Relics Autograph Book",
+      "patterns": [
+        "kit-construction",
+        "triple relics",
+        "autograph",
+        "book"
+      ],
+      "category": "book_card",
+      "rarity_signal": "premium_book_auto_relic",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_museum_ucc_2425",
+      "product_family": "Topps Museum Collection UCC",
+      "program_family": "Kit-Construction"
+    },
+    {
+      "sport": "football",
+      "label": "Museum UEFA Respect/Foundation Patch Book Auto",
+      "patterns": [
+        "respect",
+        "foundation",
+        "patch",
+        "book"
+      ],
+      "category": "book_card",
+      "rarity_signal": "patch_book_autograph",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_museum_ucc_2425",
+      "product_family": "Topps Museum Collection UCC",
+      "program_family": "UEFA Respect/Foundation Patch Book"
+    },
+    {
+      "sport": "football",
+      "label": "Museum Grail Card",
+      "patterns": [
+        "museum",
+        "grail"
+      ],
+      "category": "grail_program",
+      "rarity_signal": "official_grail_chase",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_museum_ucc_2425",
+      "product_family": "Topps Museum Collection UCC",
+      "program_family": "Grail"
+    },
+    {
+      "sport": "football",
+      "label": "Topps Chrome EURO Berlin at Night",
+      "patterns": [
+        "berlin at night"
+      ],
+      "category": "ssp_insert",
+      "rarity_signal": "rare_chase_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_chrome_euro_2024",
+      "product_family": "Topps Chrome UEFA EURO",
+      "program_family": "At Night"
+    },
+    {
+      "sport": "football",
+      "label": "EURO Final Goal Net Relic Autograph",
+      "patterns": [
+        "euro final",
+        "goal net",
+        "relic",
+        "autograph"
+      ],
+      "category": "autograph_relic",
+      "rarity_signal": "event_used_relic_auto",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_chrome_euro_2024",
+      "product_family": "Topps Chrome UEFA EURO",
+      "program_family": "Euro Final Goal Net Relic"
+    },
+    {
+      "sport": "football",
+      "label": "Merlins EURO Match Ball Signatures 1/1",
+      "patterns": [
+        "merlins",
+        "euro match ball",
+        "signatures"
+      ],
+      "category": "autograph_relic",
+      "rarity_signal": "one_of_one_event_relic_auto",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "print_run": 1,
+      "source_id": "topps_chrome_euro_2024",
+      "product_family": "Topps Chrome UEFA EURO",
+      "program_family": "Merlins Euro Match Ball Signatures"
+    },
+    {
+      "sport": "football",
+      "label": "Reverence Crowned Legend Jewel Autograph Relic",
+      "patterns": [
+        "crowned legend",
+        "jewel",
+        "autograph",
+        "relic"
+      ],
+      "category": "case_hit",
+      "rarity_signal": "case_level_jewel_auto_relic",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_reverence_ucc_2425",
+      "product_family": "Topps Reverence UCC",
+      "program_family": "Crowned Legend"
+    },
+    {
+      "sport": "hockey",
+      "label": "Young Guns Outburst Red /25",
+      "patterns": [
+        "young guns",
+        "outburst red"
+      ],
+      "category": "rookie_parallel",
+      "rarity_signal": "low_numbered_flagship_rookie_parallel",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "print_run": 25,
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Flagship",
+      "program_family": "Young Guns",
+      "importance_reason": "Upper Deck documents Outburst Red Young Guns /25; exact variant and denominator must match before comps are treated as exact."
+    },
+    {
+      "sport": "hockey",
+      "label": "Young Guns Outburst Gold 1/1",
+      "patterns": [
+        "young guns",
+        "outburst gold"
+      ],
+      "category": "rookie_parallel",
+      "rarity_signal": "one_of_one_flagship_rookie_parallel",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "print_run": 1,
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Flagship",
+      "program_family": "Young Guns",
+      "importance_reason": "Upper Deck documents Outburst Gold Young Guns as 1-of-1; valuation must rely on exact/near evidence rather than a generic rarity premium."
+    },
+    {
+      "sport": "football",
+      "label": "Topps Chrome Premier League Chrome Anime",
+      "patterns": [
+        "chrome anime"
+      ],
+      "category": "case_hit",
+      "rarity_signal": "premium_case_pull",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_chrome_pl_2026",
+      "product_family": "Topps Chrome Premier League",
+      "program_family": "Chrome Anime",
+      "importance_reason": "Topps identifies Chrome Anime among the premium case pulls in 2026 Topps Chrome Premier League."
+    },
+    {
+      "sport": "football",
+      "label": "Topps Chrome Premier League Locked In",
+      "patterns": [
+        "locked in"
+      ],
+      "category": "case_hit",
+      "rarity_signal": "premium_case_pull",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_chrome_pl_2026",
+      "product_family": "Topps Chrome Premier League",
+      "program_family": "Locked In",
+      "importance_reason": "Topps identifies Locked In as a premium case pull; exact insert identity should be verified before comp use."
+    },
+    {
+      "sport": "football",
+      "label": "Topps Inception UCC Autograph Patch",
+      "patterns": [
+        "inception",
+        "autograph patch"
+      ],
+      "category": "autograph_relic",
+      "rarity_signal": "premium_autograph_patch",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "source_id": "topps_inception_ucc_2526",
+      "product_family": "Topps Inception UCC",
+      "program_family": "Inception Autograph Patch",
+      "importance_reason": "Topps describes Inception as autograph/relic-driven and shows Inception Autograph Patch content; player and exact card identity remain decisive."
+    },
+    {
+      "sport": "football",
+      "label": "Topps Museum UCC Roll of Honor",
+      "patterns": [
+        "museum",
+        "roll of honor"
+      ],
+      "category": "insert",
+      "rarity_signal": "named_insert_program",
+      "confidence": "high",
+      "attention_priority": 3,
+      "knowledge_tier": 3,
+      "source_id": "topps_museum_ucc_2526",
+      "product_family": "Topps Museum Collection UCC",
+      "program_family": "Museum Roll of Honor",
+      "importance_reason": "Topps identifies Museum Roll of Honor as a named insert in the 2025/26 Museum UCC release."
+    }
+  ]
+}

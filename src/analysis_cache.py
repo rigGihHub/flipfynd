@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CACHE_PATH = BASE_DIR / "analysis_cache.json"
 
 CACHE_SCHEMA_VERSION = 2
-CACHE_MODEL_VERSION = "flip_v2_hard_demand"
+CACHE_MODEL_VERSION = "flip_v24_detail_evidence_fusion"
 
 _memory_cache: Optional[Dict[str, Any]] = None
 

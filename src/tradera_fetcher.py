@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin
 
+from src.listing_detail_enrichment import enrich_selected_listings
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -236,13 +238,107 @@ def record_fetch_summary(
 ):
     state = load_fetch_state()
     category_info = state["categories"].setdefault(category_name, {})
-    category_info["last_fetch_at"] = datetime.now(timezone.utc).isoformat()
+    category_info["last_fetch_at"] = _utc_now_iso()
     category_info["last_pages_scanned"] = int(pages_scanned)
     category_info["last_items_seen"] = int(items_seen)
     category_info["last_new_items"] = int(new_items)
     category_info["last_stop_reason"] = str(stop_reason or "")
     save_fetch_state(state)
 
+
+
+
+def _utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def start_fetch_run(scope):
+    state = load_fetch_state()
+    state["active_run"] = {
+        "status": "running",
+        "scope": str(scope or ""),
+        "started_at": _utc_now_iso(),
+        "heartbeat_at": _utc_now_iso(),
+        "current_category": "",
+        "current_page": 0,
+        "total_items_seen": 0,
+        "total_new_items": 0,
+        "completed_categories": [],
+    }
+    save_fetch_state(state)
+
+
+def start_fetch_category(category_name):
+    state = load_fetch_state()
+    run = state.setdefault("active_run", {})
+    run.update({
+        "status": "running",
+        "current_category": category_name,
+        "current_page": 0,
+        "category_items_seen": 0,
+        "category_new_items": 0,
+        "heartbeat_at": _utc_now_iso(),
+    })
+    save_fetch_state(state)
+
+
+def record_fetch_progress(category_name, page_number, pages_scanned, items_seen, new_items):
+    state = load_fetch_state()
+    run = state.setdefault("active_run", {})
+    run.update({
+        "status": "running",
+        "current_category": category_name,
+        "current_page": int(page_number),
+        "category_pages_scanned": int(pages_scanned),
+        "category_items_seen": int(items_seen),
+        "category_new_items": int(new_items),
+        "heartbeat_at": _utc_now_iso(),
+    })
+    category_info = state.setdefault("categories", {}).setdefault(category_name, {})
+    category_info.update({
+        "running": True,
+        "current_page": int(page_number),
+        "current_items_seen": int(items_seen),
+        "current_new_items": int(new_items),
+        "heartbeat_at": _utc_now_iso(),
+    })
+    save_fetch_state(state)
+
+
+def finish_fetch_category(category_name, pages_scanned, items_seen, new_items, stop_reason):
+    state = load_fetch_state()
+    run = state.setdefault("active_run", {})
+    completed = list(run.get("completed_categories", []) or [])
+    if category_name not in completed:
+        completed.append(category_name)
+    run.update({
+        "completed_categories": completed,
+        "total_items_seen": int(run.get("total_items_seen", 0) or 0) + int(items_seen),
+        "total_new_items": int(run.get("total_new_items", 0) or 0) + int(new_items),
+        "heartbeat_at": _utc_now_iso(),
+    })
+    category_info = state.setdefault("categories", {}).setdefault(category_name, {})
+    category_info["running"] = False
+    category_info["current_page"] = int(pages_scanned)
+    category_info["current_items_seen"] = int(items_seen)
+    category_info["current_new_items"] = int(new_items)
+    save_fetch_state(state)
+    record_fetch_summary(category_name, pages_scanned, items_seen, new_items, stop_reason)
+
+
+def finish_fetch_run(status="finished", message=""):
+    state = load_fetch_state()
+    run = state.setdefault("active_run", {})
+    run.update({
+        "status": str(status),
+        "finished_at": _utc_now_iso(),
+        "heartbeat_at": _utc_now_iso(),
+        "message": str(message or ""),
+    })
+    for info in state.setdefault("categories", {}).values():
+        if isinstance(info, dict):
+            info["running"] = False
+    save_fetch_state(state)
 
 def format_loaded_pages(pages):
     if not pages:
@@ -383,6 +479,24 @@ def merge_items(
                     old_item["saljare"]
                 )
 
+            if not item.get("image_urls") and old_item.get("image_urls"):
+                item["image_urls"] = old_item.get("image_urls", [])
+            if not item.get("image_alts") and old_item.get("image_alts"):
+                item["image_alts"] = old_item.get("image_alts", [])
+
+            # Detail-page enrichment is deliberately selective. Preserve a prior
+            # successful snapshot when a later category crawl only sees the
+            # compact listing card again.
+            detail_keys = [
+                "detail_priority_score", "detail_priority_reasons",
+                "detail_enrichment_status", "detail_source", "detail_enriched_at",
+                "detail_title", "full_description", "detail_image_urls",
+                "exact_end_text", "bid_count", "seller_detail",
+            ]
+            for detail_key in detail_keys:
+                if item.get(detail_key) in (None, "", []) and old_item.get(detail_key) not in (None, "", []):
+                    item[detail_key] = old_item.get(detail_key)
+
         merged[key] = item
 
     return list(
@@ -500,6 +614,25 @@ def extract_item(
         raw_text
     )
 
+    # Capture listing image references for Visual Edge. We only store URLs and
+    # alt text here; no visual claim is inferred from the pixels.
+    image_urls = []
+    image_alts = []
+    try:
+        images = container.locator("img")
+        for idx in range(min(images.count(), 8)):
+            img = images.nth(idx)
+            src = img.get_attribute("src") or img.get_attribute("data-src")
+            if src:
+                src = urljoin("https://www.tradera.com", src)
+                if src not in image_urls:
+                    image_urls.append(src)
+            alt = normalize_space(img.get_attribute("alt"))
+            if alt and alt not in image_alts:
+                image_alts.append(alt)
+    except Exception:
+        pass
+
     return {
         "titel": title,
         "pris": price,
@@ -507,6 +640,8 @@ def extract_item(
         "saljare": seller,
         "lank": href,
         "raw_text": raw_text,
+        "image_urls": image_urls,
+        "image_alts": image_alts,
         "sida": page_number,
         "source_category": category_name,
     }
@@ -608,6 +743,8 @@ def fetch_tradera_category(
     known_links=None,
     stop_after_known_pages=3,
     safety_max_pages=250,
+    page_callback=None,
+    detail_limit=12,
 ):
     """Fetch a Tradera category page-by-page.
 
@@ -649,8 +786,8 @@ def fetch_tradera_category(
             print(message, flush=True)
 
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(1800)
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_timeout(1200)
 
                 anchors = page.locator('a[href*="/item/"]')
                 count = anchors.count()
@@ -705,6 +842,16 @@ def fetch_tradera_category(
                 logs.append(message)
                 print(message, flush=True)
 
+                if page_callback is not None:
+                    page_callback(
+                        category_name=category_name,
+                        page_number=page_number,
+                        page_items=list(page_items),
+                        pages_scanned=pages_scanned,
+                        items_seen=len(all_items),
+                        new_items=sum(1 for item in all_items if item.get("lank") not in known_links),
+                    )
+
                 # Smart incremental stop: once several whole pages only contain
                 # listings already present locally, deeper pages are unlikely to
                 # add fresh listings. Full scans pass stop_after_known_pages=0.
@@ -731,6 +878,27 @@ def fetch_tradera_category(
             time.sleep(0.3)
         else:
             stop_reason = f"säkerhetsgräns {safety_max_pages} sidor" if end_page is None else f"angiven slutsida {end_page}"
+
+        detail_summary = {"attempted": 0, "enriched": 0, "failed": 0}
+        if int(detail_limit or 0) > 0 and all_items:
+            try:
+                all_items, detail_summary = enrich_selected_listings(
+                    browser,
+                    all_items,
+                    known_links=known_links,
+                    limit=int(detail_limit),
+                    timeout_ms=30000,
+                    log=lambda msg: print(msg, flush=True),
+                )
+                message = (
+                    f"Detaljberikning: {detail_summary['enriched']}/{detail_summary['attempted']} lyckades"
+                )
+                logs.append(message)
+                print(message, flush=True)
+            except Exception as exc:
+                message = f"Detaljberikning kunde inte slutföras: {exc}"
+                logs.append(message)
+                print(message, flush=True)
 
         browser.close()
 
