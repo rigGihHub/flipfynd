@@ -42,6 +42,9 @@ from src.visual_identity import build_visual_card_candidates
 from src.exact_comp_hunter import hunt_exact_comps
 from src.comp_verdict import build_comp_verdict
 from src.dynamic_max_bid import build_dynamic_max_bid
+from src.exact_identity_gate import build_exact_identity_gate
+from src.buy_now_hunter import build_buy_now_opportunity
+from src.ending_soon_hunter import build_ending_soon_opportunity
 from src.detail_evidence_fusion import build_detail_evidence_fusion
 
 from src.pricing import (
@@ -76,7 +79,16 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.7"
+APP_VERSION = "v0.11.11"
+
+FETCH_SCOPE_MAP = {
+    "🏒 Hockey": "Hockey - NHL",
+    "⚽ Fotboll": "Fotboll",
+    "🏒⚽ Båda": "__all__",
+}
+
+def selected_fetch_category(scope_label):
+    return FETCH_SCOPE_MAP.get(scope_label, "__all__")
 
 
 BASE_DIR = (
@@ -1107,7 +1119,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.markdown(f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; HOCKEY + FOTBOLL &nbsp;•&nbsp; TRADERA SCANNER</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; HOCKEY / FOTBOLL &nbsp;•&nbsp; TRADERA SCANNER</div>', unsafe_allow_html=True)
 
 if st.session_state.get("fetch_last_message"):
     message = st.session_state["fetch_last_message"]
@@ -1215,7 +1227,7 @@ if not _has_data:
         """
         <div class="ff-data-card">
           <h3>📥 Börja här – hämta annonser från Tradera</h3>
-          <p>FlipFynd har inga annonser inlästa ännu. Hämta hockey och fotboll först; därefter kan appen söka och ranka fynd.</p>
+          <p>FlipFynd har inga annonser inlästa ännu. Välj Hockey, Fotboll eller Båda nedan och hämta den marknad du vill analysera.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1227,20 +1239,31 @@ if not _has_data:
             stop_fetch()
             st.rerun()
     else:
+        st.markdown("**1. Välj vilken sport du vill hämta**")
+        fetch_scope = st.radio(
+            "Sport att hämta",
+            list(FETCH_SCOPE_MAP.keys()),
+            index=0,
+            horizontal=True,
+            key="onboarding_fetch_scope",
+            label_visibility="collapsed",
+            help="Välj Hockey eller Fotboll om du bara vill läsa in en marknad. Båda hämtar sporterna efter varandra.",
+        )
+        fetch_category = selected_fetch_category(fetch_scope)
         primary_label = (
-            "🔄 Försök hämta annonser igen"
+            "🔄 Försök hämta igen"
             if _fetch_status == "failed"
-            else "🔄 Hämta hockey + fotboll från Tradera"
+            else f"🔄 Hämta {fetch_scope.replace('🏒⚽ ', '').replace('🏒 ', '').replace('⚽ ', '')} från Tradera"
         )
         if st.button(
             primary_label,
             type="primary",
             use_container_width=True,
-            key="top_fetch_all",
+            key="top_fetch_selected",
         ):
-            start_fetch("__all__", True, "incremental")
+            start_fetch(fetch_category, True, "incremental")
             st.rerun()
-        st.caption("Smart uppdatering används automatiskt. Du behöver inte välja sidor eller göra några tekniska inställningar.")
+        st.caption("Smart uppdatering används automatiskt. Du kan börja med en sport och lägga till den andra senare.")
 
     if _fetch_status == "failed":
         st.error(
@@ -1252,19 +1275,31 @@ if not _has_data:
             with st.expander("Tekniska detaljer – använd detta om felet återkommer"):
                 st.code(log_tail, language="text")
 else:
+    st.markdown("### 🎛 Välj marknad att uppdatera")
+    market_scope = st.radio(
+        "Vilken sport ska hämtknapparna arbeta med?",
+        list(FETCH_SCOPE_MAP.keys()),
+        index=0,
+        horizontal=True,
+        key="main_fetch_scope",
+        help="Valet gäller Uppdatera annonser, Läs nästa omgång och Smart Refresh. Det påverkar inte vilken sport du söker fynd i längre ned.",
+    )
+    market_fetch_category = selected_fetch_category(market_scope)
+    st.caption("Det här valet styr bara **hämtningen från Tradera**. Sportfiltret under Hitta fynd styr separat vilka redan inlästa annonser du analyserar.")
+
     top_left, top_right = st.columns([3, 1])
     with top_left:
         st.caption("✅ Annonsdata finns inläst. Du kan söka fynd direkt eller göra en snabb kontroll av de nyaste annonserna.")
         st.caption("**🔄 Uppdatera annonser** = börjar från sida 1 och letar efter nya/förändrade annonser. Den är snabb och är knappen du normalt använder varje dag.")
     with top_right:
         if st.button(
-            "🔄 Uppdatera annonser",
+            f"🔄 Uppdatera {market_scope.replace('🏒⚽ ', 'båda').replace('🏒 ', 'hockey').replace('⚽ ', 'fotboll')}",
             use_container_width=True,
             disabled=_fetch_status == "running",
             key="top_refresh_data",
             help="Snabb uppdatering av de nyaste Tradera-sidorna. Den fortsätter inte den djupa fullmarknadsläsningen.",
         ):
-            start_fetch("__all__", True, "incremental")
+            start_fetch(market_fetch_category, True, "incremental")
             st.rerun()
 
     coverage_h = get_market_coverage_status("Hockey - NHL")
@@ -1300,17 +1335,17 @@ else:
         with action_left:
             st.caption(
                 f"**▶ Läs nästa omgång** = fortsätter där fullmarknadsscannern slutade och läser högst {MARKET_BATCH_PAGES} nya sidor per sport. "
-                "Använd den flera gånger tills respektive sport visar **Hela marknaden inläst**. Redan sparade annonser behålls."
+                "Valet ovan avgör vilken sport som fortsätter. Använd den flera gånger tills vald sport visar **Hela marknaden inläst**. Redan sparade annonser behålls."
             )
         with action_right:
             if st.button(
-                "▶ Läs nästa omgång",
+                f"▶ Läs nästa omgång – {market_scope.replace('🏒⚽ ', 'båda').replace('🏒 ', 'hockey').replace('⚽ ', 'fotboll')}",
                 use_container_width=True,
                 disabled=_fetch_status == "running",
                 key="top_market_batch",
                 help="Fortsätt fullmarknadsläsningen från nästa ej lästa sida. Detta är tyngre än en vanlig uppdatering.",
             ):
-                start_fetch("__all__", True, "market_batch")
+                start_fetch(market_fetch_category, True, "market_batch")
                 st.rerun()
     else:
         st.success("✅ Fullmarknadsscannern har nått slutet för både hockey och fotboll. Använd normalt bara Uppdatera annonser för att hålla de nyaste sidorna färska.")
@@ -1344,16 +1379,21 @@ else:
     st.caption(
         "**⚡ Uppdatera det som behövs** = läser bara ett litet sidblock som faktiskt blivit gammalt. "
         "Sida 1–5 kontrolleras ungefär var 2:e timme, 6–20 var 8:e timme, 21–60 dagligen och djupare sidor ungefär var tredje dag. "
-        "Detta är CPU-snålast när hela marknaden redan är inläst stegvis."
+        "Valet ovan avgör vilken sport som uppdateras. Detta är CPU-snålast när marknaden redan är inläst stegvis."
+    )
+    selected_refresh_due = (
+        (market_fetch_category == "Hockey - NHL" and refresh_h.get("due"))
+        or (market_fetch_category == "Fotboll" and refresh_f.get("due"))
+        or (market_fetch_category == "__all__" and (refresh_h.get("due") or refresh_f.get("due")))
     )
     if st.button(
-        "⚡ Uppdatera det som behövs",
+        f"⚡ Smart refresh – {market_scope.replace('🏒⚽ ', 'båda').replace('🏒 ', 'hockey').replace('⚽ ', 'fotboll')}",
         use_container_width=True,
-        disabled=_fetch_status == "running" or not (refresh_h.get("due") or refresh_f.get("due")),
+        disabled=_fetch_status == "running" or not selected_refresh_due,
         key="top_smart_refresh",
-        help="Uppdaterar bara det äldsta prioriterade sidblocket per sport. Den läser inte om hela marknaden.",
+        help="Uppdaterar bara det äldsta prioriterade sidblocket för vald sport. Den läser inte om hela marknaden.",
     ):
-        start_fetch("__all__", True, "scheduled_refresh")
+        start_fetch(market_fetch_category, True, "scheduled_refresh")
         st.rerun()
 
 def render_search_pipeline(debug, sport_label, max_price, search):
@@ -1388,6 +1428,43 @@ def render_search_pipeline(debug, sport_label, max_price, search):
         st.warning("Annonsform-filtret sorterar bort allt. Välj Alla för att kontrollera marknaden.")
     elif int(debug.get("after_sale_type", 0) or 0) and int(debug.get("after_feature_filters", 0) or 0) == 0:
         st.warning("Ett specialfilter – numrerat, patch/relic eller autograf – sorterar bort alla annonser.")
+
+
+# Pedagogiskt huvudflöde. Hitta fynd låses under aktiv hämtning så användaren
+# aldrig behöver fundera på om analysen körs mot ett halvfärdigt dataset.
+_flow_fetching = st.session_state.get("fetch_status") == "running"
+if not _has_data:
+    _flow_step = "1"
+    _flow_title = "HÄMTA ANNONSER"
+    _flow_text = "Det finns ännu inga annonser att analysera. Välj Hockey, Fotboll eller Båda ovan och hämta data först."
+elif _flow_fetching:
+    _flow_step = "2"
+    _flow_title = "VÄNTA TILLS HÄMTNINGEN ÄR KLAR"
+    _flow_text = "FlipFynd sparar annonser löpande, men Hitta fynd är låst tills pågående hämtning är färdig. Då analyseras ett stabilt dataset."
+else:
+    _flow_step = "3"
+    _flow_title = "HITTA FYND"
+    _flow_text = "Data är redo. Välj sport och budget. Börja med tom sökruta och utan avancerade filter, tryck sedan Hitta fynd."
+
+st.markdown(
+    f"""
+    <div class="ff-data-card">
+      <h3>🧭 SÅ FUNKAR FLÖDET</h3>
+      <p><b>1. Hämta annonser</b> → välj marknad ovan och läs in Tradera-data.</p>
+      <p><b>2. Vänta på KLAR</b> → under hämtningen är Hitta fynd låst så du inte analyserar halvfärdig data.</p>
+      <p><b>3. Hitta fynd</b> → välj sport + budget och låt FlipFynd filtrera, värdera och ranka kandidater.</p>
+      <p><b>4. Agera</b> → börja med Köp nu / Slutar snart / Agera nu och öppna sedan annonsen på Tradera.</p>
+      <p><b>Just nu – steg {_flow_step}: {_flow_title}</b><br>{_flow_text}</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+if _flow_fetching:
+    st.info("⏳ Hämtning pågår. Hitta fynd låses automatiskt upp när hämtningen är klar.")
+elif _has_data:
+    st.success("✅ Annonsdata är redo. Du kan trycka Hitta fynd nu.")
+else:
+    st.warning("📥 Börja med att hämta annonser ovan. Hitta fynd blir aktiv när data finns och ingen hämtning pågår.")
 
 
 with st.form("analysis_form"):
@@ -1475,16 +1552,33 @@ with st.form("analysis_form"):
     # Intern prestandaparameter: användaren ska inte behöva förstå den.
     full_limit = 12
 
+    _find_disabled = (not _has_data) or _flow_fetching
+    if _flow_fetching:
+        _find_label = "⏳ Vänta – annonser hämtas"
+    elif not _has_data:
+        _find_label = "📥 Hämta annonser först"
+    else:
+        _find_label = "🔎 Hitta fynd"
     run = st.form_submit_button(
-        "🔎 Hitta fynd" if _has_data else "📥 Hämta annonser först",
+        _find_label,
         type="primary",
         use_container_width=True,
-        disabled=not _has_data,
+        disabled=_find_disabled,
+        help=(
+            "Knappen låses medan en hämtning pågår. Vänta tills hämtningen visar KLAR."
+            if _flow_fetching
+            else "Analyserar redan inlästa annonser – den hämtar inte ny data."
+        ),
     )
 
 
 if run:
-    with st.spinner(f"Analyserar {sport_label.lower()} och rankar de bästa fynden…"):
+    status = st.status("🔎 FlipFynd startar analysen…", expanded=True)
+    status.write(f"1/3 • Förbereder {sport_label.lower()}annonser inom din budget på {int(max_price)} kr.")
+    progress = st.progress(12, text="Förbereder annonser…")
+    status.write("2/3 • Analyserar kort, efterfrågan, risk, comps och möjlig vinst. Det kan ta en stund om många annonser ska bedömas.")
+    progress.progress(35, text="Analyserar och rankar fynd…")
+    try:
         results, debug = analyze_data(
             data=data,
             sport=sport,
@@ -1497,6 +1591,14 @@ if run:
             patch_only=patch_only,
             auto_only=auto_only,
         )
+        progress.progress(90, text="Sorterar de bästa kandidaterna…")
+        status.write(f"3/3 • Klart. {int((debug or {}).get('final_results', len(results)) or 0)} annonser nådde analyssteget.")
+        progress.progress(100, text="Klar")
+        status.update(label="✅ Analysen är klar – resultaten visas nedan", state="complete", expanded=False)
+    except Exception as exc:
+        status.update(label="❌ Analysen kunde inte slutföras", state="error", expanded=True)
+        st.error("Något gick fel under fyndanalysen. Dina inställningar är sparade; försök igen eller öppna tekniska detaljer i Administration & data.")
+        raise
 
     st.session_state["results"] = results
     st.session_state["debug"] = debug
@@ -1535,7 +1637,7 @@ if st.session_state.get("results") is not None:
             )
         elif st.session_state.get("debug", {}).get("final_results", 0) == 0:
             st.warning(
-                "FlipFynd hittade inga analyserbara kandidater. Öppna sållningen nedan – den visar exakt vilket steg som tar bort annonserna."
+                "FlipFynd hittade inga analyserbara kandidater med den här kombinationen. Du gör inte nödvändigtvis något fel. Börja med tom sökruta, Annonsform = Alla och inga specialfilter. Öppna sållningen nedan för att se exakt vilket steg som tar bort annonserna."
             )
         else:
             st.info(
@@ -1559,6 +1661,42 @@ if st.session_state.get("results") is not None:
 
     actionable = radar_groups["AGERA NU"] + radar_groups["BEVAKA"] + radar_groups["UNDERSÖK"]
     actionable.sort(key=lambda x: x.get("opportunity_priority_score", 0), reverse=True)
+
+    buy_now_candidates = []
+    for candidate in filtered:
+        bn = build_buy_now_opportunity(candidate)
+        if bn.get("eligible"):
+            buy_now_candidates.append((bn, candidate))
+    buy_now_candidates.sort(key=lambda pair: pair[0].get("score", 0), reverse=True)
+    if buy_now_candidates:
+        st.subheader("⚡ Köp nu – agera direkt")
+        st.caption("Här visas bara Köp nu-annonser med tillräckligt stark befintlig värdering och identitet. Hunter-motorn skapar inte egna priser eller maxbud.")
+        for bn, candidate in buy_now_candidates[:5]:
+            cols_bn = st.columns([1, 4, 2])
+            cols_bn[0].metric("Köp nu-score", f"{bn['score']}/100")
+            cols_bn[1].markdown(f"**{candidate.get('titel','Okänt kort')}**  \n{bn.get('label','')}")
+            cols_bn[2].metric("Totalpris", f"{float(candidate.get('total_cost') or 0):.0f} kr")
+            if bn.get("reasons"):
+                st.caption(" • ".join(bn["reasons"]))
+    ending_soon_candidates = []
+    for candidate in filtered:
+        es = build_ending_soon_opportunity(candidate)
+        if es.get("eligible"):
+            ending_soon_candidates.append((es, candidate))
+    ending_soon_candidates.sort(key=lambda pair: pair[0].get("score", 0), reverse=True)
+    if ending_soon_candidates:
+        st.subheader("⏰ Slutar snart – under säkert maxbud")
+        st.caption("Här visas bara auktioner där återstående tid kan tolkas säkert och nuvarande totalpris fortfarande ligger under ett befintligt verifierat maxbud. Motorn gissar aldrig sluttid eller maxbud.")
+        for es, candidate in ending_soon_candidates[:5]:
+            cols_es = st.columns([1, 4, 2])
+            cols_es[0].metric("Timing-score", f"{es['score']}/100")
+            cols_es[1].markdown(f"**{candidate.get('titel','Okänt kort')}**  \n{es.get('label','')}")
+            cols_es[2].metric("Tid kvar", f"{int(es.get('remaining_minutes') or 0)} min")
+            if es.get("reasons"):
+                st.caption(" • ".join(es["reasons"]))
+            if candidate.get("lank"):
+                st.markdown(f"[Öppna på Tradera]({candidate.get('lank')})")
+
     if actionable:
         st.subheader("📡 Opportunity Radar")
         st.caption("FlipFynd kokar ned marknaden till vad som är värt din tid just nu. Radarn ändrar inte värdering, maxbud eller köpbeslut.")
@@ -1710,6 +1848,10 @@ if st.session_state.get("results") is not None:
                                     base_max_total=candidate.get("max_total_price"),
                                     shipping=candidate.get("max_price_shipping_assumption") or candidate.get("frakt") or 29,
                                     comp_verdict=comp_verdict,
+                                    identity_gate={
+                                        "supports_dynamic_max_bid": bool(candidate.get("exact_identity_gate_supports_dynamic_max_bid")),
+                                        "blockers": candidate.get("exact_identity_gate_blockers") or [],
+                                    },
                                 )
                                 if dynamic_bid.get("available"):
                                     st.success(
@@ -2038,6 +2180,11 @@ if st.session_state.get("results") is not None:
             if item.get("identity_conflicts"):
                 st.warning("⚠️ Motstridig kortinformation i annonsen. Manuell kontroll rekommenderas.")
 
+            gate_status = item.get("exact_identity_gate_status") or "LÅST"
+            gate_score = int(item.get("exact_identity_gate_score", 0) or 0)
+            gate_icon = "✅" if gate_status == "VERIFIERAD" else ("🟡" if gate_status in {"SÖKBAR", "GRANSKA"} else "🔒")
+            st.caption(f"{gate_icon} Exact Identity Gate: {item.get('exact_identity_gate_label', 'Exakt identitet låst')} · {gate_score}/100")
+
             player_match_confidence = item.get("player_match_confidence", "low")
             if player_match_confidence == "medium":
                 st.caption("⚠️ Spelarnamnet identifierades med stavningstolerans – kontrollera titeln före köp.")
@@ -2102,6 +2249,26 @@ if st.session_state.get("results") is not None:
                     )
                     if item.get("card_identity"):
                         st.write(f"**Kortidentitet:** {item.get('card_identity')}")
+                    with st.expander("🔐 Exact Identity Gate", expanded=False):
+                        st.markdown(f"**{item.get('exact_identity_gate_label', 'Exakt identitet låst')}** · {int(item.get('exact_identity_gate_score', 0) or 0)}/100")
+                        if item.get("exact_identity_gate_supports_exact_comp_search"):
+                            st.success("Exakt comp-sökning får användas för detta kort.")
+                        else:
+                            st.warning("Exakt comp-sökning är låst tills identiteten är tillräckligt komplett.")
+                        if item.get("exact_identity_gate_supports_dynamic_max_bid"):
+                            st.success("Identiteten är även stark nog för ett comp-stött dynamiskt maxbud, om comp-underlaget också godkänns.")
+                        else:
+                            st.caption("Dynamiskt maxbud är låst av identitetsgrinden.")
+                        for blocker in (item.get("exact_identity_gate_blockers") or [])[:5]:
+                            st.caption("⛔ " + str(blocker))
+                        for warning in (item.get("exact_identity_gate_warnings") or [])[:4]:
+                            st.caption("⚠️ " + str(warning))
+                        reqs = item.get("exact_identity_gate_requirements") or []
+                        if reqs:
+                            st.markdown("**Exakta comps måste uppfylla:**")
+                            for req in reqs[:8]:
+                                st.caption("• " + str(req))
+                        st.caption(item.get("exact_identity_gate_note") or "")
 
                 with d2:
                     st.write(f"**Försiktigt värde:** {floor:.0f} kr")

@@ -22,6 +22,7 @@ def build_dynamic_max_bid(
     base_max_total: object,
     shipping: object,
     comp_verdict: dict[str, Any] | None,
+    identity_gate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return an evidence-adjusted max price without ever increasing base max.
 
@@ -53,6 +54,14 @@ def build_dynamic_max_bid(
 
     if base_total is None:
         result["reasons"].append("inget befintligt FlipFynd-budtak att justera")
+        return result
+
+    if identity_gate is not None and not identity_gate.get("supports_dynamic_max_bid"):
+        result["status"] = "Exakt identitet är inte tillräckligt verifierad"
+        result["level"] = "identitet låst"
+        result["reasons"].append("Exact Identity Gate tillåter inte comp-stött dynamiskt maxbud")
+        for blocker in list(identity_gate.get("blockers") or [])[:2]:
+            result["reasons"].append(str(blocker))
         return result
 
     if not verdict.get("supports_safe_max_bid"):

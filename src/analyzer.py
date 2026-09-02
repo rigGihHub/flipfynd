@@ -13,6 +13,7 @@ from src.rookie_importance import build_player_rookie_importance
 from src.mispriced_rookie_hunter import build_mispriced_rookie_signal
 from src.misclassified_card_hunter import build_misclassified_card_signal
 from src.detail_evidence_fusion import build_detail_evidence_fusion
+from src.exact_identity_gate import build_exact_identity_gate
 from src.chase_knowledge_graph import build_chase_knowledge_graph
 from src.visual_edge import build_visual_edge
 from src.flip_scenarios import build_flip_scenarios
@@ -2836,6 +2837,7 @@ def analyze_core(
     features["sport"] = sport
 
     detail_evidence_fusion = build_detail_evidence_fusion(item)
+    exact_identity_gate = build_exact_identity_gate({**features, **detail_evidence_fusion, "detail_evidence_fusion_conflicts": detail_evidence_fusion.get("conflicts", []), "detail_evidence_fusion_has_conflict": detail_evidence_fusion.get("has_conflict", False), "detail_evidence_fusion_source_count": detail_evidence_fusion.get("source_count", 0)})
 
     analysis_total_cost, auction_buffer = compute_entry_cost(
         item,
@@ -3408,6 +3410,17 @@ def analyze_core(
         "identity_evidence_sources": features.get("identity_evidence_sources", {}),
         "identity_enriched_fields": features.get("identity_enriched_fields", []),
         "identity_conflicts": features.get("identity_conflicts", []),
+        "exact_identity_gate_status": exact_identity_gate.get("status"),
+        "exact_identity_gate_label": exact_identity_gate.get("label"),
+        "exact_identity_gate_score": exact_identity_gate.get("score", 0),
+        "exact_identity_gate_supports_exact_comp_search": exact_identity_gate.get("supports_exact_comp_search", False),
+        "exact_identity_gate_supports_dynamic_max_bid": exact_identity_gate.get("supports_dynamic_max_bid", False),
+        "exact_identity_gate_blockers": exact_identity_gate.get("blockers", []),
+        "exact_identity_gate_warnings": exact_identity_gate.get("warnings", []),
+        "exact_identity_gate_requirements": exact_identity_gate.get("exact_comp_requirements", []),
+        "exact_identity_gate_source_count": exact_identity_gate.get("source_count", 0),
+        "exact_identity_gate_identity_fields": exact_identity_gate.get("identity_fields", {}),
+        "exact_identity_gate_note": exact_identity_gate.get("note"),
         "detail_evidence_fusion_score": detail_evidence_fusion.get("score", 0),
         "detail_evidence_fusion_status": detail_evidence_fusion.get("status"),
         "detail_evidence_fusion_source_count": detail_evidence_fusion.get("source_count", 0),

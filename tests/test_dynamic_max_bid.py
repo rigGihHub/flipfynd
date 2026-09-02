@@ -77,3 +77,40 @@ class DynamicMaxBidTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_identity_gate_can_block_dynamic_max_bid():
+    verdict = {
+        "supports_safe_max_bid": True,
+        "score": 90,
+        "exact_count": 5,
+        "recent_exact_count": 4,
+        "relative_spread": 0.1,
+        "price_median": 500,
+    }
+    result = build_dynamic_max_bid(
+        base_max_total=400,
+        shipping=29,
+        comp_verdict=verdict,
+        identity_gate={"supports_dynamic_max_bid": False, "blockers": ["kortnummer saknas"]},
+    )
+    assert result["available"] is False
+    assert "identitet" in result["level"]
+
+
+def test_identity_gate_allows_dynamic_max_bid_when_both_gates_pass():
+    verdict = {
+        "supports_safe_max_bid": True,
+        "score": 90,
+        "exact_count": 5,
+        "recent_exact_count": 4,
+        "relative_spread": 0.1,
+        "price_median": 500,
+    }
+    result = build_dynamic_max_bid(
+        base_max_total=400,
+        shipping=29,
+        comp_verdict=verdict,
+        identity_gate={"supports_dynamic_max_bid": True, "blockers": []},
+    )
+    assert result["available"] is True
