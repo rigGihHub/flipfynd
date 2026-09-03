@@ -130,6 +130,9 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
         "sale_status": "sold",
         "source_platform": platform,
         "provenance": provenance,
+        "sold_verification_status": "verified",
+        "sale_evidence_type": "explicit_sold_price",
+        "acquisition_source": provenance,
         "imported_at": datetime.now(timezone.utc).isoformat(),
     }
     if sold_total and sold_total > 0:

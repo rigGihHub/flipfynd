@@ -1146,6 +1146,57 @@ class SoldCompCollectorTests(unittest.TestCase):
         self.assertEqual(result["added_count"], 1)
         self.assertEqual(result["records"][0]["sold_price"], 220.0)
 
+
+class SmartSoldCompAcquisitionV01117Tests(unittest.TestCase):
+    def test_collector_records_verification_metadata(self):
+        from src.sold_comp_collector import collect_sold_comps
+        result = collect_sold_comps([
+            {"titel": "Connor Bedard Young Guns #451", "sold_price": 225, "source_platform": "Tradera"}
+        ], source_name="snapshot.json")
+        record = result["records"][0]
+        self.assertEqual(record["sold_verification_status"], "verified")
+        self.assertEqual(record["sale_evidence_type"], "explicit_sold_price")
+        self.assertEqual(record["acquisition_source"], "snapshot.json")
+
+    def test_collector_explains_price_without_sold_evidence(self):
+        from src.sold_comp_collector import collect_sold_comps
+        result = collect_sold_comps([
+            {"titel": "Connor Bedard Young Guns #451", "pris": 225, "status": "ended"}
+        ])
+        self.assertEqual(result["rejection_reasons"]["price_without_sold_evidence"], 1)
+
+    def test_smart_collector_scans_allowlisted_source_and_excludes_output(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from src.sold_comp_collector import smart_collect_local_sold_comps
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "tradera_data.json").write_text(json.dumps([
+                {"titel": "Connor Bedard Young Guns #451", "sold_price": 225, "url": "https://x/sold"},
+                {"titel": "Connor Bedard Young Guns #451", "pris": 180, "status": "active"},
+            ]), encoding="utf-8")
+            output = base / "data" / "sold_comps.json"
+            output.parent.mkdir(parents=True)
+            output.write_text(json.dumps([
+                {"titel": "Should not rescan", "sold_price": 999, "url": "https://x/output"}
+            ]), encoding="utf-8")
+            result = smart_collect_local_sold_comps(base, exclude=[output])
+        self.assertEqual(result["sources_scanned"], 1)
+        self.assertEqual(result["added_count"], 1)
+        self.assertEqual(result["not_sold_count"], 1)
+        self.assertEqual(result["records"][0]["sold_price"], 225.0)
+
+    def test_manual_import_gets_verified_metadata(self):
+        from src.sold_comp_import import import_sold_comp_rows
+        result = import_sold_comp_rows([
+            {"title": "Connor Bedard Young Guns #451", "sold_price": 200}
+        ], provenance="manual_test")
+        record = result["records"][0]
+        self.assertEqual(record["sold_verification_status"], "verified")
+        self.assertEqual(record["sale_evidence_type"], "explicit_sold_price")
+        self.assertEqual(record["acquisition_source"], "manual_test")
+
 class CompMatchGuardrailTests(unittest.TestCase):
     def test_card_number_conflict_rejects_comp(self):
         from src.market_analysis import assess_comp_compatibility
@@ -1345,3 +1396,38 @@ class CardMarketKnowledgeV069Tests(unittest.TestCase):
         from src.card_market_knowledge import detect_market_knowledge_signals
         signals = detect_market_knowledge_signals("PMG Green /10", "football")
         self.assertEqual(signals, [])
+
+class AdaptiveCandidateDeepeningV01123Tests(unittest.TestCase):
+    def _candidate(self, score, attention=0, boost=0, review=0):
+        return ({"titel": "x"}, {
+            "rank_score": score,
+            "player_card_demand_preselection_boost": boost,
+            "player_card_demand_review_priority_score": review,
+        }, {"score": attention})
+
+    def test_keeps_baseline_top_twelve(self):
+        from src.adaptive_deepening import select_adaptive_full_analysis_indices
+        rows = [self._candidate(100-i) for i in range(20)]
+        selected = select_adaptive_full_analysis_indices(rows, base_limit=12, hard_cap=30)
+        self.assertEqual(selected[:12], list(range(12)))
+
+    def test_deepens_candidate_close_to_cutoff(self):
+        from src.adaptive_deepening import select_adaptive_full_analysis_indices
+        rows = [self._candidate(100-i) for i in range(12)] + [self._candidate(80)]
+        selected = select_adaptive_full_analysis_indices(rows, base_limit=12, hard_cap=30)
+        self.assertIn(12, selected)
+
+    def test_deepens_strong_independent_signal_below_cutoff_band(self):
+        from src.adaptive_deepening import select_adaptive_full_analysis_indices
+        rows = [self._candidate(100-i) for i in range(12)] + [self._candidate(10, attention=12)]
+        selected = select_adaptive_full_analysis_indices(rows, base_limit=12, hard_cap=30)
+        self.assertIn(12, selected)
+
+    def test_does_not_deepen_weak_tail_and_respects_cap(self):
+        from src.adaptive_deepening import select_adaptive_full_analysis_indices
+        rows = [self._candidate(100-i) for i in range(12)] + [self._candidate(10) for _ in range(50)]
+        selected = select_adaptive_full_analysis_indices(rows, base_limit=12, hard_cap=30)
+        self.assertEqual(selected, list(range(12)))
+        signaled = [self._candidate(100-i) for i in range(12)] + [self._candidate(10, attention=20) for _ in range(50)]
+        selected2 = select_adaptive_full_analysis_indices(signaled, base_limit=12, hard_cap=30)
+        self.assertEqual(len(selected2), 30)

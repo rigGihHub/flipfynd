@@ -16,11 +16,14 @@ from src.detail_evidence_fusion import build_detail_evidence_fusion
 from src.exact_identity_gate import build_exact_identity_gate
 from src.chase_knowledge_graph import build_chase_knowledge_graph
 from src.visual_edge import build_visual_edge
+from src.information_edge_hunter import build_information_edge_hunter
 from src.flip_scenarios import build_flip_scenarios
 from src.comments import build_comment
 from src.market_analysis import build_market_analysis
 from src.player_market import get_player_database, match_player, normalize_player_name
 from src.pricing import normalize_shipping, total_acquisition_cost
+from src.premium_comp_hunter import hunt_premium_comps
+from src.premium_valuation import build_exact_premium_valuation
 
 
 HOCKEY_SETS = {
@@ -1557,6 +1560,60 @@ def compute_liquidity_evidence(
     }
 
 
+def compute_flip_velocity(liquidity_analysis, sale_probability, net_profit, total_cost):
+    """Estimate turnover speed only when observable sold evidence exists.
+
+    This is a prioritisation metric, not a promise of time-to-sale. Asking-only
+    or heuristic liquidity must never manufacture a precise selling horizon.
+    """
+    liq = dict(liquidity_analysis or {})
+    evidence = liq.get("evidence")
+    sold30 = int(liq.get("sold_30d") or 0)
+    sold90 = int(liq.get("sold_90d") or 0)
+    median_age = liq.get("median_sold_age_days")
+    probability = max(0.0, min(100.0, float(sale_probability or 0)))
+    profit = float(net_profit or 0)
+    capital = max(0.0, float(total_cost or 0))
+
+    if evidence != "sold" or sold90 <= 0:
+        return {
+            "score": None, "label": "Ej bedömd", "expected_days": None,
+            "profit_30d": None, "capital_turns_30d": None,
+            "evidence": evidence or "none",
+            "note": "För lite verifierad omsättningsdata för att uppskatta säljtakt.",
+        }
+
+    # Recent verified transactions dominate. Median comp age is supporting
+    # evidence, never interpreted as literal listing-to-sale time.
+    velocity = min(100.0, sold30 * 18.0 + max(0, sold90 - sold30) * 6.0)
+    if isinstance(median_age, (int, float)):
+        if median_age <= 14: velocity += 12
+        elif median_age <= 30: velocity += 7
+        elif median_age > 90: velocity -= 10
+    velocity = max(0.0, min(100.0, velocity * 0.70 + probability * 0.30))
+
+    if velocity >= 80:
+        days, label = 10, "Mycket snabb"
+    elif velocity >= 65:
+        days, label = 20, "Snabb"
+    elif velocity >= 50:
+        days, label = 35, "Normal"
+    elif velocity >= 35:
+        days, label = 60, "Långsam"
+    else:
+        days, label = 90, "Mycket långsam"
+
+    profit_30d = profit * 30.0 / days if profit > 0 else 0.0
+    turns = 30.0 / days if capital > 0 else None
+    return {
+        "score": round(velocity, 1), "label": label, "expected_days": days,
+        "profit_30d": round(profit_30d, 1),
+        "capital_turns_30d": round(turns, 2) if turns is not None else None,
+        "evidence": "verified_sold_velocity",
+        "note": "Säljtakten är en försiktig prioriteringssignal från verifierade avslut, inte en garanti.",
+    }
+
+
 def compute_risk_model(
     *,
     valuation_confidence_score,
@@ -1879,6 +1936,21 @@ def compute_haircut(
         2,
     )
 
+
+
+def _premium_identity_needs_sold_evidence(features):
+    """Premium structure must not be presented as a precise price from heuristics alone."""
+    features = features or {}
+    return bool(
+        features.get("is_auto")
+        or features.get("is_patch")
+        or features.get("is_jersey")
+        or features.get("is_game_worn")
+        or features.get("is_1of1")
+        or features.get("is_low_serial")
+        or features.get("parallel")
+        or str(features.get("rookie_tier") or "").casefold() in {"iconic", "strong"}
+    )
 
 def compute_resale_ranges(
     estimated_value,
@@ -3002,6 +3074,51 @@ def analyze_core(
         elif valuation_confidence_score < 60:
             confidence = min(confidence, 0.72)
 
+    premium_identity = _premium_identity_needs_sold_evidence(features)
+    premium_comp_hunter = hunt_premium_comps(features, comparable_details)
+    premium_exact_sold_count = int(premium_comp_hunter.get("exact_count", 0) or 0)
+    premium_valuation = build_exact_premium_valuation(premium_comp_hunter.get("exact") or [])
+    sold_evidence_sufficient = (
+        comp_valuation_basis == "sold"
+        and sold_comparable_count >= 2
+        and valuation_confidence_score >= 60
+        and (not premium_identity or premium_exact_sold_count >= 2)
+    )
+    valuation_display_safe = not premium_identity or sold_evidence_sufficient
+    valuation_display_note = ""
+    if premium_identity and sold_evidence_sufficient and premium_valuation.get("safe_for_display"):
+        # Premium economics must come from exact premium sales, not broad comps or rarity heuristics.
+        estimated_value = int(premium_valuation.get("base") or estimated_value)
+        value_source = "exact_premium_sold_comps"
+        comp_valuation_range = {
+            "low": premium_valuation.get("low"),
+            "base": premium_valuation.get("base"),
+            "high": premium_valuation.get("high"),
+            "source": "exact_premium_sold_comps",
+        }
+        reasons.append(
+            f"{premium_valuation.get('count', 0)} exakta premiumförsäljningar; "
+            "färskare avslut väger tyngre i basvärdet"
+        )
+    if premium_identity and not sold_evidence_sufficient:
+        premium_bits = []
+        if features.get("is_auto"):
+            premium_bits.append("autograf")
+        if features.get("is_patch") or features.get("is_jersey"):
+            premium_bits.append("patch/relic")
+        if features.get("is_low_serial") or features.get("is_1of1"):
+            premium_bits.append("låg numrering")
+        if features.get("parallel"):
+            premium_bits.append("parallel")
+        kind = ", ".join(premium_bits[:3]) or "premiumvariant"
+        valuation_display_note = (
+            f"Kortet är identifierat som {kind}. FlipFynd visar därför inte ett exakt "
+            "'realistiskt värde' från en titelheuristik eller breda samma-spelare-comps. Minst två "
+            "exakta premiumförsäljningar som matchar kortets set/program och kända premiumegenskaper "
+            "behövs för ett pris som ska visas som realistiskt."
+        )
+        risks.append("premiumkort saknar tillräckliga verifierade sold comps för säker prisvisning")
+
     liquidity_analysis = compute_liquidity_evidence(
         liquidity,
         profile,
@@ -3046,6 +3163,10 @@ def analyze_core(
         expected_resale,
         floor_resale,
         probability,
+    )
+
+    flip_velocity = compute_flip_velocity(
+        liquidity_analysis, probability, profits["net_profit_estimate"], analysis_total_cost
     )
 
     quality = compute_card_quality(
@@ -3284,6 +3405,16 @@ def analyze_core(
         market_edge_score=market_edge.get("score", 0),
         identity_confidence_score=features.get("identity_confidence_score", 0),
         knowledge_signals=market_knowledge_signals,
+    )
+
+    information_edge = build_information_edge_hunter(
+        item=item,
+        features=features,
+        listing_quality=listing_quality,
+        hidden_find=hidden_find,
+        market_edge=market_edge,
+        visual_edge=visual_edge,
+        identity_gate=exact_identity_gate,
     )
 
     flip_scenarios = build_flip_scenarios(
@@ -3542,6 +3673,12 @@ def analyze_core(
         "market_edge_reasons": market_edge["reasons"],
         "market_edge_types": market_edge["types"],
         "is_market_edge_candidate": market_edge["is_edge_candidate"],
+        "information_edge_score": information_edge["score"],
+        "information_edge_label": information_edge["label"],
+        "information_edge_reasons": information_edge["reasons"],
+        "information_edge_verify_first": information_edge["verify_first"],
+        "is_information_edge_candidate": information_edge["is_candidate"],
+        "information_edge_review_only": information_edge["review_only"],
         "visual_edge_score": visual_edge["score"],
         "visual_edge_label": visual_edge["label"],
         "visual_edge_reasons": visual_edge["reasons"],
@@ -3585,6 +3722,32 @@ def analyze_core(
 
         "value_source":
             value_source,
+
+        "valuation_display_safe": valuation_display_safe,
+        "valuation_display_note": valuation_display_note,
+        "premium_identity_requires_sold_evidence": premium_identity,
+        "premium_comp_hunter_active": premium_comp_hunter.get("active", False),
+        "premium_comp_hunter_status": premium_comp_hunter.get("status"),
+        "premium_comp_hunter_exact_count": premium_comp_hunter.get("exact_count", 0),
+        "premium_comp_hunter_near_count": premium_comp_hunter.get("near_count", 0),
+        "premium_comp_hunter_rejected_count": premium_comp_hunter.get("rejected_count", 0),
+        "premium_comp_hunter_query": premium_comp_hunter.get("query"),
+        "premium_comp_hunter_exact": premium_comp_hunter.get("exact", []),
+        "premium_comp_hunter_near": premium_comp_hunter.get("near", []),
+        "premium_comp_hunter_search_targets": premium_comp_hunter.get("search_targets", []),
+        "premium_comp_hunter_safe_for_valuation": premium_comp_hunter.get("safe_for_valuation", False),
+        "premium_comp_hunter_note": premium_comp_hunter.get("note"),
+        "premium_valuation_active": premium_valuation.get("active", False),
+        "premium_valuation_safe_for_display": premium_valuation.get("safe_for_display", False),
+        "premium_valuation_count": premium_valuation.get("count", 0),
+        "premium_valuation_low": premium_valuation.get("low"),
+        "premium_valuation_base": premium_valuation.get("base"),
+        "premium_valuation_high": premium_valuation.get("high"),
+        "premium_valuation_spread_pct": premium_valuation.get("spread_pct"),
+        "premium_valuation_fresh_count": premium_valuation.get("fresh_count", 0),
+        "premium_valuation_confidence": premium_valuation.get("confidence"),
+        "premium_valuation_observations": premium_valuation.get("observations", []),
+        "premium_valuation_note": premium_valuation.get("note"),
 
         "marginal":
             expected_resale
@@ -3633,6 +3796,14 @@ def analyze_core(
 
         "sale_probability":
             probability,
+
+        "flip_velocity_score": flip_velocity.get("score"),
+        "flip_velocity_label": flip_velocity.get("label"),
+        "flip_velocity_expected_days": flip_velocity.get("expected_days"),
+        "flip_velocity_profit_30d": flip_velocity.get("profit_30d"),
+        "flip_velocity_capital_turns_30d": flip_velocity.get("capital_turns_30d"),
+        "flip_velocity_evidence": flip_velocity.get("evidence"),
+        "flip_velocity_note": flip_velocity.get("note"),
 
         "uncertainty_haircut":
             haircut,

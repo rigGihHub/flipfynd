@@ -14,6 +14,7 @@ try:
 except ImportError:
     st_autorefresh = None
 
+from src.adaptive_deepening import select_adaptive_full_analysis_indices
 from src.card_market_knowledge import detect_market_attention
 from src.analysis_cache import (
     build_analysis_signature,
@@ -36,7 +37,9 @@ from src.sold_comp_import import (
     parse_import_bytes,
     save_sold_comps,
 )
-from src.sold_comp_collector import collect_sold_comps
+from src.sold_comp_collector import collect_sold_comps, smart_collect_local_sold_comps
+from src.external_sold_sources import available_adapters, import_external_sold_rows
+from src.sold_source_registry import sold_source_registry, source_readiness_summary
 from src.visual_detective import analyze_listing_images
 from src.visual_identity import build_visual_card_candidates
 from src.exact_comp_hunter import hunt_exact_comps
@@ -46,7 +49,11 @@ from src.exact_identity_gate import build_exact_identity_gate
 from src.buy_now_hunter import build_buy_now_opportunity
 from src.ending_soon_hunter import build_ending_soon_opportunity
 from src.find_diagnostics import summarize_no_find_reasons
+from src.near_buy_guidance import build_near_buy_guidance
 from src.detail_evidence_fusion import build_detail_evidence_fusion
+from src.flip_journal import (
+    build_entry_from_listing, journal_metrics, load_journal, save_journal, update_entry,
+)
 
 from src.pricing import (
     DEFAULT_UNKNOWN_SHIPPING,
@@ -80,7 +87,7 @@ st.set_page_config(
 )
 
 
-APP_VERSION = "v0.11.12"
+APP_VERSION = "v0.11.23"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -108,6 +115,8 @@ SOLD_COMPS_PATH = (
     / "data"
     / "sold_comps.json"
 )
+
+FLIP_JOURNAL_PATH = BASE_DIR / "data" / "flip_journal.json"
 
 FETCH_LOG_PATH = (
     BASE_DIR
@@ -620,6 +629,37 @@ def is_auto(item):
     )
 
 
+
+@st.cache_data(show_spinner=False, max_entries=6000)
+def _cached_fast_analysis(item_signature, item, sport, strategy):
+    """Reuse the cheap first-pass analysis across filter-only reruns.
+
+    item_signature is intentionally explicit in the cache key so a changed
+    listing invalidates the cached result while ticking a UI checkbox does not.
+    """
+    return analyze_item(
+        item,
+        mode="fast",
+        strategy_mode=strategy,
+        sport=sport,
+    )
+
+
+def _fast_signature(item, sport, strategy):
+    payload = {
+        "url": item.get("url") or item.get("link"),
+        "title": item.get("titel") or item.get("title"),
+        "price": item.get("pris"),
+        "shipping": item.get("frakt"),
+        "raw_text": item.get("raw_text"),
+        "full_description": item.get("full_description"),
+        "sport": sport,
+        "strategy": strategy,
+    }
+    return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+
+
+
 def analyze_data(
     data,
     sport,
@@ -750,20 +790,18 @@ def analyze_data(
 
         debug["after_search"] += 1
 
-        fast = analyze_item(
-            item,
-            mode="fast",
-            strategy_mode=
-                strategy,
-            sport=sport,
-        )
+        # Cheap filters must run before any card analysis. This makes a changed
+        # checkbox/filter almost instant instead of re-analysing hundreds of
+        # listings that will be discarded anyway.
+        direct_sale_type = _FETCHER.detect_sale_type(item) if hasattr(_FETCHER, "detect_sale_type") else None
+        if not direct_sale_type:
+            text = str(item.get("raw_text") or "").casefold()
+            direct_sale_type = "Köp nu" if "köp nu" in text else ("Auktion" if ("utropspris" in text or "ledande bud" in text or " bud" in text) else "Okänd")
 
         if (
-            sale_type == "Endast auktioner"
-            and fast.get("sale_type") != "Auktion"
+            sale_type == "Endast auktioner" and direct_sale_type != "Auktion"
         ) or (
-            sale_type == "Endast Köp nu"
-            and fast.get("sale_type") != "Köp nu"
+            sale_type == "Endast Köp nu" and direct_sale_type != "Köp nu"
         ):
             debug["sale_type_miss"] += 1
             continue
@@ -779,6 +817,13 @@ def analyze_data(
             continue
 
         debug["after_feature_filters"] += 1
+
+        fast = _cached_fast_analysis(
+            _fast_signature(item, sport, strategy),
+            item,
+            sport,
+            strategy,
+        )
 
         attention = detect_market_attention(
             f"{item.get('titel', '')} {item.get('raw_text', '') or ''}",
@@ -814,14 +859,13 @@ def analyze_data(
     )
 
     results = []
+    full_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=30)
+    full_index_set = set(full_indices)
+    debug["adaptive_full_selected"] = len(full_indices)
+    debug["adaptive_extra_full"] = max(0, len(full_indices) - min(full_limit, len(candidates)))
 
-    for (
-        original,
-        fast,
-        _attention,
-    ) in candidates[
-        :full_limit
-    ]:
+    for idx in full_indices:
+        original, fast, _attention = candidates[idx]
         signature = (
             build_analysis_signature(
                 original,
@@ -872,16 +916,9 @@ def analyze_data(
             full
         )
 
-    for (
-        _,
-        fast,
-        _attention,
-    ) in candidates[
-        full_limit:
-    ]:
-        results.append(
-            fast
-        )
+    for idx, (_, fast, _attention) in enumerate(candidates):
+        if idx not in full_index_set:
+            results.append(fast)
 
     results.sort(
         key=lambda item: (
@@ -1641,6 +1678,39 @@ if st.session_state.get("results") is not None:
                         st.metric(reason["label"], reason["count"])
                 st.caption("Varje annons räknas under sin viktigaste nuvarande spärr. Detta ändrar inte analysen – det förklarar bara den.")
 
+            # Show a short, actionable queue instead of forcing the user to inspect
+            # twenty full cards to understand what would need to improve.
+            near_buy_rows = []
+            for candidate in st.session_state["results"]:
+                guidance = build_near_buy_guidance(candidate)
+                if guidance.get("readiness_score", 0) <= 0:
+                    continue
+                near_buy_rows.append((guidance.get("readiness_score", 0), candidate, guidance))
+            near_buy_rows.sort(key=lambda row: (row[0], float(row[1].get("deal_score", 0) or 0)), reverse=True)
+            if near_buy_rows:
+                st.markdown("### 🎯 Närmast KÖP")
+                st.caption("Det här är inte köprekommendationer. Här ser du vilka kandidater som ligger närmast och exakt vad som fortfarande stoppar dem.")
+                for ready_score, candidate, guidance in near_buy_rows[:5]:
+                    with st.container(border=True):
+                        top_cols = st.columns([3, 1])
+                        top_cols[0].markdown(f"**{candidate.get('titel', 'Okänd annons')}**")
+                        top_cols[1].metric("Köpberedskap", f"{ready_score}/100")
+                        st.markdown(f"**{guidance.get('status', 'GRANSKA')}** – {guidance.get('primary_action', '')}")
+                        steps = guidance.get("next_steps") or []
+                        if steps:
+                            st.caption("Nästa steg: " + " • ".join(steps[:3]))
+                        economics = []
+                        if candidate.get("net_profit_estimate") is not None:
+                            economics.append(f"nettovinst {float(candidate.get('net_profit_estimate') or 0):.0f} kr")
+                        if candidate.get("roi_estimate") is not None:
+                            economics.append(f"ROI {float(candidate.get('roi_estimate') or 0):.0%}")
+                        if candidate.get("sale_probability") is not None:
+                            economics.append(f"säljchans {float(candidate.get('sale_probability') or 0):.0f}%")
+                        if economics:
+                            st.caption("Nu: " + " · ".join(economics))
+                        if candidate.get("lank"):
+                            st.markdown(f"[Öppna annonsen på Tradera ↗]({candidate.get('lank')})")
+
     if not visible:
         if not data:
             st.warning(
@@ -1898,6 +1968,30 @@ if st.session_state.get("results") is not None:
                 "Bildprioriteten påverkar inte värdering, vinst, ROI eller maxbud. Den avgör bara vilka annonser som bör granskas visuellt först."
             )
 
+    information_edge_candidates = [x for x in filtered if x.get("is_information_edge_candidate")]
+    information_edge_candidates.sort(
+        key=lambda x: (x.get("information_edge_score", 0), x.get("market_edge_score", 0)), reverse=True
+    )
+    if information_edge_candidates:
+        with st.expander(f"🔥 Informationsövertag ({len(information_edge_candidates)})", expanded=True):
+            st.caption(
+                "Dåligt beskrivna eller svårsökta annonser där FlipFynd ser något som bör verifieras före andra köpare. "
+                "Detta är INTE ett KÖP-beslut och skapar aldrig ett marknadsvärde."
+            )
+            for candidate in information_edge_candidates[:10]:
+                st.write(
+                    f"**{candidate.get('titel', 'Okänd annons')}** · "
+                    f"{candidate.get('information_edge_label', 'Informationsedge')} "
+                    f"{candidate.get('information_edge_score', 0)}/100"
+                )
+                if candidate.get("information_edge_reasons"):
+                    st.caption(" • ".join(candidate.get("information_edge_reasons")[:3]))
+                verify = candidate.get("information_edge_verify_first") or []
+                if verify:
+                    st.warning("Verifiera först: " + ", ".join(verify[:4]))
+                if candidate.get("lank"):
+                    st.markdown(f"[Öppna annonsen och verifiera]({candidate.get('lank')})")
+
     edge_candidates = [
         x for x in filtered
         if x.get("is_market_edge_candidate") and x.get("deal_score", 0) >= 40
@@ -2033,6 +2127,8 @@ if st.session_state.get("results") is not None:
         floor = item.get("floor_resale", 0) or 0
         best_case = item.get("best_case_resale", 0) or 0
         net_profit = item.get("net_profit_estimate", 0) or 0
+        valuation_display_safe = bool(item.get("valuation_display_safe", True))
+        valuation_display_note = item.get("valuation_display_note") or ""
         sale_probability = item.get("sale_probability", 0) or 0
 
         with st.container(border=True):
@@ -2040,7 +2136,11 @@ if st.session_state.get("results") is not None:
             decision_text = "STARKT FYND" if raw_decision == "KÖP (starkt fynd)" else ("KÖP" if raw_decision == "KÖP" else ("BEVAKA" if raw_decision == "KANSKE" else "HOPPA ÖVER"))
             score_value = float(item.get("deal_score", 0) or 0)
             quick_price_label = "AKTUELLT" if sale_type == "Auktion" else "KÖP FÖR"
-            quick_resale = f"{floor:.0f}–{expected:.0f} kr" if floor and expected and floor != expected else f"{expected:.0f} kr"
+            quick_resale = (
+                (f"{floor:.0f}–{expected:.0f} kr" if floor and expected and floor != expected else f"{expected:.0f} kr")
+                if valuation_display_safe else "Otillräckligt underlag"
+            )
+            quick_profit = f"{net_profit:.0f} kr" if valuation_display_safe else "Ej beräknad"
             result_html = f"""<div class="ff-result-head">
                     <div class="ff-result-topline">
                       <span class="ff-rank-chip">RANK #{index:02d}</span>
@@ -2052,7 +2152,7 @@ if st.session_state.get("results") is not None:
                     <div class="ff-quick-grid">
                       <div class="ff-quick-cell"><div class="ff-quick-label">{quick_price_label}</div><div class="ff-quick-value">{total_cost:.0f} kr</div></div>
                       <div class="ff-quick-cell"><div class="ff-quick-label">REALISTISKT VÄRDE</div><div class="ff-quick-value">{quick_resale}</div></div>
-                      <div class="ff-quick-cell"><div class="ff-quick-label">MÖJLIG NETTOVINST</div><div class="ff-quick-value">{net_profit:.0f} kr</div></div>
+                      <div class="ff-quick-cell"><div class="ff-quick-label">MÖJLIG NETTOVINST</div><div class="ff-quick-value">{quick_profit}</div></div>
                       <div class="ff-quick-cell"><div class="ff-quick-label">SÄLJCHANS</div><div class="ff-quick-value">{sale_probability:.0f}%</div></div>
                     </div>
                     <div class="ff-retro-rule"></div>
@@ -2102,9 +2202,13 @@ if st.session_state.get("results") is not None:
                     if not shipping_known:
                         st.caption("Frakten är okänd; 29 kr används endast som försiktigt kalkylantagande.")
             with m2:
-                st.metric("Prognos nettovinst", f"{net_profit:.0f} kr")
+                if valuation_display_safe:
+                    st.metric("Prognos nettovinst", f"{net_profit:.0f} kr")
+                else:
+                    st.metric("Prognos nettovinst", "Ej beräknad")
+                    st.caption(valuation_display_note or "Korttypen kräver bättre prisunderlag innan en nettovinst kan visas.")
                 breakdown = item.get("profit_breakdown") or {}
-                if breakdown:
+                if breakdown and valuation_display_safe:
                     st.caption(
                         f"{breakdown.get('resale_price', 0):.0f} kr försäljning − "
                         f"{breakdown.get('acquisition_cost', 0):.0f} kr inköp − "
@@ -2146,6 +2250,16 @@ if st.session_state.get("results") is not None:
                         "Högsta beräknade totalkostnad som fortfarande når FlipFynds KÖP-gräns."
                     )
 
+            if item.get("is_information_edge_candidate"):
+                st.warning(
+                    f"🔥 {item.get('information_edge_label', 'Potentiellt informationsövertag')} · "
+                    f"{item.get('information_edge_score', 0)}/100. "
+                    "Verifiera innan köp – signalen skapar inget marknadsvärde."
+                )
+                verify = item.get("information_edge_verify_first") or []
+                if verify:
+                    st.caption("Verifiera först: " + ", ".join(verify[:4]))
+
             if item.get("is_market_edge_candidate"):
                 st.info(
                     f"⚡ {item.get('market_edge_label', 'Marknadsedge')} · "
@@ -2165,11 +2279,15 @@ if st.session_state.get("results") is not None:
                 st.metric("Fyndpoäng", f"{item.get('deal_score', 0):.0f}/100")
                 st.caption(item.get("deal_score_label", "Pass"))
             with m4:
-                if floor and expected and floor != expected:
-                    resale_text = f"{floor:.0f}–{expected:.0f} kr"
+                if valuation_display_safe:
+                    if floor and expected and floor != expected:
+                        resale_text = f"{floor:.0f}–{expected:.0f} kr"
+                    else:
+                        resale_text = f"{expected:.0f} kr"
+                    st.metric("Realistiskt värde", resale_text)
                 else:
-                    resale_text = f"{expected:.0f} kr"
-                st.metric("Realistiskt värde", resale_text)
+                    st.metric("Realistiskt värde", "Otillräckligt underlag")
+                    st.caption(valuation_display_note or "Exakta eller nära sålda jämförelser behövs för denna korttyp.")
             with m5:
                 st.metric("Säljbarhet", item.get("liquidity_label", "Normalt"))
                 st.caption(f"{item.get('liquidity_score', 0):.0f}/100 • säljchans {sale_probability:.0f}%")
@@ -2177,6 +2295,27 @@ if st.session_state.get("results") is not None:
                 deal_confidence = item.get("deal_confidence_score", 0) or 0
                 st.metric("Fyndsäkerhet", f"{deal_confidence:.0f}/100")
                 st.caption(f"{item.get('deal_confidence_level', 'låg')} evidens")
+
+            velocity_days = item.get("flip_velocity_expected_days")
+            velocity_profit = item.get("flip_velocity_profit_30d")
+            if velocity_days is not None:
+                st.caption(
+                    f"⚡ Flip Velocity: {item.get('flip_velocity_label', 'Ej bedömd')} · "
+                    f"ca {velocity_days} dagar · vinsttakt {float(velocity_profit or 0):.0f} kr/30 dagar"
+                )
+            else:
+                st.caption("⚡ Flip Velocity: Ej bedömd – kräver verifierade avslut.")
+
+            journal_key = f"journal_add_{index}_{hashlib.sha1(str(item.get('lank') or item.get('titel')).encode('utf-8')).hexdigest()[:8]}"
+            if st.button("📒 Logga som köpt", key=journal_key, use_container_width=True):
+                journal_rows = load_journal(FLIP_JOURNAL_PATH)
+                if any(r.get("listing_url") and r.get("listing_url") == item.get("lank") for r in journal_rows):
+                    st.info("Den här annonsen finns redan i Flip Journal.")
+                else:
+                    purchase_price = float(item.get("pris") or 0) + (float(item.get("frakt")) if isinstance(item.get("frakt"), (int, float)) else 29.0)
+                    journal_rows.append(build_entry_from_listing(item, purchase_price=purchase_price))
+                    save_journal(journal_rows, FLIP_JOURNAL_PATH)
+                    st.success("Köpet är loggat i Flip Journal. Kontrollera det faktiska inköpspriset i journalen om det avviker.")
 
             risk_score = item.get("risk_score")
             if risk_score is not None:
@@ -2304,12 +2443,66 @@ if st.session_state.get("results") is not None:
                                 st.caption("• " + str(req))
                         st.caption(item.get("exact_identity_gate_note") or "")
 
+                    if item.get("premium_comp_hunter_active"):
+                        with st.expander("💎 Premium Comp Hunter", expanded=False):
+                            exact_count = int(item.get("premium_comp_hunter_exact_count", 0) or 0)
+                            near_count = int(item.get("premium_comp_hunter_near_count", 0) or 0)
+                            st.markdown(f"**{item.get('premium_comp_hunter_status', 'Premium comps granskas')}**")
+                            cpc1, cpc2 = st.columns(2)
+                            with cpc1:
+                                st.metric("Exakta premium-sålda", exact_count)
+                            with cpc2:
+                                st.metric("Närliggande premium-sålda", near_count)
+                            if item.get("premium_comp_hunter_safe_for_valuation"):
+                                st.success("Premiumkortet har tillräckligt med exakta sålda jämförelser för att prisunderlaget ska få användas vidare.")
+                            else:
+                                st.warning("Breda samma-spelare-comps räcker inte. Minst två exakta premiumförsäljningar behövs för realistiskt värde.")
+                            query = item.get("premium_comp_hunter_query")
+                            if query:
+                                st.caption(f"Exakt sökfras: {query}")
+                            for comp in (item.get("premium_comp_hunter_exact") or [])[:4]:
+                                price = comp.get("price")
+                                price_text = f" · {float(price):.0f} kr" if isinstance(price, (int, float)) else ""
+                                st.caption(f"✅ {comp.get('title', 'Såld comp')}{price_text}")
+                            for comp in (item.get("premium_comp_hunter_near") or [])[:3]:
+                                missing = ", ".join(comp.get("missing") or [])
+                                st.caption(f"🟡 {comp.get('title', 'Närliggande comp')}" + (f" · saknar: {missing}" if missing else ""))
+                            targets = item.get("premium_comp_hunter_search_targets") or []
+                            if targets:
+                                st.markdown("**Sök efter exakt samma premiumkort:**")
+                                cols = st.columns(min(2, len(targets)))
+                                for idx, target in enumerate(targets[:2]):
+                                    with cols[idx]:
+                                        st.link_button(str(target.get("platform") or "Sök"), str(target.get("url") or "#"), use_container_width=True)
+                            if item.get("premium_valuation_safe_for_display"):
+                                st.markdown("**Exakt premiumintervall**")
+                                pv1, pv2, pv3 = st.columns(3)
+                                with pv1:
+                                    st.metric("Observerat låg", f"{float(item.get('premium_valuation_low') or 0):.0f} kr")
+                                with pv2:
+                                    st.metric("Färskhetsvägt basvärde", f"{float(item.get('premium_valuation_base') or 0):.0f} kr")
+                                with pv3:
+                                    st.metric("Observerat hög", f"{float(item.get('premium_valuation_high') or 0):.0f} kr")
+                                spread = item.get("premium_valuation_spread_pct")
+                                fresh = int(item.get("premium_valuation_fresh_count", 0) or 0)
+                                conf = item.get("premium_valuation_confidence") or "låg"
+                                spread_text = f"{float(spread):.0f}%" if isinstance(spread, (int, float)) else "ej beräknad"
+                                st.caption(f"Spridning: {spread_text} · färska avslut ≤180 dagar: {fresh} · intervallsäkerhet: {conf}")
+                                st.caption(item.get("premium_valuation_note") or "")
+                            st.caption(item.get("premium_comp_hunter_note") or "")
+
                 with d2:
-                    st.write(f"**Försiktigt värde:** {floor:.0f} kr")
-                    st.write(f"**Förväntat värde:** {expected:.0f} kr")
-                    st.write(f"**Best case:** {best_case:.0f} kr")
-                    st.write(f"**Riskjusterad vinst:** {item.get('risk_adjusted_profit', 0)} kr")
-                    st.write(f"**ROI:** {item.get('roi_estimate', 0)}")
+                    if valuation_display_safe:
+                        st.write(f"**Försiktigt värde:** {floor:.0f} kr")
+                        st.write(f"**Förväntat värde:** {expected:.0f} kr")
+                        st.write(f"**Best case:** {best_case:.0f} kr")
+                        st.write(f"**Riskjusterad vinst:** {item.get('risk_adjusted_profit', 0)} kr")
+                        st.write(f"**ROI:** {item.get('roi_estimate', 0)}")
+                    else:
+                        st.write("**Prisvärdering:** Otillräckligt underlag")
+                        st.write("**Riskjusterad vinst:** Ej beräknad")
+                        st.write("**ROI:** Ej beräknad")
+                        st.caption(valuation_display_note)
                     st.write(f"**Rank:** {item.get('rank_score', 0)}")
                     st.caption(
                         f"Ranken vägs med fyndsäkerhet: {item.get('ranking_confidence_score', item.get('deal_confidence_score', 0))}/100"
@@ -2902,15 +3095,121 @@ with st.expander("⚙️ Administration & data"):
                 except Exception as exc:
                     st.error(f"Importen kunde inte läsas: {exc}")
 
-    with st.expander("Samla verifierade avslut"):
+    with st.expander("Sold Source Readiness"):
+        readiness = source_readiness_summary()
         st.caption(
-            "Collector söker i redan inlästa lokala data men tar bara in objekt med explicit såld-evidens. "
-            "En annons som bara är avslutad eller stängd räknas aldrig som såld."
+            "FlipFynd skiljer på en webbplats som är bra för manuell comp-research och en källa som faktiskt kan "
+            "integreras stabilt och verifierbart. Research-only får aldrig marknadsföras som automatisk sold-data."
+        )
+        r1, r2, r3 = st.columns(3)
+        r1.metric("Kända källor", readiness["source_count"])
+        r2.metric("Automatiskt anslutna", readiness["automated_count"])
+        r3.metric("Research-only", readiness["research_only_count"])
+        if readiness["automated_count"] == 0:
+            st.warning(
+                "Ingen extern sold-källa är ännu automatiskt ansluten. Det är en verklig begränsning: "
+                "FlipFynd ska hellre visa detta än låtsas ha live-comps."
+            )
+        for source in sold_source_registry():
+            cols = st.columns([2, 2, 5])
+            cols[0].markdown(f"**{source['label']}**")
+            cols[1].write(source["status"])
+            cols[2].caption(source["note"])
+            cols[2].markdown(f"[Öppna för comp-research ↗]({source['research_url']})")
+
+    with st.expander("External Sold Source Adapter"):
+        st.caption(
+            "Källadaptrar översätter externa exporter till FlipFynds strikta sold-comp-format. "
+            "De hämtar inget från internet själva och en avslutad annons räknas aldrig som såld utan explicit såld-evidens."
+        )
+        adapter_options = {item["label"]: item["key"] for item in available_adapters()}
+        adapter_label = st.selectbox("Källformat", list(adapter_options), key="external_sold_adapter")
+        external_upload = st.file_uploader(
+            "Välj extern CSV eller JSON", type=["csv", "json"], key="external_sold_upload"
+        )
+        if external_upload is not None and st.button("Validera extern sold-data", use_container_width=True):
+            try:
+                rows = parse_import_bytes(external_upload.getvalue(), external_upload.name)
+                existing = load_sold_comps(str(SOLD_COMPS_PATH))
+                result = import_external_sold_rows(
+                    rows, adapter_options[adapter_label], existing=existing
+                )
+                if result["added_count"]:
+                    save_sold_comps(result["records"], SOLD_COMPS_PATH)
+                    get_sold_comp_data.clear()
+                    clear_analysis_cache()
+                    st.session_state["result_cache"] = {}
+                st.success(
+                    f"{result['added_count']} nya verifierade comps • "
+                    f"{result['duplicate_count']} dubbletter • "
+                    f"{result['adapter_rejected_count']} saknade explicit såld-evidens • "
+                    f"{result['error_count']} avvisades av säkerhetsgrinden."
+                )
+                if result["adapter_rejections"] or result["errors"]:
+                    with st.expander("Visa varför rader avvisades"):
+                        for err in result["adapter_rejections"][:25]:
+                            st.write(f"Rad {err['row']}: {err['reason']}")
+                        for err in result["errors"][:25]:
+                            st.write(f"Rad {err['row']}: {err['error']}")
+            except Exception as exc:
+                st.error(f"Extern sold-data kunde inte valideras: {exc}")
+
+    with st.expander("Smart Sold Comp Acquisition"):
+        st.caption(
+            "FlipFynd söker bara i kända lokala datakällor och tar enbart in rader med direkt såld-evidens. "
+            "Ended/closed räcker aldrig. Aktiva priser får aldrig bli sold comps av misstag."
         )
         current_sold = load_sold_comps(str(SOLD_COMPS_PATH))
         st.write(f"**{len(current_sold)} verifierade sold comps sparade i denna datamiljö.**")
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         with c1:
+            if st.button("Sök verifierade avslut", type="primary", use_container_width=True):
+                try:
+                    result = smart_collect_local_sold_comps(
+                        BASE_DIR,
+                        existing=current_sold,
+                        exclude=[SOLD_COMPS_PATH],
+                    )
+                    if result["added_count"]:
+                        save_sold_comps(result["records"], SOLD_COMPS_PATH)
+                        get_sold_comp_data.clear()
+                        clear_analysis_cache()
+                        st.session_state["result_cache"] = {}
+                    st.success(
+                        f"{result['added_count']} nya verifierade avslut • "
+                        f"{result['sources_scanned']} källor skannade • "
+                        f"{result['duplicate_count']} dubbletter • "
+                        f"{result['not_sold_count']} utan tillräcklig såld-evidens • "
+                        f"{result['invalid_count']} ogiltiga."
+                    )
+                    with st.expander("Visa källdiagnostik"):
+                        if not result["source_reports"]:
+                            st.info("Inga kända lokala källfiler hittades utöver sold-comp-biblioteket.")
+                        for report in result["source_reports"]:
+                            source_name = Path(report["source"]).name
+                            if report.get("error"):
+                                st.write(f"**{source_name}:** kunde inte läsas — {report['error']}")
+                                continue
+                            st.write(
+                                f"**{source_name}:** {report['rows']} rader • "
+                                f"{report['candidate_count']} verifierbara • "
+                                f"{report['added_count']} nya • {report['duplicate_count']} dubbletter"
+                            )
+                        if result.get("rejection_reasons"):
+                            st.caption("Avvisningsorsaker")
+                            labels = {
+                                "price_without_sold_evidence": "pris finns men ingen såld-evidens",
+                                "missing_sold_evidence": "såld-evidens saknas",
+                                "sold_state_without_price": "såld-status finns men pris saknas",
+                                "non_positive_sold_price": "sold_price är inte positivt",
+                                "invalid_normalized_row": "raden kunde inte valideras",
+                                "not_an_object": "ogiltigt radformat",
+                            }
+                            for reason, count in sorted(result["rejection_reasons"].items(), key=lambda x: (-x[1], x[0])):
+                                st.write(f"- {count}: {labels.get(reason, reason)}")
+                except Exception as exc:
+                    st.error(f"Smart collector kunde inte köras: {exc}")
+        with c2:
             if st.button("Samla från inlästa annonser", use_container_width=True):
                 try:
                     source_rows = get_data()
@@ -2927,12 +3226,11 @@ with st.expander("⚙️ Administration & data"):
                     st.success(
                         f"{result['added_count']} nya verifierade avslut • "
                         f"{result['duplicate_count']} dubbletter • "
-                        f"{result['not_sold_count']} ignorerade eftersom såld-evidens saknades • "
-                        f"{result['invalid_count']} ogiltiga."
+                        f"{result['not_sold_count']} ignorerade • {result['invalid_count']} ogiltiga."
                     )
                 except Exception as exc:
                     st.error(f"Collector kunde inte köras: {exc}")
-        with c2:
+        with c3:
             export_payload = json.dumps(current_sold, ensure_ascii=False, indent=2).encode("utf-8")
             st.download_button(
                 "Exportera sold-comp-bibliotek",
@@ -2943,9 +3241,55 @@ with st.expander("⚙️ Administration & data"):
                 help="Spara en kopia av historiken. Streamlit Clouds lokala filsystem är inte permanent mellan alla omstarter/deploys.",
             )
         st.caption(
+            "VERIFIED SOLD betyder att källraden har ett explicit sålt pris eller explicit såld-status tillsammans med pris. "
+            "Det betyder inte att FlipFynd har verifierat kortets exakta identitet; den kontrollen görs separat innan en comp får bära värderingen."
+        )
+        st.caption(
             "Viktigt: lagring i själva Streamlit-instansen är runtime-lagring. Exportfunktionen gör att sold-comp-historiken "
             "kan bevaras tills en extern persistent databas kopplas in."
         )
+
+    with st.expander("📒 Flip Journal & Feedback Loop", expanded=False):
+        journal_rows = load_journal(FLIP_JOURNAL_PATH)
+        metrics = journal_metrics(journal_rows)
+        st.caption("Här jämför FlipFynd sina prognoser med verkliga köp och försäljningar. Journalen påverkar ännu inte rekommendationerna automatiskt – den samlar först kalibreringsdata.")
+        j1, j2, j3, j4 = st.columns(4)
+        j1.metric("Loggade affärer", metrics["entry_count"])
+        j2.metric("Sålda", metrics["sold_count"])
+        j3.metric("Verklig nettovinst", f"{metrics['actual_net_profit_total']:.0f} kr")
+        j4.metric("Träffgrad", f"{metrics['win_rate']:.0f}%" if metrics["win_rate"] is not None else "Ej bedömd")
+        if metrics["median_days_to_sell"] is not None:
+            st.caption(f"Median faktisk säljtid: {metrics['median_days_to_sell']} dagar.")
+        if metrics["mean_profit_error"] is not None:
+            direction = "underskattar" if metrics["mean_profit_error"] > 0 else "överskattar"
+            st.caption(f"Kalibreringssignal: modellen {direction} i snitt nettovinsten med {abs(metrics['mean_profit_error']):.0f} kr på avslutade journalposter.")
+        if journal_rows:
+            labels = {f"{r.get('title','Okänd')} · {r.get('status','')} · {r.get('id')}": r.get('id') for r in journal_rows}
+            selected_label = st.selectbox("Välj journalpost", list(labels), key="flip_journal_entry")
+            selected_id = labels[selected_label]
+            selected = next(r for r in journal_rows if r.get("id") == selected_id)
+            c1, c2 = st.columns(2)
+            with c1:
+                purchase_price = st.number_input("Faktisk total inköpskostnad", min_value=0.0, value=float(selected.get("purchase_price") or 0), step=1.0, key=f"jp_{selected_id}")
+                purchase_date = st.text_input("Köpdatum (ÅÅÅÅ-MM-DD)", value=selected.get("purchase_date") or "", key=f"jd_{selected_id}")
+                sale_price = st.number_input("Faktiskt försäljningspris", min_value=0.0, value=float(selected.get("sale_price") or 0), step=1.0, key=f"js_{selected_id}")
+                sale_date = st.text_input("Säljdatum (ÅÅÅÅ-MM-DD)", value=selected.get("sale_date") or "", key=f"jsd_{selected_id}")
+            with c2:
+                selling_fee = st.number_input("Faktisk försäljningsavgift", min_value=0.0, value=float(selected.get("selling_fee") or 0), step=1.0, key=f"jf_{selected_id}")
+                packaging_cost = st.number_input("Emballage", min_value=0.0, value=float(selected.get("packaging_cost") or 0), step=1.0, key=f"jpack_{selected_id}")
+                other_cost = st.number_input("Övrig kostnad", min_value=0.0, value=float(selected.get("other_cost") or 0), step=1.0, key=f"jo_{selected_id}")
+                notes = st.text_area("Anteckning", value=selected.get("notes") or "", key=f"jn_{selected_id}")
+            if st.button("Spara journalpost", type="primary", use_container_width=True, key=f"save_{selected_id}"):
+                changes = {"purchase_price":purchase_price,"purchase_date":purchase_date or None,"selling_fee":selling_fee,"packaging_cost":packaging_cost,"other_cost":other_cost,"notes":notes}
+                if sale_price > 0:
+                    changes["sale_price"] = sale_price
+                    changes["sale_date"] = sale_date or None
+                save_journal(update_entry(journal_rows, selected_id, **changes), FLIP_JOURNAL_PATH)
+                st.success("Journalpost sparad.")
+                st.rerun()
+        journal_export = json.dumps({"schema_version":1,"entries":journal_rows}, ensure_ascii=False, indent=2).encode("utf-8")
+        st.download_button("Exportera Flip Journal", data=journal_export, file_name="flipfynd_flip_journal.json", mime="application/json", use_container_width=True, help="Spara en kopia. Streamlit Clouds lokala runtime-lagring är inte permanent mellan alla omstarter/deploys.")
+        st.warning("Journalen lagras tills vidare i Streamlit-instansens lokala runtime. Exportera den regelbundet tills persistent databas är inkopplad.")
 
     with st.expander("Underhåll / riskzon"):
         st.warning("Dessa funktioner påverkar lokalt analysunderlag och cache.")

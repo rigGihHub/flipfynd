@@ -11,8 +11,8 @@ def _primary_blocker(item: dict) -> str:
     if decision.startswith("KÖP"):
         return "KÖP"
 
-    identity = float(item.get("exact_identity_gate_score") or item.get("identity_confidence_score") or 0)
-    valuation = float(item.get("valuation_confidence") or 0)
+    identity = float(item.get("exact_identity_gate_score") or item.get("card_identity_confidence_score") or 0)
+    valuation = float(item.get("valuation_confidence_score") or item.get("valuation_confidence") or 0)
     comps = int(item.get("comparable_count") or 0)
     net = float(item.get("net_profit_estimate") or 0)
     roi = float(item.get("roi_estimate") or 0)
