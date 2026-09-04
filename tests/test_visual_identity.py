@@ -36,6 +36,8 @@ class VisualIdentityTests(unittest.TestCase):
             "title": "Connor Bedard Upper Deck Series 1 2023-24 #451 Outburst Young Guns",
             "sold_price": 995,
             "market_state": "sold",
+            "sold_verification_status": "verified",
+            "sale_evidence_type": "explicit_sold_price",
             "platform": "Tradera",
         }]
         result = build_visual_card_candidates(finding(), observed_records=sold)
@@ -47,6 +49,17 @@ class VisualIdentityTests(unittest.TestCase):
         sold = [{
             "title": "Connor Bedard Upper Deck Series 1 2023-24 #999 Outburst",
             "sold_price": 500,
+            "market_state": "sold",
+            "sold_verification_status": "verified",
+            "sale_evidence_type": "explicit_sold_price",
+        }]
+        result = build_visual_card_candidates(finding(), observed_records=sold)
+        self.assertFalse(any(c["verified_identity"] for c in result["candidates"]))
+
+    def test_unverified_sold_hint_cannot_verify_identity(self):
+        sold = [{
+            "title": "Connor Bedard Upper Deck Series 1 2023-24 #451 Outburst Young Guns",
+            "sold_price": 995,
             "market_state": "sold",
         }]
         result = build_visual_card_candidates(finding(), observed_records=sold)
@@ -67,6 +80,8 @@ class VisualIdentityTests(unittest.TestCase):
             "title": "Connor Bedard Upper Deck Series 1 2023-24 #451 Outburst",
             "sold_price": 900,
             "market_state": "sold",
+            "sold_verification_status": "verified",
+            "sale_evidence_type": "explicit_sold_price",
         }]
         result = build_visual_card_candidates(finding(), observed_records=sold)
         self.assertFalse(result["safe_for_valuation"])

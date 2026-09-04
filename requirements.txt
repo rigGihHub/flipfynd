@@ -3,3 +3,4 @@ streamlit-autorefresh>=1.0.1,<2
 requests>=2.32,<3
 playwright>=1.48,<2
 openai>=1.54,<2
+psycopg[binary]>=3.2,<4

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 
 def _utc_now() -> str:
@@ -69,10 +69,26 @@ def build_entry_from_listing(item: dict, purchase_price: Optional[float] = None,
         "recommended_decision": item.get("beslut") or item.get("decision") or "",
         "deal_score_at_capture": _to_float(item.get("deal_score")),
         "deal_confidence_at_capture": _to_float(item.get("deal_confidence_score")),
+        "valuation_confidence_at_capture": _to_float(item.get("valuation_confidence_score")),
+        "risk_score_at_capture": _to_float(item.get("risk_score")),
+        "sellability_at_capture": _to_float(item.get("liquidity_score")) or _to_float(item.get("liquidity")),
+        "exact_comp_available_at_capture": bool((item.get("sold_comparable_count") or 0) > 0),
+        "decision_confidence_downgraded_at_capture": bool(item.get("decision_confidence_audit_downgraded")),
+        "decision_confidence_blockers_at_capture": list(item.get("decision_confidence_audit_blockers") or []),
+        "decision_conflict_downgraded_at_capture": bool(item.get("decision_conflict_audit_downgraded")),
+        "decision_conflicts_at_capture": list(item.get("decision_conflict_audit_conflicts") or []),
         "expected_resale_at_capture": _to_float(item.get("expected_resale_price")) or _to_float(item.get("realistic_value")),
         "expected_net_profit_at_capture": _to_float(item.get("net_profit")),
         "max_total_price_at_capture": _to_float(item.get("max_total_price")),
         "flip_velocity_days_at_capture": _to_float(item.get("flip_velocity_expected_days")),
+        "information_edge_score_at_capture": _to_float(item.get("information_edge_score")),
+        "information_edge_candidate_at_capture": bool(item.get("is_information_edge_candidate")),
+        "hidden_find_score_at_capture": _to_float(item.get("hidden_find_score")),
+        "hidden_find_candidate_at_capture": bool(item.get("is_hidden_find_candidate")),
+        "market_edge_score_at_capture": _to_float(item.get("market_edge_score")),
+        "market_edge_candidate_at_capture": bool(item.get("is_market_edge_candidate")),
+        "mispriced_rookie_candidate_at_capture": bool(item.get("mispriced_rookie_candidate")),
+        "misclassified_card_candidate_at_capture": bool(item.get("misclassified_card_candidate")),
         "purchase_date": purchase_date or (datetime.now().date().isoformat() if purchase_price is not None else None),
         "purchase_price": purchase_price,
         "sale_date": None,
@@ -83,6 +99,9 @@ def build_entry_from_listing(item: dict, purchase_price: Optional[float] = None,
         "actual_net_profit": None,
         "days_to_sell": None,
         "notes": "",
+        "outcome_review_reasons": [],
+        "outcome_review_note": "",
+        "outcome_reviewed_at": None,
     }
 
 
@@ -106,6 +125,7 @@ def update_entry(entries: list[dict], entry_id: str, **changes: Any) -> list[dic
             packaging = _to_float(new_row.get("packaging_cost")) or 0.0
             other = _to_float(new_row.get("other_cost")) or 0.0
             new_row["actual_net_profit"] = float(new_row["sale_price"]) - purchase - fee - packaging - other
+            new_row["actual_roi_pct"] = (new_row["actual_net_profit"] / purchase * 100) if purchase > 0 else None
             new_row["days_to_sell"] = _days_between(new_row.get("purchase_date"), new_row.get("sale_date"))
             new_row["status"] = "sålt"
         elif new_row.get("purchase_price") is not None:

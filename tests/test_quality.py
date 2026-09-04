@@ -889,6 +889,8 @@ class SoldCompFoundationTests(unittest.TestCase):
             "sold_price": price,
             "frakt": 19,
             "market_state": "sold",
+            "sold_verification_status": "verified",
+            "sale_evidence_type": "explicit_sold_price",
             "sold_at": (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat(),
             "source_platform": "Tradera",
             "lank": f"https://example.invalid/sold-{idx}",
@@ -929,6 +931,13 @@ class SoldCompFoundationTests(unittest.TestCase):
         from src.market_analysis import _market_state
         self.assertEqual(_market_state({"status": "ended", "pris": 150}), "asking")
         self.assertEqual(_market_state({"status": "closed", "pris": 150}), "asking")
+
+    def test_legacy_sold_hint_without_verification_is_blocked(self):
+        from src.market_analysis import _market_state
+        self.assertEqual(
+            _market_state({"market_state": "sold", "sold_price": 150}),
+            "blocked_sold",
+        )
 
     def test_sold_comp_weight_is_stronger_than_asking_weight(self):
         self.assertGreater(
@@ -1041,6 +1050,8 @@ class SoldCompImportV065Tests(unittest.TestCase):
                 "sold_price": price,
                 "frakt": 19,
                 "market_state": "sold",
+                "sold_verification_status": "verified",
+                "sale_evidence_type": "explicit_sold_price",
                 "sold_at": f"2026-08-{10+i:02d}",
                 "lank": f"https://example.invalid/sold-range-{i}",
                 "saljare": f"seller-{i}",

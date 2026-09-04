@@ -24,6 +24,8 @@ from src.player_market import get_player_database, match_player, normalize_playe
 from src.pricing import normalize_shipping, total_acquisition_cost
 from src.premium_comp_hunter import hunt_premium_comps
 from src.premium_valuation import build_exact_premium_valuation
+from src.decision_confidence_audit import audit_decision_confidence
+from src.decision_conflict_audit import audit_decision_conflicts
 
 
 HOCKEY_SETS = {
@@ -3252,6 +3254,25 @@ def analyze_core(
     elif risk_analysis["score"] > 60 and decision == "KÖP (starkt fynd)":
         decision = "KÖP"
 
+    pre_confidence_audit_decision = decision
+    decision_confidence_audit = audit_decision_confidence(
+        decision=decision,
+        valuation_confidence_score=valuation_confidence_score,
+        identity_confidence_score=features.get("identity_confidence_score", 0),
+        deal_confidence_score=deal_confidence["score"],
+        listing_quality_score=listing_quality.get("score", 0),
+        risk_score=risk_analysis["score"],
+        player_match_confidence=profile.get("match_confidence", "low"),
+        comp_valuation_basis=comp_valuation_basis,
+        sold_comparable_count=sold_comparable_count,
+        asking_comparable_count=asking_comparable_count,
+        exact_identity_gate_status=exact_identity_gate.get("status"),
+        valuation_display_safe=valuation_display_safe,
+        is_lot=bool(features.get("is_lot")),
+        extreme_discount=extreme_discount,
+    )
+    decision = decision_confidence_audit["audited_decision"]
+
     deal_score = compute_deal_score_100(
         profits=profits,
         expected_resale=expected_resale,
@@ -3265,6 +3286,38 @@ def analyze_core(
         decision=decision,
         risk_score=risk_analysis["score"],
     )
+
+    pre_conflict_audit_decision = decision
+    decision_conflict_audit = audit_decision_conflicts(
+        decision=decision,
+        deal_score=deal_score["score"],
+        risk_score=risk_analysis["score"],
+        liquidity_score=liquidity,
+        valuation_confidence_score=valuation_confidence_score,
+        identity_confidence_score=features.get("identity_confidence_score", 0),
+        sale_probability=probability,
+        net_profit_estimate=profits["net_profit_estimate"],
+        floor_profit_estimate=profits["floor_profit_estimate"],
+        risk_adjusted_profit=profits["risk_adjusted_profit"],
+        roi_estimate=profits["roi_estimate"],
+        comp_valuation_basis=comp_valuation_basis,
+        sold_comparable_count=sold_comparable_count,
+    )
+    decision = decision_conflict_audit["audited_decision"]
+    if decision != pre_conflict_audit_decision:
+        deal_score = compute_deal_score_100(
+            profits=profits,
+            expected_resale=expected_resale,
+            total_cost=analysis_total_cost,
+            probability=probability,
+            liquidity=liquidity,
+            valuation_confidence_score=valuation_confidence_score,
+            identity_confidence_score=features.get("identity_confidence_score", 0),
+            deal_confidence_score=deal_confidence["score"],
+            risks=risks,
+            decision=decision,
+            risk_score=risk_analysis["score"],
+        )
 
     base_rank = compute_rank(
         item.get("score", 0) or 0,
@@ -3295,8 +3348,22 @@ def analyze_core(
         profits["roi_estimate"],
         analysis_total_cost,
     )
+    if decision_confidence_audit.get("downgraded"):
+        audit_reason = (decision_confidence_audit.get("blockers") or ["beslutsunderlaget är för tunt"])[0]
+        decision_diagnostics = [f"Decision Confidence Audit: {audit_reason}."] + list(decision_diagnostics or [])
+        decision_diagnostics = decision_diagnostics[:5]
+    if decision_conflict_audit.get("downgraded"):
+        conflicts = decision_conflict_audit.get("conflicts") or []
+        conflict_reason = conflicts[0].get("message") if conflicts else "analysens signaler motsäger ett klart KÖP"
+        decision_diagnostics = [f"Decision Conflict Audit: {conflict_reason}."] + list(decision_diagnostics or [])
+        decision_diagnostics = decision_diagnostics[:5]
 
-    max_purchase = None if (features.get("is_lot") or not listing_quality["clear_buy_safe"]) else compute_max_purchase_price(
+    max_purchase = None if (
+        features.get("is_lot")
+        or not listing_quality["clear_buy_safe"]
+        or not decision_confidence_audit.get("allow_max_purchase", False)
+        or not decision_conflict_audit.get("allow_max_purchase", False)
+    ) else compute_max_purchase_price(
         item,
         expected_resale,
         floor_resale,
@@ -3499,6 +3566,26 @@ def analyze_core(
 
         "decision_diagnostics":
             decision_diagnostics,
+        "decision_pre_confidence_audit": pre_confidence_audit_decision,
+        "decision_confidence_audit_status": decision_confidence_audit.get("status"),
+        "decision_confidence_audit_label": decision_confidence_audit.get("label"),
+        "decision_confidence_audit_score": decision_confidence_audit.get("score", 0),
+        "decision_confidence_audit_downgraded": decision_confidence_audit.get("downgraded", False),
+        "decision_confidence_audit_blockers": decision_confidence_audit.get("blockers", []),
+        "decision_confidence_audit_warnings": decision_confidence_audit.get("warnings", []),
+        "decision_confidence_audit_strengths": decision_confidence_audit.get("strengths", []),
+        "decision_confidence_audit_thin_value_evidence": decision_confidence_audit.get("thin_value_evidence", False),
+        "decision_confidence_audit_note": decision_confidence_audit.get("note"),
+        "decision_pre_conflict_audit": pre_conflict_audit_decision,
+        "decision_conflict_audit_status": decision_conflict_audit.get("status"),
+        "decision_conflict_audit_label": decision_conflict_audit.get("label"),
+        "decision_conflict_audit_summary": decision_conflict_audit.get("summary"),
+        "decision_conflict_audit_downgraded": decision_conflict_audit.get("downgraded", False),
+        "decision_conflict_audit_severe": decision_conflict_audit.get("severe_conflict", False),
+        "decision_conflict_audit_conflict_count": decision_conflict_audit.get("conflict_count", 0),
+        "decision_conflict_audit_conflicts": decision_conflict_audit.get("conflicts", []),
+        "decision_conflict_audit_strengths": decision_conflict_audit.get("strengths", []),
+        "decision_conflict_audit_note": decision_conflict_audit.get("note"),
 
         "max_total_price":
             (max_purchase or {}).get("max_total_price"),

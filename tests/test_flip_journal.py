@@ -21,3 +21,10 @@ def test_journal_compares_predicted_and_actual_profit():
     row = build_entry_from_listing({"titel":"A","net_profit":100}, purchase_price=100, purchase_date="2026-08-01")
     rows = update_entry([row], row["id"], sale_date="2026-08-06", sale_price=240, selling_fee=20, packaging_cost=5)
     assert journal_metrics(rows)["mean_profit_error"] == 15
+
+
+def test_new_journal_entry_has_empty_outcome_review():
+    row = build_entry_from_listing({"titel":"A"}, purchase_price=50)
+    assert row["outcome_review_reasons"] == []
+    assert row["outcome_review_note"] == ""
+    assert row["outcome_reviewed_at"] is None

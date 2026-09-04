@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from src.card_parser import build_card_identity, parse_card_features
 from src.pricing import total_acquisition_cost
+from src.sold_comp_quality import is_verified_sold_comp
 
 PREMIUM_SETS = {
     'The Cup', 'SP Authentic', 'Dominion', 'Premier', 'Ultimate Collection', 'Black Diamond',
@@ -444,15 +445,13 @@ def _parse_datetime(value):
 
 
 def _market_state(item: dict) -> str:
-    """Return sold/asking without guessing from an ended auction alone.
+    """Return sold/asking/blocked_sold without upgrading ambiguous history.
 
-    A listing is only treated as a realised sale when the input data explicitly
-    says it sold or carries an explicit sold price. Ended/closed is not enough.
+    A row that merely contains ``sold_price`` or the word ``sold`` is not enough
+    to become realised-sale evidence. Stored sold history must also carry the
+    verification/evidence metadata produced by FlipFynd's strict import pipeline.
     """
     explicit_sold_price = item.get("sold_price")
-    if isinstance(explicit_sold_price, (int, float)) and explicit_sold_price > 0:
-        return "sold"
-
     raw_values = [
         item.get("market_state"),
         item.get("listing_status"),
@@ -461,10 +460,15 @@ def _market_state(item: dict) -> str:
     ]
     normalized = " ".join(str(v or "").casefold().strip() for v in raw_values)
     sold_markers = {"sold", "såld", "completed_sold", "ended_sold", "realized", "realised"}
-    if any(marker in normalized.split() for marker in sold_markers):
-        return "sold"
-    if any(marker in normalized for marker in ("completed sold", "ended sold", "avslutad såld")):
-        return "sold"
+    has_sold_hint = (
+        isinstance(explicit_sold_price, (int, float))
+        and not isinstance(explicit_sold_price, bool)
+        and explicit_sold_price > 0
+    ) or any(marker in normalized.split() for marker in sold_markers) or any(
+        marker in normalized for marker in ("completed sold", "ended sold", "avslutad såld")
+    )
+    if has_sold_hint:
+        return "sold" if is_verified_sold_comp(item) else "blocked_sold"
     return "asking"
 
 
@@ -799,6 +803,13 @@ def build_market_analysis(item: dict, all_items: list) -> dict:
         if not isinstance(other, dict):
             continue
         state = _market_state(other)
+        if state == "blocked_sold":
+            rejected_comps.append({
+                "title": other.get("titel", ""),
+                "market_state": "blocked_sold",
+                "reasons": ["såld-raden saknar verifierad explicit försäljningsevidens"],
+            })
+            continue
         comp_price = _realized_total(other) if state == "sold" else _safe_total_cost(other)
         if comp_price is None:
             continue

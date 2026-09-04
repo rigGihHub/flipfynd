@@ -12,6 +12,7 @@ import re
 from typing import Any, Iterable
 
 from src.card_parser import parse_card_features
+from src.sold_comp_quality import is_verified_sold_comp
 
 
 def _norm(value: object) -> str:
@@ -200,7 +201,7 @@ def build_visual_card_candidates(
         if score < 45 or len(matches) < 2:
             continue
         source = str(record.get("platform") or record.get("source") or "observerad historik")
-        sold = bool(record.get("sold_price") not in (None, "") or str(record.get("market_state") or "").casefold() == "sold")
+        sold = is_verified_sold_comp(record)
         verified = sold and score >= 70 and "kortnummer" in matches and ("set/produkt" in matches or "säsong/år" in matches)
         candidates.append({
             "label": _identity_label({**visual, **{k: _record_features(record).get(k) or visual.get(k) for k in ("player_name", "set_name", "season", "card_number", "parallel", "grading_company", "grade")}}),

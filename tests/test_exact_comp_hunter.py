@@ -21,6 +21,8 @@ class ExactCompHunterTests(unittest.TestCase):
             "title": "Connor Bedard 2023-24 Upper Deck Series 1 #451 Outburst",
             "sold_price": 900,
             "market_state": "sold",
+            "sold_verification_status": "verified",
+            "sale_evidence_type": "explicit_sold_price",
             "platform": "test",
             **IDENTITY,
         }

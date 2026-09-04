@@ -10,6 +10,8 @@ import re
 from typing import Any, Iterable
 from urllib.parse import quote_plus
 
+from src.sold_comp_quality import is_verified_sold_comp
+
 from src.card_parser import parse_card_features
 
 
@@ -194,7 +196,7 @@ def classify_comp(identity: dict[str, Any], record: dict) -> dict[str, Any]:
         else:
             tier = "WEAK"
 
-    sold = bool(record.get("sold_price") not in (None, "") or str(record.get("market_state") or "").casefold() == "sold")
+    sold = is_verified_sold_comp(record)
     return {
         "tier": tier,
         "sold": sold,
