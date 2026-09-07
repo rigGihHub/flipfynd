@@ -67,3 +67,31 @@ def test_empty_views_fail_closed():
     assert build_ending_soon_view([])["status"] == "EMPTY"
     assert build_watch_view([])["status"] == "EMPTY"
     assert build_research_view([])["status"] == "EMPTY"
+
+from src.novice_navigation import build_best_available_view
+
+
+def test_best_available_returns_top_three_without_upgrading_decisions():
+    rows = [
+        {"titel": "Weak A", "beslut": "SKIP", "opportunity_priority_score": 80, "deal_score": 20},
+        {"titel": "Watch B", "beslut": "BEVAKA", "opportunity_priority_score": 90, "deal_score": 30},
+        {"titel": "Weak C", "beslut": "SKIP", "opportunity_priority_score": 70, "deal_score": 50},
+        {"titel": "Weak D", "beslut": "SKIP", "opportunity_priority_score": 60, "deal_score": 99},
+    ]
+    view = build_best_available_view(rows, limit=3)
+    assert view["status"] == "READY"
+    assert [r["title"] for r in view["rows"]] == ["Watch B", "Weak A", "Weak C"]
+    assert [r["decision"] for r in view["rows"]] == ["BEVAKA", "SKIP", "SKIP"]
+    assert view["creates_new_decision"] is False
+
+
+def test_best_available_can_surface_skips_hidden_by_normal_display_filters():
+    view = build_best_available_view([
+        {"titel": "Only analysed card", "beslut": "SKIP", "deal_score": 11, "confidence": 12}
+    ])
+    assert view["status"] == "READY"
+    assert view["rows"][0]["decision"] == "SKIP"
+
+
+def test_best_available_empty_is_explicit():
+    assert build_best_available_view([])["status"] == "EMPTY"

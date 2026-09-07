@@ -117,7 +117,7 @@ from src.buy_opportunity_gap import build_queue_opportunity_gaps
 from src.watch_priority import build_watch_priority_queue
 from src.simple_card_language import sold_evidence_text, identity_text, sellability_text
 from src.novice_navigation import (
-    build_buy_view, build_ending_soon_view, build_watch_view, build_research_view,
+    build_buy_view, build_ending_soon_view, build_watch_view, build_research_view, build_best_available_view,
 )
 
 _FETCHER = build_fetcher_api(_tradera_fetcher)
@@ -197,7 +197,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.11.88"
+APP_VERSION = "v0.11.89"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -207,6 +207,13 @@ FETCH_SCOPE_MAP = {
 
 def selected_fetch_category(scope_label):
     return FETCH_SCOPE_MAP.get(scope_label, "__all__")
+
+def fetch_scope_display(scope_label):
+    return {
+        "🏒 Hockey": "Hockey",
+        "⚽ Fotboll": "Fotboll",
+        "🏒⚽ Båda": "båda sporterna",
+    }.get(scope_label, "båda sporterna")
 
 
 BASE_DIR = (
@@ -1627,8 +1634,8 @@ else:
 
     with st.expander("⚙️ Avancerad marknadshämtning"):
         st.caption(
-            "Här finns fullmarknadsscanner, Smart Refresh, sidtäckning och val av sport. "
-            "Du behöver normalt inte använda detta för den dagliga fyndjakten."
+            "Här kan du bygga en större historik av Tradera-annonser eller fräscha upp äldre sidor. "
+            "För vanlig användning räcker knappen Uppdatera marknaden ovanför."
         )
         market_scope = st.radio(
             "Vilken sport ska de avancerade hämtningsknapparna arbeta med?",
@@ -1640,7 +1647,8 @@ else:
         )
         market_fetch_category = selected_fetch_category(market_scope)
 
-        st.markdown("#### 📡 Marknadstäckning")
+        st.markdown("#### 📡 Läs in mer av marknaden")
+        st.caption("Knappen nedan fortsätter bakåt sida för sida på Tradera. Bra när du vill bygga större marknadstäckning; inte nödvändigt för en snabb dagsaktuell sökning.")
         c1, c2 = st.columns(2)
         for col, icon, label, coverage in [
             (c1, "🏒", "Hockey", coverage_h),
@@ -1660,18 +1668,19 @@ else:
 
         if not market_overview["all_complete"]:
             if st.button(
-                f"▶ Läs nästa marknadsomgång – {market_scope.replace('🏒⚽ ', 'båda').replace('🏒 ', 'hockey').replace('⚽ ', 'fotboll')}",
+                f"▶ Läs nästa sidblock – {fetch_scope_display(market_scope)}",
                 use_container_width=True,
                 disabled=_fetch_status == "running",
                 key="top_market_batch",
-                help=f"Fortsätter fullmarknadsläsningen med högst {MARKET_BATCH_PAGES} nya sidor per sport.",
+                help=f"Läser nästa {MARKET_BATCH_PAGES} Tradera-sidor i ordning och sparar annonserna. Använd detta när du vill täcka mer än de nyaste annonserna.",
             ):
                 start_fetch(market_fetch_category, True, "market_batch")
                 st.rerun()
         else:
             st.success("Fullmarknadsscannern har nått slutet för både hockey och fotboll.")
 
-        st.markdown("#### ⏱ Smart Refresh")
+        st.markdown("#### ⏱ Fräscha upp äldre sidor")
+        st.caption("Den här funktionen går tillbaka till redan inlästa äldre sidor när de blivit gamla och kan ha ändrats. Den läser alltså inte hela marknaden igen.")
         r1, r2 = st.columns(2)
         for col, icon, label, plan in [
             (r1, "🏒", "Hockey", refresh_h),
@@ -1693,11 +1702,11 @@ else:
             or (market_fetch_category == "__all__" and (refresh_h.get("due") or refresh_f.get("due")))
         )
         if st.button(
-            f"⚡ Uppdatera äldre sidor som behövs – {market_scope.replace('🏒⚽ ', 'båda').replace('🏒 ', 'hockey').replace('⚽ ', 'fotboll')}",
+            f"⚡ Uppdatera gamla sidor – {fetch_scope_display(market_scope)}",
             use_container_width=True,
             disabled=_fetch_status == "running" or not selected_refresh_due,
             key="top_smart_refresh",
-            help="Läser bara ett äldre sidblock som blivit gammalt. Detta behövs inte för vanlig daglig uppdatering.",
+            help="Kontrollerar bara äldre Tradera-sidor som FlipFynd bedömer behöver läsas om. Nyare sidor påverkas inte.",
         ):
             start_fetch(market_fetch_category, True, "scheduled_refresh")
             st.rerun()
@@ -1961,6 +1970,34 @@ if st.session_state.get("results") is not None:
             else:
                 st.info("**KÖP INGET JUST NU.** Inget kort har tillräckligt starkt underlag för ett säkert förstaval.")
                 st.caption(simple_buy.get("note") or "")
+                best_available = build_best_available_view(st.session_state.get("results") or [], limit=3)
+                if best_available.get("status") == "READY":
+                    st.markdown("### 🥈 Bästa tillgängliga just nu")
+                    st.caption("De här tre är bäst av det FlipFynd faktiskt analyserat inom din sökning – även om inget är tillräckligt bra för KÖP.")
+                    for rank, row in enumerate(best_available.get("rows") or [], start=1):
+                        with st.container(border=True):
+                            top = st.columns([4, 1])
+                            top[0].markdown(f"**#{rank} {row['title']}**")
+                            top[1].markdown(f"**{row.get('decision') or 'EJ BESLUT'}**")
+                            facts=[]
+                            if row.get("total_cost") is not None:
+                                facts.append(f"kostar {float(row['total_cost']):.0f} kr")
+                            if row.get("max_total_price") is not None:
+                                facts.append(f"betala högst {float(row['max_total_price']):.0f} kr")
+                            if row.get("net_profit") is not None:
+                                facts.append(f"möjlig vinst {float(row['net_profit']):+.0f} kr")
+                            if facts:
+                                st.write(" · ".join(facts))
+                            plain=[]
+                            plain.append(sold_evidence_text(row.get("sold_comps")))
+                            plain.append(identity_text(row.get("identity_status")))
+                            plain.append(sellability_text(row.get("sellability_label"), row.get("sellability_score")))
+                            st.caption(" · ".join(x for x in plain if x))
+                            if row.get("primary_blocker"):
+                                st.caption("Varför inte KÖP: " + str(row["primary_blocker"]))
+                            if row.get("url"):
+                                st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
+                    st.caption(best_available.get("note") or "")
 
         elif _main_view == "Slutar snart":
             ending_view = build_ending_soon_view(filtered)
@@ -2142,6 +2179,16 @@ if st.session_state.get("results") is not None:
     else:
         st.info("**KÖP INGET JUST NU.** FlipFynd hittar inget kort med tillräckligt starkt underlag för ett säkert förstaval.")
         st.caption(best_buy["note"])
+        fallback = build_best_available_view(st.session_state.get("results") or [], limit=3)
+        if fallback.get("status") == "READY":
+            with st.expander("Visa de 3 bästa alternativen trots att inget är KÖP", expanded=False):
+                st.caption(fallback.get("note") or "")
+                for rank, row in enumerate(fallback.get("rows") or [], start=1):
+                    st.markdown(f"**#{rank} · {row['title']} · {row.get('decision') or 'EJ BESLUT'}**")
+                    if row.get("primary_blocker"):
+                        st.caption("Stoppar KÖP: " + str(row["primary_blocker"]))
+                    if row.get("url"):
+                        st.markdown(f"[Öppna annonsen ↗]({row['url']})")
 
     buy_queue = build_top_buy_queue(filtered)
     if buy_queue["status"] == "READY" and len(buy_queue.get("picks", [])) > 1:

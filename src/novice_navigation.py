@@ -137,3 +137,59 @@ def build_research_view(candidates, limit=10):
         "creates_new_decision": False,
         "note": "Researchsignaler är ledtrådar för vidare kontroll och får inte tolkas som KÖP utan ordinarie beslutsunderlag.",
     }
+
+
+def build_best_available_view(candidates, limit=3):
+    """Show the strongest already-analysed alternatives even when none is a BUY.
+
+    This is a visibility fallback only. It never changes an existing decision,
+    valuation or max price and never labels a non-BUY candidate as BUY.
+    """
+    rows = []
+    for item in candidates or []:
+        decision = str(item.get("beslut") or item.get("decision") or item.get("recommendation") or "").upper()
+        blockers = list(item.get("decision_diagnostics") or [])
+        total_cost = item.get("analysis_total_cost")
+        if total_cost is None:
+            total_cost = item.get("total_cost")
+        if total_cost is None:
+            total_cost = item.get("totalpris")
+        max_total_price = item.get("dynamic_max_total_price")
+        if max_total_price is None:
+            max_total_price = item.get("max_total_price")
+        net_profit = item.get("net_profit_estimate")
+        rows.append({
+            "title": _title(item),
+            "url": _url(item),
+            "decision": decision or "EJ BESLUT",
+            "total_cost": total_cost,
+            "max_total_price": max_total_price,
+            "net_profit": net_profit,
+            "identity_status": item.get("exact_identity_gate_status") or item.get("exact_identity_status"),
+            "sold_comps": int(item.get("sold_comparable_count") or 0),
+            "sellability_label": item.get("liquidity_label") or item.get("sellability_label"),
+            "sellability_score": item.get("liquidity_score") or item.get("sellability_score"),
+            "primary_blocker": blockers[0] if blockers else None,
+            "_opportunity_priority": _num(item.get("opportunity_priority_score"), -1.0),
+            "_deal_score": _num(item.get("deal_score"), -1.0),
+            "_confidence": _num(item.get("confidence"), -1.0),
+        })
+    rows.sort(
+        key=lambda row: (row["_opportunity_priority"], row["_deal_score"], row["_confidence"]),
+        reverse=True,
+    )
+    for row in rows:
+        row.pop("_opportunity_priority", None)
+        row.pop("_deal_score", None)
+        row.pop("_confidence", None)
+    return {
+        "view": "best_available",
+        "status": "READY" if rows else "EMPTY",
+        "rows": rows[: max(1, int(limit))],
+        "count": len(rows),
+        "creates_new_decision": False,
+        "note": (
+            "Detta är de högst rankade redan analyserade alternativen i din sökning, inte nya köprekommendationer. "
+            "FlipFynd behåller varje korts befintliga KÖP/BEVAKA/SKIP-beslut."
+        ),
+    }
