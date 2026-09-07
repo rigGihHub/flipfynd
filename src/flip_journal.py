@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 6
 
 
 def _utc_now() -> str:
@@ -17,6 +17,39 @@ def _to_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+
+
+def _first_float(*values: Any) -> Optional[float]:
+    """Return the first explicit numeric value; never infer or synthesize one."""
+    for value in values:
+        parsed = _to_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _captured_expected_net_profit(item: dict) -> Optional[float]:
+    return _first_float(
+        item.get("net_profit"),
+        item.get("net_profit_estimate"),
+    )
+
+
+def _captured_expected_resale(item: dict) -> Optional[float]:
+    return _first_float(
+        item.get("expected_resale_price"),
+        item.get("expected_resale"),
+        item.get("realistic_value"),
+    )
+
+
+def _captured_velocity(item: dict) -> tuple[Optional[float], Optional[str]]:
+    evidence = str(item.get("flip_velocity_evidence") or "").strip()
+    if evidence != "verified_sold_velocity":
+        return None, evidence or None
+    return _to_float(item.get("flip_velocity_expected_days")), evidence
 
 
 def _days_between(start: Optional[str], end: Optional[str]) -> Optional[int]:
@@ -57,10 +90,14 @@ def hashlib_key(primary: str, salt: str = "") -> str:
 def build_entry_from_listing(item: dict, purchase_price: Optional[float] = None, purchase_date: Optional[str] = None) -> dict:
     now = _utc_now()
     purchase_price = _to_float(purchase_price)
+    expected_net_profit = _captured_expected_net_profit(item)
+    expected_resale = _captured_expected_resale(item)
+    velocity_days, velocity_evidence = _captured_velocity(item)
     return {
         "id": hashlib_key(item.get("lank") or item.get("titel") or now, now),
         "created_at": now,
         "updated_at": now,
+        "prediction_timestamp_at_capture": now,
         "status": "köpt" if purchase_price is not None else "bevakning",
         "listing_url": item.get("lank") or "",
         "title": item.get("titel") or "Okänd annons",
@@ -77,10 +114,17 @@ def build_entry_from_listing(item: dict, purchase_price: Optional[float] = None,
         "decision_confidence_blockers_at_capture": list(item.get("decision_confidence_audit_blockers") or []),
         "decision_conflict_downgraded_at_capture": bool(item.get("decision_conflict_audit_downgraded")),
         "decision_conflicts_at_capture": list(item.get("decision_conflict_audit_conflicts") or []),
-        "expected_resale_at_capture": _to_float(item.get("expected_resale_price")) or _to_float(item.get("realistic_value")),
-        "expected_net_profit_at_capture": _to_float(item.get("net_profit")),
+        "expected_resale_at_capture": expected_resale,
+        "expected_net_profit_at_capture": expected_net_profit,
         "max_total_price_at_capture": _to_float(item.get("max_total_price")),
-        "flip_velocity_days_at_capture": _to_float(item.get("flip_velocity_expected_days")),
+        "flip_velocity_days_at_capture": velocity_days,
+        "flip_velocity_evidence_at_capture": velocity_evidence,
+        "capital_efficiency_score_at_capture": _to_float(item.get("capital_efficiency_score")) or _to_float((item.get("capital_efficiency") or {}).get("score")),
+        "capital_efficiency_label_at_capture": item.get("capital_efficiency_label") or (item.get("capital_efficiency") or {}).get("label"),
+        "capital_efficiency_profit_30d_at_capture": _to_float((item.get("capital_efficiency") or {}).get("profit_30d")),
+        "capital_efficiency_roi_30d_pct_at_capture": _to_float((item.get("capital_efficiency") or {}).get("roi_30d_pct")),
+        "capital_efficiency_downside_at_capture": _to_float((item.get("capital_efficiency") or {}).get("downside")),
+        "expected_roi_pct_at_capture": ((expected_net_profit / purchase_price * 100) if purchase_price and expected_net_profit is not None else None),
         "information_edge_score_at_capture": _to_float(item.get("information_edge_score")),
         "information_edge_candidate_at_capture": bool(item.get("is_information_edge_candidate")),
         "hidden_find_score_at_capture": _to_float(item.get("hidden_find_score")),

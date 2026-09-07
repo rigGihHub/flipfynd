@@ -48,11 +48,16 @@ except ImportError:
 from src.external_sold_sources import available_adapters, import_external_sold_rows
 from src.sold_source_registry import sold_source_registry, source_readiness_summary
 from src.sold_comp_quality import audit_sold_comp_records
+from src.sold_comp_intake import sold_comp_intake_audit
+from src.sold_acquisition_pipeline import acquire_sold_batch
 from src.market_overview import build_market_overview
 from src.visual_detective import analyze_listing_images
 from src.visual_identity import build_visual_card_candidates
 from src.exact_comp_hunter import hunt_exact_comps
+from src.comp_evidence_ladder import build_exact_evidence_ladder, build_premium_evidence_ladder
 from src.comp_verdict import build_comp_verdict
+from src.comp_quality_guard import build_comp_quality_guard
+from src.evidence_scenario_range import build_evidence_scenario_range
 from src.dynamic_max_bid import build_dynamic_max_bid
 from src.exact_identity_gate import build_exact_identity_gate
 from src.buy_now_hunter import build_buy_now_opportunity
@@ -69,6 +74,7 @@ from src.outcome_review import OUTCOME_REVIEW_REASONS, build_outcome_review_patc
 from src.calibration_dashboard import build_calibration_dashboard
 from src.false_positive_review import build_false_positive_review
 from src.false_negative_review import build_false_negative_review
+from src.model_review_dashboard import build_model_review_dashboard
 from src.persistent_store import (
     load_namespace, migrate_namespace_if_empty, save_namespace, storage_status,
 )
@@ -83,6 +89,34 @@ from src.pricing import (
 
 from src import tradera_fetcher as _tradera_fetcher
 from src.fetcher_compat import build_fetcher_api
+from src.budget_portfolio import build_budget_portfolio
+from src.portfolio_downside_stress import build_portfolio_downside_stress
+from src.portfolio_opportunity_cost import build_portfolio_opportunity_cost
+from src.portfolio_concentration import build_portfolio_concentration
+from src.portfolio_identity_integrity import build_portfolio_identity_integrity
+from src.player_momentum import build_player_momentum, build_starshot_watchlist
+from src.momentum_source_intake import ingest_momentum_records
+from src.momentum_source_registry import source_registry
+from src.momentum_card_bridge import bridge_momentum_to_cards
+from src.starshot_radar import build_starshot_radar
+from src.prediction_outcome_validation import build_prediction_outcome_validation
+from src.error_segmentation import build_error_segmentation
+from src.model_correction_candidates import build_model_correction_candidates
+from src.correction_simulator import build_correction_simulation
+from src.holdout_validation import build_holdout_validation
+from src.correction_approval_gate import build_correction_approval_gate
+from src.best_buy_decision_card import build_best_buy_decision_card
+from src.top_buy_queue import build_top_buy_queue
+from src.top_buy_decision_compare import build_top_buy_decision_compare
+from src.buy_queue_risk_reward import build_queue_risk_reward
+from src.buy_decision_summary import build_buy_decision_summary
+from src.buy_now_vs_wait import build_queue_buy_timing
+from src.price_drop_target import build_queue_price_drop_targets
+from src.buy_opportunity_gap import build_queue_opportunity_gaps
+from src.watch_priority import build_watch_priority_queue
+from src.novice_navigation import (
+    build_buy_view, build_ending_soon_view, build_watch_view, build_research_view,
+)
 
 _FETCHER = build_fetcher_api(_tradera_fetcher)
 CATEGORY_URLS = _FETCHER.CATEGORY_URLS
@@ -106,8 +140,62 @@ st.set_page_config(
     layout="wide",
 )
 
+# Futuristic trading-terminal skin: visual only, no decision semantics.
+st.markdown("""
+<style>
+:root {
+  --ff-grid: rgba(255,255,255,.025);
+  --ff-panel: rgba(17,22,28,.78);
+  --ff-line: rgba(226,164,92,.28);
+  --ff-glow: rgba(226,164,92,.10);
+}
+.stApp {
+  background:
+    linear-gradient(var(--ff-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ff-grid) 1px, transparent 1px),
+    radial-gradient(circle at 78% 8%, var(--ff-glow), transparent 28%);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+[data-testid="stMetric"], [data-testid="stExpander"], div[data-testid="stVerticalBlockBorderWrapper"] {
+  background: linear-gradient(145deg, rgba(23,29,36,.82), rgba(12,16,21,.74));
+  border: 1px solid var(--ff-line);
+  box-shadow: 0 10px 32px rgba(0,0,0,.20), inset 0 1px rgba(255,255,255,.025);
+  border-radius: 14px;
+}
+[data-testid="stMetric"] {
+  position: relative;
+  overflow: hidden;
+}
+[data-testid="stMetric"]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(226,164,92,.85), transparent);
+}
+h1, h2, h3 {
+  letter-spacing: .025em;
+}
+button[kind="primary"], .stButton > button {
+  border-radius: 10px;
+  border: 1px solid rgba(226,164,92,.40);
+  backdrop-filter: blur(8px);
+}
+div[data-testid="stCaptionContainer"] {
+  opacity: .86;
+}
+@media (max-width: 640px) {
+  .stApp { background-size: 24px 24px, 24px 24px, auto; }
+  [data-testid="stMetric"], [data-testid="stExpander"], div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 10px;
+  }
+}
+</style>
+""", unsafe_allow_html=True)
 
-APP_VERSION = "v0.11.38"
+
+
+APP_VERSION = "v0.11.86"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1345,7 +1433,25 @@ if (
     st.session_state["debug"] = None
     st.session_state["results_stale_notice"] = True
 
-st.subheader("Hitta fynd")
+st.subheader("Vad vill du göra?")
+_main_view = st.radio(
+    "Huvudvy",
+    ["Vad ska jag köpa?", "Slutar snart", "Bevaka", "Research"],
+    horizontal=True,
+    label_visibility="collapsed",
+    help="Välj bara vad du vill göra. FlipFynd behåller hela analysmotorn i bakgrunden.",
+    key="main_novice_view",
+)
+_advanced_terminal = st.checkbox(
+    "Visa fördjupad analys",
+    value=False,
+    help="Öppnar hela analysterminalen med interna mått, jämförelser, kapitalverktyg och administration.",
+    key="show_advanced_terminal",
+)
+if not _advanced_terminal:
+    st.caption("Enkel vy · avancerade poäng och metoddetaljer är dolda tills du ber om dem.")
+
+st.subheader("Vad ska jag köpa?")
 if repaired_categories:
     st.info(
         "🧭 Marknadstäckningen har rättats för "
@@ -1653,10 +1759,9 @@ st.markdown(
     f"""
     <div class="ff-data-card">
       <h3>🧭 SÅ FUNKAR FLÖDET</h3>
-      <p><b>1. Hämta annonser</b> → välj marknad ovan och läs in Tradera-data.</p>
-      <p><b>2. Vänta på KLAR</b> → under hämtningen är Hitta fynd låst så du inte analyserar halvfärdig data.</p>
-      <p><b>3. Hitta fynd</b> → välj sport + budget och låt FlipFynd filtrera, värdera och ranka kandidater.</p>
-      <p><b>4. Agera</b> → börja med Köp nu / Slutar snart / Agera nu och öppna sedan annonsen på Tradera.</p>
+      <p><b>1. Hämta</b> → FlipFynd läser in annonser.</p>
+      <p><b>2. Välj budget</b> → du behöver normalt inte röra avancerade filter.</p>
+      <p><b>3. Köp eller avstå</b> → börja med Bästa köpet just nu. Öppna detaljer bara när du vill förstå varför.</p>
       <p><b>Just nu – steg {_flow_step}: {_flow_title}</b><br>{_flow_text}</p>
     </div>
     """,
@@ -1695,11 +1800,11 @@ with st.form("analysis_form"):
         strategy_label = st.selectbox(
             "Strategi",
             [
-                "Snabb flip",
-                "Störst vinstpotential",
-                "Bästa kortet",
+                "Sälj snabbt",
+                "Tjäna mest",
+                "Bäst kort",
             ],
-            help="Snabb flip prioriterar lättsålda kort. Störst vinstpotential väger premiumegenskaper högre. Bästa kortet prioriterar kortkvalitet och spelare.",
+            help="Sälj snabbt prioriterar kort som verkar lättare att sälja. Tjäna mest prioriterar realistisk vinst. Bäst kort prioriterar kortets och spelarens kvalitet.",
         )
 
     with p4:
@@ -1710,9 +1815,9 @@ with st.form("analysis_form"):
         )
 
     strategy_map = {
-        "Snabb flip": "quick_flip",
-        "Störst vinstpotential": "premium_flip",
-        "Bästa kortet": "kort",
+        "Sälj snabbt": "quick_flip",
+        "Tjäna mest": "premium_flip",
+        "Bäst kort": "kort",
     }
     strategy = strategy_map[strategy_label]
 
@@ -1740,8 +1845,8 @@ with st.form("analysis_form"):
             )
             show_skip = st.checkbox(
                 "Visa även svaga kandidater",
-                value=True,
-                help="På som standard så att FlipFynd alltid visar de bäst rankade korten, även när inget når köpgränsen.",
+                value=False,
+                help="Slå på endast om du vill se kort som inte är tillräckligt starka för huvudlistan.",
             )
 
         f1, f2, f3 = st.columns(3)
@@ -1821,6 +1926,93 @@ if st.session_state.get("results") is not None:
         filtered.append(item)
 
     visible = filtered[: int(show_count)]
+
+    # Novice navigation layer: reorganises existing analysis without creating new decisions.
+    if not _advanced_terminal:
+        st.divider()
+        if _main_view == "Vad ska jag köpa?":
+            simple_buy = build_buy_view(filtered)
+            st.subheader("🎯 Ditt beslut just nu")
+            st.caption("Ett tydligt förstaval – eller ett tydligt besked att avstå.")
+            if simple_buy.get("status") == "READY" and simple_buy.get("card"):
+                card = simple_buy["card"]
+                st.success(f"### KÖP · {card['title']}")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Kostar nu", f"{card['total_cost']:.0f} kr" if card.get("total_cost") is not None else "Ej säkert")
+                c2.metric("Betala högst", f"{card['max_total_price']:.0f} kr" if card.get("max_total_price") is not None else "Ej säkert")
+                c3.metric("Möjlig nettovinst", f"{card['net_profit']:+.0f} kr" if card.get("net_profit") is not None else "Ej säkert")
+                reasons=[]
+                if card.get("expected_resale") is not None:
+                    reasons.append(f"rimligt säljpris {card['expected_resale']:.0f} kr")
+                if card.get("expected_days") is not None:
+                    reasons.append(f"verifierad säljtid ~{card['expected_days']:.0f} dagar")
+                reasons.append("exakt identitet tillräckligt verifierad")
+                st.caption(" · ".join(reasons))
+                if card.get("url"):
+                    st.link_button("Öppna annonsen på Tradera ↗", card["url"], use_container_width=True)
+                with st.expander("Varför väljer FlipFynd detta kort?", expanded=False):
+                    for reason in card.get("reasons") or []:
+                        st.write("• " + str(reason))
+                    st.caption(simple_buy.get("note") or "")
+            else:
+                st.info("**KÖP INGET JUST NU.** Inget kort har tillräckligt starkt underlag för ett säkert förstaval.")
+                st.caption(simple_buy.get("note") or "")
+
+        elif _main_view == "Slutar snart":
+            ending_view = build_ending_soon_view(filtered)
+            st.subheader("⏳ Slutar snart")
+            st.caption("Bara auktioner där sluttid och befintligt köpunderlag redan är tillräckligt verifierade.")
+            if ending_view["status"] == "EMPTY":
+                st.info("Inga verifierade auktioner som både slutar snart och klarar FlipFynds säkerhetskrav just nu.")
+            for row in ending_view["rows"]:
+                with st.container(border=True):
+                    mins=row.get("remaining_minutes")
+                    when=f"ca {mins} min kvar" if mins is not None else "sluttid ej säker"
+                    st.markdown(f"**{row['title']}**")
+                    st.write(f"{when} · nuvarande beslut: **{row.get('decision') or 'Ej bedömt'}**")
+                    if row.get("total_cost") is not None and row.get("max_total_price") is not None:
+                        st.caption(f"Kostar nu {float(row['total_cost']):.0f} kr · befintligt maxpris {float(row['max_total_price']):.0f} kr")
+                    if row.get("url"):
+                        st.link_button("Öppna auktionen ↗", row["url"], use_container_width=True)
+            st.caption(ending_view["note"])
+
+        elif _main_view == "Bevaka":
+            watch_view = build_watch_view(filtered)
+            st.subheader("👀 Bevaka")
+            st.caption("Kort som är intressanta men ännu inte förtjänar ett KÖP.")
+            if watch_view["status"] == "EMPTY":
+                st.info("Inga tydliga bevakningskandidater i den aktuella analysen.")
+            for row in watch_view["rows"]:
+                with st.container(border=True):
+                    st.markdown(f"**{row['title']}**")
+                    st.write(f"Nuvarande beslut: **{row.get('decision') or 'BEVAKA'}**")
+                    if row.get("primary_blocker"):
+                        st.caption("Det som stoppar köp nu: " + str(row["primary_blocker"]))
+                    elif row.get("sold_comps", 0) < 2:
+                        st.caption("Det som stoppar köp nu: för tunt verifierat sold-underlag.")
+                    if row.get("url"):
+                        st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
+            st.caption(watch_view["note"])
+
+        else:
+            research_view = build_research_view(filtered)
+            st.subheader("🔬 Research")
+            st.caption("Ledtrådar att undersöka vidare. Research är aldrig samma sak som KÖP.")
+            if research_view["status"] == "EMPTY":
+                st.info("Inga tydliga researchsignaler i den aktuella analysen.")
+            for row in research_view["rows"]:
+                with st.container(border=True):
+                    st.markdown(f"**{row['title']}**")
+                    st.write(" · ".join(row.get("signals") or []))
+                    if row.get("verify_first"):
+                        st.caption("Verifiera först: " + ", ".join(row["verify_first"]))
+                    st.caption(f"Ordinarie beslut är fortfarande: {row.get('decision') or 'Ej bedömt'}")
+                    if row.get("url"):
+                        st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
+            st.caption(research_view["note"])
+
+        st.caption("Behöver du alla interna mått? Slå på ‘Visa fördjupad analys’ ovan.")
+        st.stop()
 
     st.divider()
     non_skip_count = sum(1 for item in st.session_state["results"] if item.get("beslut") != "SKIP")
@@ -1918,6 +2110,374 @@ if st.session_state.get("results") is not None:
 
     radar_main = radar_groups["AGERA NU"] + radar_groups["BEVAKA"] + radar_groups["NÄRA FYND"]
     radar_main.sort(key=lambda x: (x.get("opportunity_priority_score", 0), x.get("deal_score", 0)), reverse=True)
+
+    best_buy = build_best_buy_decision_card(filtered)
+    st.subheader("🎯 Ditt beslut just nu")
+    st.caption("Börja här. FlipFynd visar bara ett köp när underlaget räcker; annars är rätt beslut att avstå eller bevaka.")
+    if best_buy["status"] == "READY":
+        bc = best_buy["card"]
+        st.success(f"### KÖP · {bc['title']}")
+        b1, b2, b3 = st.columns(3)
+        b1.metric("Betala högst", f"{bc['max_total_price']:.0f} kr" if bc["max_total_price"] is not None else "Ej säkert")
+        b2.metric("Möjlig nettovinst", f"+{bc['net_profit']:.0f} kr" if bc['net_profit'] >= 0 else f"{bc['net_profit']:.0f} kr")
+        b3.metric("Kostar nu", f"{bc['total_cost']:.0f} kr")
+        simple=[]
+        if bc["expected_resale"] is not None: simple.append(f"rimligt säljpris {bc['expected_resale']:.0f} kr")
+        if bc["expected_days"] is not None: simple.append(f"verifierad säljtid ~{bc['expected_days']:.0f} dagar")
+        simple.append("exakt kortidentitet verifierad")
+        st.caption(" · ".join(simple))
+        if bc["url"]:
+            st.markdown(f"**[Öppna annonsen på Tradera ↗]({bc['url']})**")
+        with st.expander("Visa varför FlipFynd väljer detta kort", expanded=False):
+            if bc["reasons"]:
+                st.write(" • ".join(bc["reasons"]))
+            if bc["floor_profit"] is not None:
+                st.write(f"Svagare dokumenterat utfall: {bc['floor_profit']:+.0f} kr i beräknad nettovinst.")
+            st.caption(best_buy["note"])
+    else:
+        st.info("**KÖP INGET JUST NU.** FlipFynd hittar inget kort med tillräckligt starkt underlag för ett säkert förstaval.")
+        st.caption(best_buy["note"])
+
+    buy_queue = build_top_buy_queue(filtered)
+    if buy_queue["status"] == "READY" and len(buy_queue.get("picks", [])) > 1:
+        st.markdown("### Två alternativ")
+        alt_cols = st.columns(min(2, len(buy_queue["picks"][1:3])))
+        for alt_idx, pick in enumerate(buy_queue["picks"][1:3]):
+            with alt_cols[alt_idx]:
+                with st.container(border=True):
+                    st.markdown(f"**#{pick['rank']} {pick['title']}**")
+                    st.write(f"Kostar {pick['total_cost']:.0f} kr · möjlig vinst {pick['net_profit']:+.0f} kr")
+                    if pick["max_total_price"] is not None:
+                        st.caption(f"Betala högst {pick['max_total_price']:.0f} kr totalt")
+                    if pick["url"]:
+                        st.markdown(f"[Öppna annonsen ↗]({pick['url']})")
+
+    top3_compare = build_top_buy_decision_compare(buy_queue, filtered)
+    if top3_compare["status"] == "READY":
+        st.subheader("🔬 Fördjupad jämförelse av Top 3")
+        st.caption(top3_compare["note"])
+        for row in top3_compare["rows"]:
+            with st.container(border=True):
+                st.markdown(f"**#{row['rank']} · {row['title']}**")
+                c1,c2,c3,c4=st.columns(4)
+                c1.metric("Kapital", f"{row['capital_tied']:.0f} kr")
+                c2.metric("Svagt utfall", f"{row['weak_profit']:+.0f} kr" if row["weak_profit"] is not None else "Ej säkert")
+                c3.metric("Troligt utfall", f"{row['likely_profit']:+.0f} kr")
+                if row["sellability_score"] is not None:
+                    c4.metric("Säljbarhet", f"{row['sellability_score']:.0f}/100")
+                else:
+                    c4.metric("Säljbarhet", "Otillräckligt underlag")
+                detail=[]
+                if row["weak_roi_pct"] is not None: detail.append(f"svag ROI {row['weak_roi_pct']:+.0f}%")
+                detail.append(f"trolig ROI {row['likely_roi_pct']:+.0f}%")
+                if row["verified_sell_days"] is not None: detail.append(f"verifierad säljtid ~{row['verified_sell_days']:.0f} d")
+                if row["sellability_label"]: detail.append(str(row["sellability_label"]))
+                if row["capital_efficiency_score"] is not None: detail.append(f"kapitalpoäng {row['capital_efficiency_score']:.0f}/100")
+                st.caption(" · ".join(detail))
+                turnover=row.get("turnover")
+                if turnover:
+                    st.caption(
+                        f"♻️ Kapitalomlopp: {turnover['cycles_30d']:.2f} varv/30 d · "
+                        f"{turnover['profit_30d']:+.0f} kr vinst/30 d · "
+                        f"{turnover['roi_30d_pct']:+.0f}% ROI/30 d"
+                    )
+                    st.caption(turnover["note"])
+                else:
+                    st.caption("♻️ Kapitalomlopp: otillräckligt underlag – verifierad sold-velocity saknas.")
+                if row["url"]: st.markdown(f"[Öppna annonsen på Tradera]({row['url']})")
+
+    queue_risk_reward = build_queue_risk_reward(buy_queue, filtered)
+    rr_by_rank = {r["rank"]: r["risk_reward"] for r in queue_risk_reward["rows"]}
+    decision_summary = build_buy_decision_summary(buy_queue, filtered)
+    buy_timing = build_queue_buy_timing(buy_queue, filtered)
+    timing_by_rank = {r["rank"]: r["timing"] for r in buy_timing["rows"]}
+    price_targets = build_queue_price_drop_targets(buy_queue, filtered, buy_timing["rows"])
+    target_by_rank = {r["rank"]: r["target"] for r in price_targets["rows"]}
+    opportunity_gaps = build_queue_opportunity_gaps(buy_queue, filtered, buy_timing["rows"], price_targets["rows"])
+    gap_by_rank = {r["rank"]: r["gap"] for r in opportunity_gaps["rows"]}
+    watch_priority = build_watch_priority_queue(buy_queue, filtered, buy_timing["rows"], opportunity_gaps["rows"])
+    watch_by_rank = {r["rank"]: r["watch"] for r in watch_priority["rows"]}
+    if decision_summary["status"] == "READY":
+        st.subheader("🔬 Pris- och timingdetaljer")
+        for row in decision_summary["rows"]:
+            max_text = f"{row['max_total']:.0f} kr" if row["max_total"] is not None else "ej säkert"
+            down_text = f"{row['downside_profit']:+.0f} kr" if row["downside_profit"] is not None else "ej säkert"
+            days_text = f"{row['expected_days']:.0f} d" if row["expected_days"] is not None else "otillräckligt underlag"
+            timing = timing_by_rank.get(row["rank"], {})
+            action = timing.get("action")
+            if action == "INOM MAXPRIS":
+                st.success(f"**INOM MAXPRIS · #{row['rank']} {row['title']}**")
+            elif action == "ÖVER MAXPRIS":
+                st.warning(f"**ÖVER MAXPRIS · #{row['rank']} {row['title']}**")
+            else:
+                st.info(f"**BEVAKA · #{row['rank']} {row['title']}**")
+            st.write(
+                f"köp {row['buy_total']:.0f} kr → max {max_text} → "
+                f"trolig vinst {row['likely_profit']:+.0f} kr → nedsida {down_text} → säljtid {days_text}"
+            )
+            if timing.get("reason"):
+                st.caption(timing["reason"])
+            target = target_by_rank.get(row["rank"], {})
+            if target.get("status") == "READY":
+                target_text = f"Befintligt maxpris: {target['target_total']:.0f} kr"
+                if target.get("target_item_price") is not None:
+                    target_text += f" (annonspris ca {target['target_item_price']:.0f} kr + frakt)"
+                if target.get("drop_needed") is not None and target.get("drop_needed") > 0:
+                    target_text += f" · behövs ca {target['drop_needed']:.0f} kr lägre"
+                st.caption("🎯 " + target_text)
+            gap = gap_by_rank.get(row["rank"], {})
+            if gap.get("status") == "READY":
+                extra = f" · #{gap['wait_rank']} bland vänta-korten" if gap.get("wait_rank") is not None else ""
+                pct = f" / {gap['gap_pct']:.1f}%" if gap.get("gap_pct") is not None else ""
+                st.caption(f"📉 {gap['band']}: {gap['gap_kr']:.0f} kr{pct} från köp{extra}")
+            watch = watch_by_rank.get(row["rank"], {})
+            if watch.get("status") == "READY":
+                st.caption(
+                    f"👀 {watch['label']} · bevakningspoäng {watch['score']:.0f}/100"
+                    f" · ROI {watch['roi_pct']:.0f}%"
+                    + (f" · kapitalpoäng {watch['capital_score']:.0f}" if watch.get("capital_score") is not None else "")
+                )
+            if row["url"]:
+                st.markdown(f"[Öppna annonsen]({row['url']})")
+        st.caption(decision_summary["note"])
+
+    if watch_priority["ready"]:
+        with st.expander("👀 Bevakningsprioritet – vilka väntelägen är viktigast?", expanded=False):
+            for row in watch_priority["ready"]:
+                w=row["watch"]
+                pct=f"{w['gap_pct']:.1f}%" if w.get("gap_pct") is not None else "ej säkert"
+                st.write(
+                    f"**#{w['watch_rank']} {row['title']}** · {w['label']} · "
+                    f"{w['gap_kr']:.0f} kr / {pct} från köp · "
+                    f"möjlig vinst {w['profit']:+.0f} kr"
+                )
+                if row.get("url"):
+                    st.markdown(f"[Öppna annonsen]({row['url']})")
+            st.caption("Bevakningsprioriteten är separat från ordinarie KÖP-ranking och skapar inga nya köpbeslut.")
+
+    with st.expander("🔬 Visa full köpordning och analys", expanded=False):
+        st.caption(buy_queue["note"])
+        if buy_queue["status"] != "READY":
+            st.info("Det finns inte tillräckligt säkra KÖP för en köpordning just nu.")
+        else:
+            medals={1:"🥇",2:"🥈",3:"🥉"}
+            for pick in buy_queue["picks"]:
+                st.write(f"**{medals.get(pick['rank'],'•')} #{pick['rank']} {pick['title']}**")
+                q1,q2,q3=st.columns(3)
+                q1.metric("Totalt",f"{pick['total_cost']:.0f} kr")
+                q2.metric("Möjlig vinst",f"{pick['net_profit']:.0f} kr")
+                q3.metric("Kapitalpoäng",f"{pick['capital_score']:.0f}/100")
+                detail=[]
+                if pick["expected_days"] is not None: detail.append(f"ca {pick['expected_days']:.0f} dagar")
+                if pick["profit_30d"] is not None: detail.append(f"{pick['profit_30d']:.0f} kr/30 dagar")
+                if pick["max_total_price"] is not None: detail.append(f"max {pick['max_total_price']:.0f} kr totalt")
+                if detail: st.caption(" · ".join(detail))
+                rr = rr_by_rank.get(pick["rank"], {})
+                if rr.get("status") == "READY":
+                    parts=[f"{rr['risk_band']}"]
+                    if rr.get("weak_profit") is not None: parts.append(f"svagt {rr['weak_profit']:+.0f} kr")
+                    if rr.get("likely_profit") is not None: parts.append(f"troligt {rr['likely_profit']:+.0f} kr")
+                    if rr.get("strong_resale") is not None: parts.append(f"starkt säljpris {rr['strong_resale']:.0f} kr")
+                    st.caption(" · ".join(parts))
+                    if rr.get("capital_downside_pct") is not None: st.caption(f"Kapitalnedsida i svagt scenario: {rr['capital_downside_pct']:.0f}%")
+                if pick["why_ahead"]: st.caption("Varför före nästa: " + " • ".join(pick["why_ahead"]))
+                if pick["url"]: st.markdown(f"[Öppna på Tradera]({pick['url']})")
+                if pick["rank"] < len(buy_queue["picks"]): st.divider()
+
+    with st.expander("💰 Mina pengar – fördela en köpbudget", expanded=False):
+        st.caption("FlipFynd väljer bara bland kort som redan är KÖP och har verifierad kapitalpoäng. Den skapar inga nya köpbeslut.")
+        portfolio_budget = st.number_input(
+            "Budget att använda", min_value=100, max_value=100000, value=2000, step=100,
+            key="portfolio_budget",
+        )
+        portfolio = build_budget_portfolio(filtered, portfolio_budget)
+        if portfolio.get("status") == "READY":
+            pc1, pc2, pc3 = st.columns(3)
+            pc1.metric("Föreslaget köp", f"{portfolio['spent']:.0f} kr")
+            pc2.metric("Möjlig nettovinst", f"{portfolio['expected_profit']:.0f} kr")
+            pc3.metric("Kvar", f"{portfolio['remaining']:.0f} kr")
+            st.caption(
+                f"Kapital använt: {portfolio['capital_usage_pct']:.0f}% · "
+                f"Vinsttakt från verifierad säljtakt: {portfolio['profit_30d']:.0f} kr/30 dagar · "
+                f"ROI/30 d: {portfolio['roi_30d_pct']:.0f}%"
+            )
+            st.caption(
+                f"Svagt scenario för kombinationen: {portfolio['floor_profit']:+.0f} kr · "
+                f"{portfolio['evaluated_combination_count']} möjliga verifierade kombinationer jämförda."
+            )
+            for n, pick in enumerate(portfolio["selected"], 1):
+                ce = pick.get("capital_efficiency") or {}
+                cost = float(pick.get("total_cost") or pick.get("analysis_total_cost") or 0)
+                st.write(f"**{n}. {pick.get('titel', 'Okänt kort')} – {cost:.0f} kr**")
+                st.caption(
+                    f"{ce.get('label', 'Ej bedömd')} · möjlig nettovinst "
+                    f"{float(pick.get('net_profit_estimate') or 0):.0f} kr · "
+                    f"kapitalpoäng {float(ce.get('score') or 0):.0f}/100"
+                )
+                if pick.get("lank"):
+                    st.markdown(f"[Öppna på Tradera]({pick.get('lank')})")
+            stress=build_portfolio_downside_stress(portfolio.get("selected") or [], budget=portfolio_budget)
+            if stress.get("status")=="READY":
+                st.markdown("#### 🧯 Portföljens nedsidestest")
+                s1,s2,s3=st.columns(3)
+                s1.metric("Troligt utfall · hela korgen", f"{stress['likely_portfolio_profit']:+.0f} kr")
+                s2.metric("Alla på floor", f"{stress['all_floor_portfolio_profit']:+.0f} kr")
+                s3.metric("Försämring mot troligt", f"-{stress['all_floor_damage_vs_likely']:.0f} kr")
+                if stress["all_floor_capital_loss"] > 0:
+                    st.caption(
+                        f"Om samtliga kort samtidigt landar på sina dokumenterade floor-utfall blir "
+                        f"portföljförlusten {stress['all_floor_capital_loss']:.0f} kr "
+                        f"({stress['all_floor_loss_pct_of_spent']:.1f}% av bundet kapital)."
+                    )
+                else:
+                    st.caption("Även om samtliga valda kort samtidigt når sina dokumenterade floor-utfall är den summerade nettovinsten inte negativ.")
+                largest=stress.get("largest_capital_position") or {}
+                if largest:
+                    st.caption(
+                        f"Största kapitalposition: {largest.get('title')} · {largest.get('cost',0):.0f} kr · "
+                        f"{largest.get('share_of_selected_capital_pct',0):.1f}% av valt kapital."
+                    )
+                shocks=stress.get("single_card_shocks") or []
+                if shocks:
+                    with st.expander("Vilket enskilt kort skadar korgen mest?", expanded=False):
+                        for shock in shocks:
+                            st.write(
+                                f"**{shock['title']} på floor:** korgen {shock['portfolio_profit']:+.0f} kr · "
+                                f"försämring {shock['damage_vs_likely']:.0f} kr"
+                            )
+                st.caption(stress.get("note"))
+
+            opportunity=build_portfolio_opportunity_cost(portfolio, filtered)
+            if opportunity.get("status")=="READY":
+                st.markdown("#### ⏳ Opportunity cost")
+                st.caption(opportunity.get("reserve_note"))
+                slow=opportunity.get("slowest_selected")
+                if slow:
+                    st.caption(
+                        f"Långsammast kapital i vald korg: {slow['title']} · "
+                        f"{slow['profit_30d']:.0f} kr/30 d på {slow['cost']:.0f} kr · "
+                        f"{slow['profit_30d_per_100_capital']:.1f} kr/30 d per 100 kr bundet."
+                    )
+                alt_costs=opportunity.get("alternative_portfolios") or []
+                if alt_costs:
+                    with st.expander("Vad kostar de alternativa korgarna i vinsttakt?", expanded=False):
+                        for alt in alt_costs:
+                            names=", ".join(alt["titles"])
+                            st.write(
+                                f"**{names}** · {alt['profit_30d']:.0f} kr/30 d · "
+                                f"offrar {alt['profit_30d_sacrificed']:.0f} kr/30 d mot vald korg"
+                            )
+                st.caption(opportunity.get("note"))
+
+            concentration=build_portfolio_concentration(portfolio.get("selected") or [])
+            if concentration.get("status")=="READY":
+                st.markdown("#### 🧩 Koncentration i köpkorgen")
+                c1,c2,c3=st.columns(3)
+                c1.metric("Största position", f"{concentration['largest_position_share_pct']:.1f}%")
+                c2.metric("Två största", f"{concentration['top_two_position_share_pct']:.1f}%")
+                c3.metric("Kort i korgen", f"{concentration['card_count']}")
+                with st.expander("Visa kapital per spelare, set och sport", expanded=False):
+                    st.markdown("**Spelare**")
+                    for group in concentration["player_groups"]:
+                        st.write(f"{group['label']}: {group['capital']:.0f} kr · {group['capital_share_pct']:.1f}% · {group['card_count']} kort")
+                    st.markdown("**Set/program**")
+                    for group in concentration["set_groups"]:
+                        st.write(f"{group['label']}: {group['capital']:.0f} kr · {group['capital_share_pct']:.1f}% · {group['card_count']} kort")
+                    st.markdown("**Sport**")
+                    for group in concentration["sport_groups"]:
+                        st.write(f"{group['label']}: {group['capital']:.0f} kr · {group['capital_share_pct']:.1f}% · {group['card_count']} kort")
+                    st.markdown("**Enskilda kapitalpositioner**")
+                    for pos in concentration["positions"]:
+                        st.write(f"{pos['title']}: {pos['cost']:.0f} kr · {pos['capital_share_pct']:.1f}%")
+                if concentration.get("unknown_player_capital_pct",0)>0 or concentration.get("unknown_set_capital_pct",0)>0:
+                    st.caption(
+                        f"Okänd identitet står för {concentration.get('unknown_player_capital_pct',0):.1f}% av kapitalet på spelarnivå "
+                        f"och {concentration.get('unknown_set_capital_pct',0):.1f}% på set/programnivå."
+                    )
+                st.caption(concentration.get("note"))
+
+            identity_integrity=build_portfolio_identity_integrity(portfolio.get("selected") or [])
+            if identity_integrity.get("status")=="READY":
+                st.markdown("#### 🪪 Identitetsintegritet i köpkorgen")
+                i1,i2,i3=st.columns(3)
+                i1.metric("Exact comp-sökbar", f"{identity_integrity['exact_comp_search_capital_pct']:.1f}%")
+                i2.metric("Beslutsstarkt maxbud", f"{identity_integrity['dynamic_max_bid_capital_pct']:.1f}%")
+                i3.metric("Olöst identitet", f"{identity_integrity['unresolved_identity_capital_pct']:.1f}%")
+                with st.expander("Visa identitetsnivå per kapitalandel", expanded=False):
+                    for group in identity_integrity["identity_groups"]:
+                        st.write(
+                            f"**{group['status']}**: {group['capital']:.0f} kr · "
+                            f"{group['capital_share_pct']:.1f}% · {group['card_count']} kort"
+                        )
+                    st.markdown("**Kort för kort**")
+                    for row in identity_integrity["details"]:
+                        score_text="ej satt" if row["identity_score"] is None else f"{row['identity_score']:.0f}/100"
+                        permissions=[]
+                        if row["supports_exact_comp_search"]: permissions.append("Exact comps")
+                        if row["supports_dynamic_max_bid"]: permissions.append("dynamiskt maxbud")
+                        permission_text=", ".join(permissions) if permissions else "ingen exact-behörighet"
+                        st.write(
+                            f"{row['title']}: {row['cost']:.0f} kr · {row['capital_share_pct']:.1f}% · "
+                            f"{row['identity_status']} · {score_text} · {permission_text}"
+                        )
+                st.caption(identity_integrity.get("note"))
+
+            alternatives=portfolio.get("alternatives") or []
+            if alternatives:
+                with st.expander("Visa alternativa kapitalfördelningar", expanded=False):
+                    for i, alt in enumerate(alternatives, 1):
+                        names=", ".join(str(x.get("titel") or "Okänt kort") for x in alt["selected"])
+                        st.write(
+                            f"**Alt {i}: {names}** · {alt['spent']:.0f} kr bundet · "
+                            f"{alt['profit_30d']:.0f} kr/30 d · svagt {alt['floor_profit']:+.0f} kr"
+                        )
+            st.caption("Urvalsordning: " + " → ".join(portfolio.get("selection_basis") or []))
+            st.warning("Detta är en budgetfördelning, inte en garanti. Outnyttjad budget är tillåten; FlipFynd fyller inte kapital med svagare eller overifierade köp.")
+        else:
+            st.info(portfolio.get("note") or "Det finns ännu inte tillräckligt säkra kandidater för en budgetfördelning.")
+
+    # Stjärnskott Radar: research context, collapsed in the novice-first UI.
+    with st.expander("🌟 Research: Stjärnskott Radar", expanded=False):
+        st.caption("För dig som vill leta spelare vars situation nyligen har förändrats. Detta påverkar aldrig köpbeslutet automatiskt.")
+        st.caption("Upptäcker dokumenterade förändringar runt spelare och kopplar dem till redan skannade kort. Momentum ändrar aldrig KÖP, värdering eller maxbud.")
+        momentum_upload = st.file_uploader("Läs in momentum-evidens (JSON)", type=["json"], key="momentum_evidence_json", help="JSON-lista med strukturerade poster: player_name, event_type, source_name, source_url, occurred_at och source_type.")
+        momentum_events=[]
+        if momentum_upload is not None:
+            try:
+                raw_momentum=json.load(momentum_upload)
+                if isinstance(raw_momentum,dict): raw_momentum=raw_momentum.get("records") or raw_momentum.get("events") or []
+                intake=ingest_momentum_records(raw_momentum if isinstance(raw_momentum,list) else [])
+                momentum_events=intake.get("accepted") or []
+                if intake.get("rejected_count"):
+                    st.warning(f"{intake['rejected_count']} momentumposter avvisades eftersom evidensen var ofullständig eller källtypen inte stöds.")
+            except Exception:
+                st.error("Momentumfilen kunde inte läsas som giltig strukturerad JSON. Ingen data har antagits.")
+        starshot=build_starshot_radar(momentum_events, filtered)
+        if not starshot.get("players"):
+            st.info("Ingen verifierad momentum-evidens är inläst ännu. Radarn visar hellre tomt än gissar vilka spelare som är stjärnskott.")
+        else:
+            sm1,sm2=st.columns(2)
+            sm1.metric("Spelare med dokumenterad förändring", starshot["player_count"])
+            sm2.metric("Kopplade skannade kort", starshot["matched_card_count"])
+            for player in starshot["players"][:10]:
+                with st.expander(f"🔥 {player['player_name']} · {player.get('sport') or 'Sport ej angiven'} · {player['event_count']} händelse(r)", expanded=bool(player.get("cards"))):
+                    st.write("**Vad har hänt?**")
+                    for event in player.get("events",[])[:5]:
+                        detail=f" · {event.get('detail')}" if event.get('detail') else ""
+                        st.write(f"{event['event_type']} · {event['occurred_at'][:10]} · {event['source_name']}{detail}")
+                        st.caption(event.get("source_url"))
+                    st.caption(f"Oberoende källor: {player['source_count']} · Händelsetyper: {player['event_type_count']}")
+                    st.write("**Kort på marknaden**")
+                    if not player.get("cards"):
+                        st.info("Inga redan skannade annonser med strukturerat player_name matchar spelaren.")
+                    for card in player.get("cards",[])[:8]:
+                        cost="okänd" if card.get("total_cost") is None else f"{card['total_cost']:.0f} kr"
+                        st.write(f"**{card['title']}** · {card['existing_decision']} · total kostnad {cost}")
+                        st.caption(f"Identitet: {card['identity_status']} · Exact SOLD comps: {card['exact_sold_comp_count']} · Sellability: {card.get('sellability') or 'ej verifierad'}")
+                        if card.get("url"): st.markdown(f"[Öppna annons]({card['url']})")
+                    st.warning(f"{player['market_reaction_status']} — {player['market_reaction_reason']}")
+                    st.caption("Stjärnskott ≠ KÖP. Kortets befintliga FlipFynd-bedömning står kvar.")
+    st.divider()
 
     if radar_main or radar_groups["BEHÖVER VERIFIERAS"]:
         st.subheader("📡 Opportunity Radar")
@@ -2063,6 +2623,19 @@ if st.session_state.get("results") is not None:
                                 exact_count = int(exact_hunt.get("exact_sold_count", 0) or 0)
                                 near_count = int(exact_hunt.get("near_sold_count", 0) or 0)
                                 st.caption(f"Exakta sålda comps i lokal historik: {exact_count} · nära sålda comps: {near_count}")
+                                evidence_ladder = build_exact_evidence_ladder(exact_hunt)
+                                ladder_counts = {level["key"]: level for level in evidence_ladder.get("levels", [])}
+                                st.markdown("**🪜 Comp Evidence Ladder**")
+                                st.caption(
+                                    f"✅ Exact: {ladder_counts.get('EXACT', {}).get('count', 0)} · "
+                                    f"🟡 Near: {ladder_counts.get('NEAR', {}).get('count', 0)} · "
+                                    f"👤 Player-only: {ladder_counts.get('PLAYER_ONLY', {}).get('count', 0)} · "
+                                    f"⛔ Rejected: {ladder_counts.get('REJECTED', {}).get('count', 0)}"
+                                )
+                                if evidence_ladder.get("valuation_basis_count", 0):
+                                    st.success(f"Värderingsgrund: {evidence_ladder['valuation_basis_count']} verifierade Exact-comps.")
+                                else:
+                                    st.warning("Värderingsgrund: inga verifierade Exact-comps. Near/Player-only används inte som exakt prisgrund.")
                                 for comp_item in exact_hunt.get("exact", [])[:3]:
                                     price = comp_item.get("price")
                                     price_text = f" · {price} kr" if price not in (None, "") else ""
@@ -2074,6 +2647,7 @@ if st.session_state.get("results") is not None:
                                     st.caption(f"⛔ {rejected_count} historiska poster avvisades p.g.a. identitetskonflikt.")
 
                                 comp_verdict = build_comp_verdict(exact_hunt)
+                                comp_quality = build_comp_quality_guard(exact_hunt.get("exact") or [])
                                 verdict_score = int(comp_verdict.get("score", 0) or 0)
                                 st.markdown(
                                     f"**🧾 Comp Verdict: {comp_verdict.get('verdict')}** · "
@@ -2085,6 +2659,70 @@ if st.session_state.get("results") is not None:
                                         f"{comp_verdict.get('price_high'):.0f} kr · median "
                                         f"{comp_verdict.get('price_median'):.0f} kr"
                                     )
+                                spread = comp_quality.get("relative_spread")
+                                spread_text = f" · spridning {spread*100:.0f}%" if spread is not None else ""
+                                if comp_quality.get("duplicate_observation_count", 0):
+                                    st.caption(
+                                        f"🔁 {comp_quality.get('raw_exact_count', 0)} Exact-poster → "
+                                        f"{comp_quality.get('independent_exact_count', 0)} oberoende försäljningar "
+                                        f"efter deduplicering."
+                                    )
+                                if comp_quality.get("decision_grade"):
+                                    st.success(
+                                        f"🛡️ Comp Quality Guard: {comp_quality.get('label')} · "
+                                        f"{comp_quality.get('recent_count', 0)} färska Exact{spread_text}"
+                                    )
+                                elif comp_quality.get("status") != "NO_EXACT_COMPS":
+                                    st.warning(f"🛡️ Comp Quality Guard: {comp_quality.get('label')}{spread_text}")
+                                for blocker in comp_quality.get("blockers", [])[:4]:
+                                    st.caption("⛔ " + blocker)
+                                for warning in comp_quality.get("warnings", [])[:2]:
+                                    st.caption("⚠️ " + warning)
+
+                                scenario_range = build_evidence_scenario_range(
+                                    exact_hunt.get("exact") or [],
+                                    total_cost=item.get("analysis_total_cost") or item.get("total_cost"),
+                                    decision_grade=bool(comp_quality.get("decision_grade")),
+                                )
+                                if scenario_range.get("available"):
+                                    st.markdown("**📐 Evidensbaserat scenariointervall**")
+                                    cols = st.columns(3)
+                                    for col, scenario in zip(cols, scenario_range.get("scenarios") or []):
+                                        with col:
+                                            st.metric(scenario.get("label"), f"{scenario.get('resale_price'):.0f} kr")
+                                            if scenario.get("net_profit") is not None:
+                                                st.caption(f"netto {scenario.get('net_profit'):+.0f} kr · ROI {scenario.get('roi_pct'):+.0f}%")
+                                            st.caption(scenario.get("basis"))
+                                    st.caption(scenario_range.get("note"))
+
+                                diversity = comp_quality.get("source_diversity") or {}
+                                if diversity.get("status") not in (None, "NO_EXACT_COMPS"):
+                                    mp = diversity.get("marketplaces") or {}
+                                    sellers = diversity.get("sellers") or {}
+                                    mp_text = (
+                                        f"{mp.get('unique_count', 0)} marknadsplatser"
+                                        if mp.get("unique_count", 0) != 1
+                                        else f"1 marknadsplats ({mp.get('top_name') or 'okänd'})"
+                                    )
+                                    seller_text = (
+                                        f"{sellers.get('unique_count', 0)} säljare"
+                                        if sellers.get("unique_count", 0) != 1
+                                        else f"1 säljare ({sellers.get('top_name') or 'okänd'})"
+                                    )
+                                    st.caption(f"🌐 Comp Source Diversity: {mp_text} · {seller_text}")
+                                    for warning in diversity.get("warnings", [])[:2]:
+                                        st.caption("↳ ⚠️ " + warning)
+                                recency = comp_quality.get("recency_transparency") or {}
+                                if recency.get("status") == "DESCRIBED":
+                                    st.caption(f"🕒 Comp Recency: nyast {recency.get('newest_age_days')} d · medianålder {recency.get('median_age_days')} d · äldst {recency.get('oldest_age_days')} d")
+                                    ages = recency.get("median_carrier_ages_days") or []
+                                    if ages: st.caption("↳ Medianpriset formas av comp(s) som är " + " / ".join(f"{int(x)} dagar" for x in ages) + " gamla.")
+                                direction = comp_quality.get("market_direction") or {}
+                                if direction.get("status") == "DESCRIBED":
+                                    arrow = "↗" if direction.get("direction") in ("UP", "MIXED_UP") else ("↘" if direction.get("direction") in ("DOWN", "MIXED_DOWN") else "↔")
+                                    st.caption(f"{arrow} Comp Market Direction: {direction.get('label')} · {direction.get('first_price'):.0f} → {direction.get('latest_price'):.0f} kr ({direction.get('pct_change'):+.1f}%)")
+                                    st.caption(f"↳ Senaste {direction.get('recent_count')} comps median: {direction.get('recent_median'):.0f} kr · total median {direction.get('overall_median'):.0f} kr")
+
                                 dynamic_bid = build_dynamic_max_bid(
                                     base_max_total=candidate.get("max_total_price"),
                                     shipping=candidate.get("max_price_shipping_assumption") or candidate.get("frakt") or 29,
@@ -2323,6 +2961,18 @@ if st.session_state.get("results") is not None:
                     <div class="ff-retro-rule"></div>
                   </div>"""
             st.markdown(result_html, unsafe_allow_html=True)
+            capital = item.get("capital_efficiency") or {}
+            if capital.get("score") is not None:
+                downside_text = (
+                    f"{float(capital.get('downside') or 0):.0f} kr"
+                    if float(capital.get("downside") or 0) < 0 else "ingen beräknad förlust"
+                )
+                st.caption(
+                    f"💸 Kapital: {capital.get('label')} · "
+                    f"{float(capital.get('profit_30d') or 0):.0f} kr vinst/30 dagar · "
+                    f"{float(capital.get('roi_30d_pct') or 0):.0f}%/30 dagar · "
+                    f"nedsida: {downside_text}"
+                )
 
             if item.get("visual_image_urls"):
                 image_urls = item.get("visual_image_urls")[:3]
@@ -2583,6 +3233,55 @@ if st.session_state.get("results") is not None:
                                 st.metric("Exakta premium-sålda", exact_count)
                             with cpc2:
                                 st.metric("Närliggande premium-sålda", near_count)
+                            premium_ladder = build_premium_evidence_ladder({
+                                "active": item.get("premium_comp_hunter_active"),
+                                "exact": item.get("premium_comp_hunter_exact") or [],
+                                "near": item.get("premium_comp_hunter_near") or [],
+                                "rejected": item.get("premium_comp_hunter_rejected") or [],
+                                "insufficient_count": item.get("premium_comp_hunter_insufficient_count", 0),
+                                "safe_for_valuation": item.get("premium_comp_hunter_safe_for_valuation"),
+                            })
+                            premium_levels = {level["key"]: level for level in premium_ladder.get("levels", [])}
+                            premium_quality = build_comp_quality_guard(item.get("premium_comp_hunter_exact") or [])
+                            st.caption(
+                                "🪜 Evidence: "
+                                f"Exact premium {premium_levels.get('EXACT_PREMIUM', {}).get('count', 0)} · "
+                                f"Near {premium_levels.get('NEAR_PREMIUM', {}).get('count', 0)} · "
+                                f"Otillräckliga {premium_levels.get('INSUFFICIENT', {}).get('count', 0)} · "
+                                f"Rejected {premium_levels.get('REJECTED', {}).get('count', 0)}"
+                            )
+                            st.caption("Endast verifierade Exact premium-comps får bära premiumvärderingen.")
+                            if premium_quality.get("duplicate_observation_count", 0):
+                                st.caption(
+                                    f"🔁 {premium_quality.get('raw_exact_count', 0)} Exact premium-poster → "
+                                    f"{premium_quality.get('independent_exact_count', 0)} oberoende försäljningar."
+                                )
+                            premium_diversity = premium_quality.get("source_diversity") or {}
+                            if premium_diversity.get("status") not in (None, "NO_EXACT_COMPS"):
+                                mp = premium_diversity.get("marketplaces") or {}
+                                sellers = premium_diversity.get("sellers") or {}
+                                st.caption(
+                                    f"🌐 Premium Source Diversity: {mp.get('unique_count', 0)} marknadsplatser · "
+                                    f"{sellers.get('unique_count', 0)} säljare"
+                                )
+                                for warning in premium_diversity.get("warnings", [])[:2]:
+                                    st.caption("↳ ⚠️ " + warning)
+                            premium_recency = premium_quality.get("recency_transparency") or {}
+                            if premium_recency.get("status") == "DESCRIBED":
+                                st.caption(f"🕒 Premium Recency: nyast {premium_recency.get('newest_age_days')} d · medianålder {premium_recency.get('median_age_days')} d · äldst {premium_recency.get('oldest_age_days')} d")
+                            premium_direction = premium_quality.get("market_direction") or {}
+                            if premium_direction.get("status") == "DESCRIBED":
+                                arrow = "↗" if premium_direction.get("direction") in ("UP", "MIXED_UP") else ("↘" if premium_direction.get("direction") in ("DOWN", "MIXED_DOWN") else "↔")
+                                st.caption(f"{arrow} Premium Market Direction: {premium_direction.get('label')} · {premium_direction.get('first_price'):.0f} → {premium_direction.get('latest_price'):.0f} kr ({premium_direction.get('pct_change'):+.1f}%)")
+                            premium_direction_evidence = premium_quality.get("market_direction_evidence") or {}
+                            if premium_direction_evidence.get("status") == "DESCRIBED":
+                                st.caption(f"🔎 Premium riktningsunderlag: {premium_direction_evidence.get('exact_count')} comps · {premium_direction_evidence.get('span_days')} dagar")
+                            if premium_quality.get("decision_grade"):
+                                st.success("🛡️ Premium Comp Quality: beslutsstarkt även avseende antal, färskhet och prisspridning.")
+                            elif exact_count:
+                                st.warning(f"🛡️ Premium Comp Quality: {premium_quality.get('label')} – exakt identitet räcker inte ensam.")
+                                for blocker in premium_quality.get("blockers", [])[:3]:
+                                    st.caption("⛔ " + blocker)
                             if item.get("premium_comp_hunter_safe_for_valuation"):
                                 st.success("Premiumkortet har tillräckligt med exakta sålda jämförelser för att prisunderlaget ska få användas vidare.")
                             else:
@@ -3251,10 +3950,10 @@ with st.expander("⚙️ Administration & data"):
                 try:
                     rows = parse_import_bytes(sold_upload.getvalue(), sold_upload.name)
                     existing = _load_sold_comp_records()
-                    result = import_sold_comp_rows(
+                    result = acquire_sold_batch(
                         rows,
                         existing=existing,
-                        provenance=f"manual_upload:{sold_upload.name}",
+                        source_key=f"manual_upload:{sold_upload.name}",
                     )
                     if result["added_count"]:
                         _save_sold_comp_records(result["records"])
@@ -3263,12 +3962,13 @@ with st.expander("⚙️ Administration & data"):
                         st.session_state["result_cache"] = {}
                     st.success(
                         f"{result['added_count']} nya comps importerade • "
-                        f"{result['duplicate_count']} dubbletter • {result['error_count']} avvisade rader."
+                        f"{result['duplicate_count']} dubbletter • {result['quarantine_count']} i karantän."
                     )
-                    if result["errors"]:
-                        with st.expander("Visa avvisade rader"):
-                            for err in result["errors"][:25]:
-                                st.write(f"Rad {err['row']}: {err['error']}")
+                    if result["quarantine"]:
+                        with st.expander("Visa karantän"):
+                            for err in result["quarantine"][:25]:
+                                st.write(f"Rad {err['row']}: {err['reason']}")
+                    st.caption(f"Pipeline: {result['exact_ready_count']} exakt klara • {result['review_count']} behöver identitetsgranskning. Batch {result['batch_id']}")
                 except Exception as exc:
                     st.error(f"Importen kunde inte läsas: {exc}")
 
@@ -3451,6 +4151,29 @@ with st.expander("⚙️ Administration & data"):
             "VERIFIED SOLD betyder att källraden har ett explicit sålt pris eller explicit såld-status tillsammans med pris. "
             "Det betyder inte att FlipFynd har verifierat kortets exakta identitet; den kontrollen görs separat innan en comp får bära värderingen."
         )
+        intake = sold_comp_intake_audit(current_sold)
+        with st.expander("Exact Comp Intake – vad kan faktiskt användas exakt?"):
+            st.caption(
+                "En riktig försäljning är inte automatiskt en exakt comp. Här separeras försäljningsbevis från kortidentitet."
+            )
+            iq1, iq2, iq3, iq4 = st.columns(4)
+            iq1.metric("Exakt klara", intake["exact_ready_count"])
+            iq2.metric("Behöver ID-koll", intake["identity_review_count"])
+            iq3.metric("Bara såld-bevis", intake["sale_only_count"])
+            iq4.metric("Avvisade", intake["rejected_count"])
+            review_rows = [r for r in intake["records"] if r["status"] != "EXACT_READY"]
+            if review_rows:
+                st.write("**Prioriterad granskningskö**")
+                for row in review_rows[:20]:
+                    missing = ", ".join(row.get("missing_identity_fields") or [])
+                    reason = "; ".join(row.get("blockers") or [])
+                    suffix = f" · saknas: {missing}" if missing else ""
+                    st.write(f"- {row['title'] or 'Namnlös rad'} — {row['status']}{suffix} · {reason}")
+            else:
+                st.success("Alla verifierade sold-rader i biblioteket har även komplett, uttryckligen bekräftad exakt identitet.")
+            st.caption(
+                "Exakt klar betyder inte att raden matchar varje analyserat kort. Den får bara gå vidare till den separata matchningen mot spelare, set, år, kortnummer och relevant variant/gradering."
+            )
         st.caption(
             "Viktigt: lagring i själva Streamlit-instansen är runtime-lagring. Exportfunktionen gör att sold-comp-historiken "
             "kan bevaras tills en extern persistent databas kopplas in."
@@ -3594,6 +4317,223 @@ with st.expander("⚙️ Administration & data"):
                     st.caption("Det finns ännu inget enskilt segment med minst 5 avslut.")
             st.warning("Detta visar möjliga missade fynd. Det bevisar inte att en säkerhetsregel är fel och ändrar inga vikter automatiskt.")
 
+        model_review = build_model_review_dashboard(journal_rows)
+        with st.expander("🧭 Model Review – fungerar besluten i verkligheten?", expanded=False):
+            st.caption(model_review["note"])
+            mr1, mr2, mr3 = st.columns(3)
+            mr1.metric("Verkliga avslut", model_review["sold_count"])
+            clean = model_review.get("buy_without_false_positive_rate_pct")
+            mr2.metric("KÖP utan tydlig miss", f"{clean:.0f}%" if clean is not None else "–")
+            miss = model_review.get("false_negative_rate_pct")
+            mr3.metric("Missade starka vinnare", f"{miss:.0f}%" if miss is not None else "–")
+
+            if not model_review["sold_count"]:
+                st.info("Model Review aktiveras när verkliga affärer har avslutats i Flip Journal.")
+            else:
+                st.markdown("**Hur gick besluten i verkligheten?**")
+                for row in model_review["decision_summary"]:
+                    if not row["count"]:
+                        continue
+                    win = row.get("profitable_rate_pct")
+                    profit = row.get("median_actual_net_profit")
+                    st.write(f"**{row['decision']}** · {row['count']} avslut · {win:.0f}% lönsamma · median {profit:.0f} kr" if win is not None and profit is not None else f"**{row['decision']}** · {row['count']} avslut")
+
+                reviewable = [x for x in model_review["signals"] if x["reviewable"]]
+                if reviewable:
+                    st.markdown("**Signaler att granska**")
+                    for sig in reviewable[:10]:
+                        parts=[]
+                        if sig["enough_buy_sample"]:
+                            parts.append(f"{sig['false_positive_rate_pct']:.0f}% dåliga KÖP ({sig['completed_buy_count']} avslut)")
+                        if sig["enough_non_buy_sample"]:
+                            parts.append(f"{sig['false_negative_rate_pct']:.0f}% missade vinnare ({sig['completed_non_buy_count']} avslut)")
+                        st.write(f"**{sig['label']}** · " + " · ".join(parts))
+
+                if model_review["supports_manual_model_review"]:
+                    st.warning("20+ verkliga avslut finns. Nu finns underlag för manuell modellgranskning – inte automatisk viktändring.")
+                else:
+                    remaining=max(0, model_review["min_manual_review_sample"]-model_review["sold_count"])
+                    st.info(f"Samla {remaining} ytterligare verkliga avslut innan modellvikter ens bör övervägas manuellt.")
+
+        capital_validation = build_capital_efficiency_validation(journal_rows)
+        with st.expander("💸 Capital Efficiency – fungerar den i verkligheten?", expanded=False):
+            st.caption(capital_validation["note"])
+            cv1, cv2, cv3 = st.columns(3)
+            cv1.metric("Avslut med sparad kapitalpoäng", capital_validation["captured_completed_count"])
+            cv2.metric("Äldre/utan kapitalpoäng", capital_validation["legacy_or_unscored_completed_count"])
+            cv3.metric("Redo för manuell granskning", "Ja" if capital_validation["supports_manual_review"] else "Nej")
+
+            high = capital_validation["high"]
+            lower = capital_validation["lower"]
+            if capital_validation["captured_completed_count"] == 0:
+                st.info("Valideringen startar först när nya affärer med sparad Capital Efficiency har sålts.")
+            else:
+                st.markdown("**Verkligt utfall efter kapitalpoäng**")
+                for label, cohort in (("65–100", high), ("0–64", lower)):
+                    if not cohort["count"]:
+                        continue
+                    win = cohort.get("win_rate_pct")
+                    p30 = cohort.get("median_actual_profit_30d")
+                    days = cohort.get("median_days_to_sell")
+                    parts = [f"{cohort['count']} avslut"]
+                    if win is not None: parts.append(f"{win:.0f}% lönsamma")
+                    if p30 is not None: parts.append(f"{p30:.0f} kr verklig medianvinst/30 dagar")
+                    if days is not None: parts.append(f"{days:.0f} dagar median")
+                    st.write(f"**Kapitalpoäng {label}** · " + " · ".join(parts))
+
+                direction = capital_validation.get("direction")
+                if direction == "supports":
+                    st.success("Hög kapitalpoäng har hittills gett bättre realiserad vinsttakt i de jämförbara grupperna.")
+                elif direction == "challenges":
+                    st.warning("Hög kapitalpoäng har hittills inte gett bättre realiserad vinsttakt. Modellen bör granskas innan den får större vikt.")
+                elif direction == "mixed":
+                    st.info("Grupperna är hittills ungefär lika i realiserad vinsttakt.")
+                else:
+                    st.info("Minst 5 avslut behövs i både hög och lägre kapitalpoäng innan grupperna jämförs.")
+
+                if capital_validation["supports_manual_review"]:
+                    st.warning("20+ relevanta avslut och minst 5 i båda grupperna finns. Manuell modellgranskning är nu rimlig; inga vikter ändras automatiskt.")
+                else:
+                    remaining=max(0, capital_validation["min_review_sample"]-capital_validation["captured_completed_count"])
+                    st.caption(f"Minst {remaining} ytterligare relevanta avslut behövs för 20-observationsgränsen, och båda grupperna måste ha minst 5.")
+
+        prediction_validation = build_prediction_outcome_validation(journal_rows)
+        with st.expander("🎯 Prognos mot verklighet – var har FlipFynd fel?", expanded=False):
+            st.caption(prediction_validation["note"])
+            p1, p2 = st.columns(2)
+            p1.metric("Verkliga avslut", prediction_validation["sold_count"])
+            p2.metric("Redo för manuell granskning", "Ja" if prediction_validation["review_ready"] else "Nej")
+            for key, label, unit in (("profit","Nettovinst"," kr"),("roi","ROI"," %"),("days_to_sell","Säljtid"," dagar")):
+                m=prediction_validation[key]
+                if not m["count"]:
+                    st.write(f"**{label}:** inget jämförbart underlag ännu")
+                    continue
+                st.write(f"**{label}** · {m['count']} jämförelser · medianfel {m['median_error']:+.1f}{unit} · typiskt fel {m['median_abs_error']:.1f}{unit}")
+                if not m["enough"]:
+                    st.caption("Minst 5 jämförbara avslut krävs innan riktningen tolkas.")
+                elif key=="days_to_sell":
+                    st.caption("Kort tar i median längre tid att sälja än prognosen." if m["bias"]=="underestimated" else ("Kort säljs i median snabbare än prognosen." if m["bias"]=="overestimated" else "Säljtidsprognosen är balanserad i median."))
+                else:
+                    st.caption("FlipFynd har i median varit för optimistisk." if m["bias"]=="overestimated" else ("FlipFynd har i median varit för försiktig." if m["bias"]=="underestimated" else "Prognosen är balanserad i median."))
+            st.warning("Diagnostiken ändrar inga modellvikter automatiskt.")
+
+        error_segmentation = build_error_segmentation(journal_rows)
+        with st.expander("🧩 Fel per typ av kort – var missar FlipFynd?", expanded=False):
+            st.caption(error_segmentation["note"])
+            es1, es2 = st.columns(2)
+            es1.metric("Verkliga avslut", error_segmentation["sold_count"])
+            es2.metric("Segment redo att granska", error_segmentation["reviewable_count"])
+            labels = {
+                "sport":"Sport","price_band":"Prisklass","risk_band":"Risk",
+                "sellability_band":"Säljbarhet","valuation_confidence":"Värderingssäkerhet",
+                "exact_comp":"Exakt comp","rookie_signal":"Rookie","market_edge":"Market Edge",
+                "information_edge":"Information Edge",
+            }
+            if not error_segmentation["reviewable"]:
+                st.info("Minst 5 jämförbara verkliga utfall behövs inom ett segment innan det listas här.")
+            else:
+                for seg in error_segmentation["reviewable"][:12]:
+                    st.write(f"**{labels.get(seg['segment'], seg['segment'])}: {seg['label']}** · {seg['count']} avslut")
+                    parts=[]
+                    if seg["profit"]["count"]:
+                        parts.append(f"vinstfel {seg['profit']['median_error']:+.0f} kr")
+                    if seg["roi"]["count"]:
+                        parts.append(f"ROI-fel {seg['roi']['median_error']:+.0f} %-enheter")
+                    if seg["days_to_sell"]["count"]:
+                        parts.append(f"säljtid {seg['days_to_sell']['median_error']:+.0f} dagar")
+                    if parts:
+                        st.caption(" · ".join(parts))
+            metric_reviews = error_segmentation.get("reviewable_by_metric") or {}
+            if any(metric_reviews.values()):
+                st.markdown("**Största typiska fel – per måttenhet**")
+                metric_labels = [("profit","Vinst","kr"),("roi","ROI","%-enheter"),("velocity","Säljtid","dagar")]
+                metric_keys = {"profit":"profit","roi":"roi","velocity":"days_to_sell"}
+                for metric_key, metric_title, unit in metric_labels:
+                    ranked = metric_reviews.get(metric_key) or []
+                    if ranked:
+                        top = ranked[0]
+                        metric = top[metric_keys[metric_key]]
+                        st.caption(f"{metric_title}: {labels.get(top['segment'],top['segment'])} – {top['label']} · median absolutfel {metric['median_abs_error']:.0f} {unit}")
+            st.warning("Segmenteringen är diagnostik. Kr, %-enheter och dagar hålls separata och ändrar inga modellvikter automatiskt.")
+
+        correction_review = build_model_correction_candidates(error_segmentation)
+        with st.expander("🛠️ Modellförslag – vad bör granskas?", expanded=False):
+            st.caption(correction_review["note"])
+            mc1, mc2 = st.columns(2)
+            mc1.metric("Kandidater", correction_review["count"])
+            mc2.metric("Starka kandidater", correction_review["strong_count"])
+            if not correction_review["candidates"]:
+                st.info("Inget segment har ännu både tillräckligt underlag och ett tydligt systematiskt prognosfel.")
+            else:
+                segment_names={"sport":"Sport","price_band":"Prisklass","risk_band":"Risk","sellability_band":"Säljbarhet",
+                    "valuation_confidence":"Värderingssäkerhet","exact_comp":"Exakt comp","rookie_signal":"Rookie",
+                    "market_edge":"Market Edge","information_edge":"Information Edge"}
+                for c in correction_review["candidates"][:10]:
+                    st.write(f"**{c['strength']}: {segment_names.get(c['segment'],c['segment'])} – {c['label']}** · {c['count']} avslut")
+                    st.caption(c["suggestion"].capitalize() + ".")
+            st.warning("Detta är granskningsförslag, inte modelländringar. FlipFynd ändrar inga vikter, haircuts eller köpbeslut automatiskt.")
+
+        correction_sim = build_correction_simulation(journal_rows, correction_review)
+        with st.expander("🧪 Korrigeringssimulator – hade ändringen faktiskt hjälpt?", expanded=False):
+            st.caption(correction_sim["note"])
+            cs1, cs2 = st.columns(2)
+            cs1.metric("Testade kandidater", correction_sim["tested_count"])
+            cs2.metric("Klarade första filtret", correction_sim["passed_count"])
+            if not correction_sim["results"]:
+                st.info("Det finns ännu inga modellkandidater att simulera.")
+            else:
+                for result in correction_sim["results"][:10]:
+                    status="✅ Går vidare" if result["worth_reviewing"] else "⛔ Inte tillräckligt bra"
+                    st.write(f"**{status}: {result['label']}** · {result['count']} avslut")
+                    for metric_name, m in result["metrics"].items():
+                        if not m.get("eligible"):
+                            continue
+                        display={"profit":"Vinst","roi":"ROI","velocity":"Säljtid"}[metric_name]
+                        st.caption(
+                            f"{display}: justering {m['shift']:+.1f} · typiskt fel {m['mae_before']:.1f} → {m['mae_after']:.1f} · förbättring {m['improvement_pct']:.0f}%"
+                        )
+            st.warning("En historisk förbättring räcker inte för produktionsändring. Simulatorn ändrar ingenting automatiskt och samma data används här både för att hitta och testa korrigeringen.")
+
+        holdout_validation = build_holdout_validation(journal_rows, correction_review)
+        with st.expander("🧪 Holdout-test – fungerar korrigeringen på separat data?", expanded=False):
+            st.caption(holdout_validation["note"])
+            hv1, hv2 = st.columns(2)
+            hv1.metric("Testade kandidater", holdout_validation["tested_count"])
+            hv2.metric("Klarade holdout", holdout_validation["passed_count"])
+            if not holdout_validation["results"]:
+                st.info("Det finns ännu inga modellkandidater att testa.")
+            else:
+                for result in holdout_validation["results"][:10]:
+                    status="✅ Klarar holdout" if result["passes_holdout"] else "⛔ Klarar inte holdout"
+                    st.write(f"**{status}: {result['label']}** · discovery {result['discovery_count']} · holdout {result['holdout_count']}")
+                    for metric_name,m in result["metrics"].items():
+                        if not m.get("eligible"):
+                            continue
+                        display={"profit":"Vinst","roi":"ROI","velocity":"Säljtid"}[metric_name]
+                        st.caption(f"{display}: justering {m['shift']:+.1f} · holdout-fel {m['mae_before']:.1f} → {m['mae_after']:.1f} · {m['improvement_pct']:.0f}% bättre")
+            st.warning("Även en klarad holdout är bara evidens för fortsatt manuell granskning. Ingen produktionsmodell ändras automatiskt.")
+
+        approval_gate = build_correction_approval_gate(holdout_validation)
+        with st.expander("🚦 Korrigeringsgrind – vad är redo att överväga?", expanded=False):
+            st.caption(approval_gate["note"])
+            ag1, ag2 = st.columns(2)
+            ag1.metric("Kandidater", approval_gate["candidate_count"])
+            ag2.metric("Redo att överväga", approval_gate["review_ready_count"])
+            if not approval_gate["reviews"]:
+                st.info("Det finns ännu inga holdout-testade korrigeringar att granska.")
+            else:
+                for review in approval_gate["reviews"][:10]:
+                    if review["ready_for_manual_review"]:
+                        st.success(f"Redo att överväga: {review['label']} · discovery {review['discovery_count']} · holdout {review['holdout_count']}")
+                        for m in review["metrics"]:
+                            display={"profit":"Vinst","roi":"ROI","velocity":"Säljtid"}.get(m["metric"],m["metric"])
+                            st.caption(f"{display}: fel {m['mae_before']:.1f} → {m['mae_after']:.1f} · {m['improvement_pct']:.0f}% bättre på holdout")
+                    else:
+                        st.write(f"**Inte redo: {review['label']}**")
+                        if review["blockers"]:
+                            st.caption(" · ".join(review["blockers"]))
+            st.warning("Redo att överväga betyder endast redo för manuell bedömning. Ingen korrigering kan aktiveras här och inga köpbeslut ändras.")
+
         if journal_rows:
             labels = {f"{r.get('title','Okänd')} · {r.get('status','')} · {r.get('id')}": r.get('id') for r in journal_rows}
             selected_label = st.selectbox("Välj journalpost", list(labels), key="flip_journal_entry")
@@ -3649,7 +4589,7 @@ with st.expander("⚙️ Administration & data"):
                 _save_flip_journal_records(update_entry(journal_rows, selected_id, **changes))
                 st.success("Journalpost sparad.")
                 st.rerun()
-        journal_export = json.dumps({"schema_version":2,"entries":journal_rows}, ensure_ascii=False, indent=2).encode("utf-8")
+        journal_export = json.dumps({"schema_version":5,"entries":journal_rows}, ensure_ascii=False, indent=2).encode("utf-8")
         st.download_button("Exportera Flip Journal", data=journal_export, file_name="flipfynd_flip_journal.json", mime="application/json", use_container_width=True, help="Spara en kopia. Streamlit Clouds lokala runtime-lagring är inte permanent mellan alla omstarter/deploys.")
         journal_health = _cached_storage_probe(DATABASE_URL) if DATABASE_URL else storage_status(None)
         journal_pending = get_pending(PENDING_SYNC_PATH, "flip_journal") is not None

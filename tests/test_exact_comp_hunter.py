@@ -70,3 +70,23 @@ class ExactCompHunterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_missing_season_is_near_not_exact():
+    identity = dict(IDENTITY)
+    row = ExactCompHunterTests().sold(season=None, title="Connor Bedard Upper Deck Series 1 #451 Outburst")
+    classified = classify_comp(identity, row)
+    assert classified["tier"] != "EXACT"
+    assert "säsong/år" in classified["missing"]
+
+
+def test_missing_set_is_near_not_exact():
+    row = ExactCompHunterTests().sold(set_name=None, title="Connor Bedard 2023-24 #451 Outburst")
+    classified = classify_comp(IDENTITY, row)
+    assert classified["tier"] != "EXACT"
+    assert "set/produkt" in classified["missing"]
+
+
+def test_extra_auto_is_not_exact_for_non_auto_target():
+    row = ExactCompHunterTests().sold(is_auto=True, title="Connor Bedard 2023-24 Upper Deck Series 1 #451 Outburst Auto")
+    classified = classify_comp(IDENTITY, row)
+    assert classified["tier"] != "EXACT"

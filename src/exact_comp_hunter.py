@@ -169,27 +169,44 @@ def classify_comp(identity: dict[str, Any], record: dict) -> dict[str, Any]:
             else:
                 missing.append(label)
 
-    # Hard identity conflicts always reject.
+    # Hard identity conflicts always reject. Exact means all known target identity
+    # fields match; a missing season/set/variant may be useful context, but it is
+    # never allowed to masquerade as an exact comp.
     if conflicts:
         tier = "REJECTED"
     else:
-        core_required = [k for k in ("player_name", "card_number") if identity.get(k)]
-        core_ok = all(
-            ("spelare" if k == "player_name" else "kortnummer") in exact_matches
-            for k in core_required
-        )
-        set_or_season_ok = (
-            (not identity.get("set_name") or "set/produkt" in exact_matches)
-            or (not identity.get("season") or "säsong/år" in exact_matches)
-        )
-        variant_fields = [
+        required_labels = []
+        for key, label in [
+            ("player_name", "spelare"),
+            ("set_name", "set/produkt"),
+            ("season", "säsong/år"),
+            ("card_number", "kortnummer"),
             ("parallel", "parallel"),
             ("serial_denominator", "serienämnare"),
             ("grading_company", "grading"),
             ("grade", "grade"),
-        ]
-        variant_known_ok = all(not identity.get(k) or label in exact_matches for k, label in variant_fields)
-        if core_ok and set_or_season_ok and variant_known_ok and len(missing) <= 1:
+        ]:
+            if identity.get(key) not in (None, ""):
+                required_labels.append(label)
+        if identity.get("is_auto"):
+            required_labels.append("autograf")
+        if identity.get("is_patch"):
+            required_labels.append("patch/relic")
+
+        core_ok = all(label in exact_matches for label in ("spelare", "kortnummer") if label in required_labels)
+        all_known_match = all(label in exact_matches for label in required_labels)
+
+        # A comp with an extra premium trait is not exact for a target that does
+        # not carry that explicitly structured trait. Downgrade instead of guessing.
+        extra_premium_trait = bool(
+            (rf.get("is_auto") and not identity.get("is_auto"))
+            or ((rf.get("is_patch") or rf.get("is_jersey")) and not identity.get("is_patch"))
+            or (rf.get("parallel") and not identity.get("parallel"))
+            or (rf.get("serial_denominator") and not identity.get("serial_denominator"))
+            or ((rf.get("grading_company") or rf.get("grade")) and not (identity.get("grading_company") or identity.get("grade")))
+        )
+
+        if all_known_match and not missing and not extra_premium_trait:
             tier = "EXACT"
         elif core_ok and len(exact_matches) >= 2:
             tier = "NEAR"

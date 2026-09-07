@@ -26,6 +26,7 @@ from src.premium_comp_hunter import hunt_premium_comps
 from src.premium_valuation import build_exact_premium_valuation
 from src.decision_confidence_audit import audit_decision_confidence
 from src.decision_conflict_audit import audit_decision_conflicts
+from src.capital_efficiency import build_capital_efficiency
 
 
 HOCKEY_SETS = {
@@ -3170,6 +3171,14 @@ def analyze_core(
     flip_velocity = compute_flip_velocity(
         liquidity_analysis, probability, profits["net_profit_estimate"], analysis_total_cost
     )
+    capital_efficiency = build_capital_efficiency(
+        total_cost=analysis_total_cost,
+        net_profit=profits["net_profit_estimate"],
+        floor_profit=profits["floor_profit_estimate"],
+        sale_probability=probability,
+        liquidity_score=liquidity,
+        velocity=flip_velocity,
+    )
 
     quality = compute_card_quality(
         features,
@@ -3818,9 +3827,11 @@ def analyze_core(
         "premium_comp_hunter_exact_count": premium_comp_hunter.get("exact_count", 0),
         "premium_comp_hunter_near_count": premium_comp_hunter.get("near_count", 0),
         "premium_comp_hunter_rejected_count": premium_comp_hunter.get("rejected_count", 0),
+        "premium_comp_hunter_insufficient_count": premium_comp_hunter.get("insufficient_count", 0),
         "premium_comp_hunter_query": premium_comp_hunter.get("query"),
         "premium_comp_hunter_exact": premium_comp_hunter.get("exact", []),
         "premium_comp_hunter_near": premium_comp_hunter.get("near", []),
+        "premium_comp_hunter_rejected": premium_comp_hunter.get("rejected", []),
         "premium_comp_hunter_search_targets": premium_comp_hunter.get("search_targets", []),
         "premium_comp_hunter_safe_for_valuation": premium_comp_hunter.get("safe_for_valuation", False),
         "premium_comp_hunter_note": premium_comp_hunter.get("note"),
@@ -3891,6 +3902,11 @@ def analyze_core(
         "flip_velocity_capital_turns_30d": flip_velocity.get("capital_turns_30d"),
         "flip_velocity_evidence": flip_velocity.get("evidence"),
         "flip_velocity_note": flip_velocity.get("note"),
+        "capital_efficiency": capital_efficiency,
+        "capital_efficiency_score": capital_efficiency.get("score"),
+        "capital_efficiency_label": capital_efficiency.get("label"),
+        "capital_efficiency_roi_30d_pct": capital_efficiency.get("roi_30d_pct"),
+        "capital_efficiency_downside": capital_efficiency.get("downside"),
 
         "uncertainty_haircut":
             haircut,

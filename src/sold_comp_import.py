@@ -159,6 +159,39 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
         record["source_currency"] = original_currency
         record["currency_conversion_source"] = conversion_source
 
+    # Preserve explicit structured identity metadata supplied by the source or
+    # reviewer. Free-text title parsing is intentionally NOT used to populate
+    # these fields: a verified sale is not automatically an exact comp.
+    identity_aliases = {
+        "player_name": ("player_name", "player"),
+        "set_name": ("set_name", "set", "product"),
+        "season": ("season", "year"),
+        "card_number": ("card_number", "checklist_number"),
+        "parallel": ("parallel", "variant"),
+        "serial_denominator": ("serial_denominator", "serial_number"),
+        "grading_company": ("grading_company",),
+        "grade": ("grade",),
+        "identity_evidence_source": ("identity_evidence_source", "identity_source"),
+    }
+    for target, aliases in identity_aliases.items():
+        value = _first(row, *aliases)
+        if value not in (None, ""):
+            record[target] = str(value).strip() if target != "serial_denominator" else value
+
+    identity_verified = _first(row, "identity_verified", "exact_identity_confirmed")
+    if identity_verified not in (None, ""):
+        text = str(identity_verified).casefold().strip()
+        record["identity_verified"] = bool(identity_verified is True or text in {"1", "true", "yes", "ja", "verified", "reviewed", "confirmed"})
+
+    for flag in ("is_parallel", "is_serial_numbered", "is_graded", "is_rookie", "is_auto", "is_patch"):
+        value = row.get(flag)
+        if value not in (None, ""):
+            text = str(value).casefold().strip()
+            record[flag] = bool(value is True or text in {"1", "true", "yes", "ja"})
+
+    if isinstance(row.get("identity_conflicts"), list):
+        record["identity_conflicts"] = list(row["identity_conflicts"])
+
     record["sold_comp_id"] = _fingerprint(record)
     return record
 

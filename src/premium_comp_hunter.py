@@ -12,6 +12,7 @@ from typing import Any, Iterable
 from urllib.parse import quote_plus
 
 from src.card_parser import parse_card_features
+from src.sold_comp_quality import is_verified_sold_comp
 
 
 def _norm(value: object) -> str:
@@ -118,6 +119,8 @@ def _classify(features: dict, detail: dict) -> dict[str, Any]:
     require_equal("season", "säsong")
     require_equal("card_number", "kortnummer")
     require_equal("parallel", "variant/parallel")
+    require_equal("grading_company", "grading")
+    require_equal("grade", "grade")
 
     if features.get("is_auto"):
         if comp.get("is_auto"):
@@ -158,9 +161,22 @@ def _classify(features: dict, detail: dict) -> dict[str, Any]:
         if features.get("card_number"):
             essential.append("kortnummer")
 
+        if features.get("season"):
+            essential.append("säsong")
+        if features.get("grading_company"):
+            essential.append("grading")
+        if features.get("grade"):
+            essential.append("grade")
+
         essential_ok = all(label in matches for label in essential)
-        # One non-essential missing field (usually season) is tolerable; premium traits are not.
-        if essential_ok and len(missing) <= 1:
+        extra_premium_trait = bool(
+            (comp.get("is_auto") and not features.get("is_auto"))
+            or ((comp.get("is_patch") or comp.get("is_jersey")) and not (features.get("is_patch") or features.get("is_jersey")))
+            or (comp.get("parallel") and not features.get("parallel"))
+            or (comp.get("serial_number") and not target_serial)
+            or ((comp.get("grading_company") or comp.get("grade")) and not (features.get("grading_company") or features.get("grade")))
+        )
+        if essential_ok and not missing and not extra_premium_trait:
             tier = "EXACT_PREMIUM"
         elif "spelare" in matches and any(x in matches for x in ("autograf", "patch/relic", "set/program")):
             tier = "NEAR_PREMIUM"
@@ -199,7 +215,7 @@ def hunt_premium_comps(features: dict, comparable_details: Iterable[dict] | None
 
     buckets = {"EXACT_PREMIUM": [], "NEAR_PREMIUM": [], "INSUFFICIENT": [], "REJECTED": []}
     for detail in list(comparable_details or []):
-        if str(detail.get("market_state") or "").casefold() != "sold":
+        if not is_verified_sold_comp(detail):
             continue
         classified = _classify(features, detail)
         buckets[classified["tier"]].append(classified)

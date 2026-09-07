@@ -14,7 +14,7 @@ def target(**overrides):
 
 
 def sold(title, price=500):
-    return {"title": title, "market_state": "sold", "price": price, "platform": "manual"}
+    return {"title": title, "market_state": "sold", "price": price, "sold_price": price, "sold_verification_status": "verified", "sale_evidence_type": "explicit_sold_price", "platform": "manual"}
 
 
 def test_broad_base_card_is_not_exact_premium_comp():
@@ -56,3 +56,21 @@ def test_no_price_is_created_by_hunter():
     result = hunt_premium_comps(target(), [])
     forbidden = {"estimated_value", "market_value", "max_bid", "profit", "roi"}
     assert forbidden.isdisjoint(result.keys())
+
+
+def test_unverified_sold_marker_is_not_a_comp():
+    row={"title":"Lucas Bergvall 2024-25 Topps Finest Autograph #RA-LB","market_state":"sold","price":550}
+    result=hunt_premium_comps(target(),[row])
+    assert result["exact_count"]==0
+    assert result["safe_for_valuation"] is False
+
+
+def test_missing_season_is_not_exact_premium():
+    row=sold("Lucas Bergvall Topps Finest Autograph #RA-LB",550)
+    result=hunt_premium_comps(target(),[row])
+    assert result["exact_count"]==0
+
+def test_graded_comp_is_not_exact_for_raw_target():
+    row=sold("Lucas Bergvall 2024-25 Topps Finest Autograph #RA-LB PSA 10",700)
+    result=hunt_premium_comps(target(),[row])
+    assert result["exact_count"]==0
