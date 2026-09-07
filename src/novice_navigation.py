@@ -84,6 +84,8 @@ def build_watch_view(candidates, limit=8):
             "primary_blocker": (item.get("decision_diagnostics") or [None])[0],
             "identity_status": item.get("exact_identity_gate_status"),
             "sold_comps": int(item.get("sold_comparable_count") or 0),
+            "sellability_label": item.get("liquidity_label") or item.get("sellability_label"),
+            "sellability_score": item.get("liquidity_score") or item.get("sellability_score"),
             "_priority": _num(item.get("opportunity_priority_score"), _num(item.get("deal_score"))),
         })
     rows.sort(key=lambda row: (-row["_priority"], row["title"]))

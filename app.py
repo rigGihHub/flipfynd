@@ -100,6 +100,7 @@ from src.momentum_source_registry import source_registry
 from src.momentum_card_bridge import bridge_momentum_to_cards
 from src.starshot_radar import build_starshot_radar
 from src.prediction_outcome_validation import build_prediction_outcome_validation
+from src.capital_efficiency_validation import build_capital_efficiency_validation
 from src.error_segmentation import build_error_segmentation
 from src.model_correction_candidates import build_model_correction_candidates
 from src.correction_simulator import build_correction_simulation
@@ -114,6 +115,7 @@ from src.buy_now_vs_wait import build_queue_buy_timing
 from src.price_drop_target import build_queue_price_drop_targets
 from src.buy_opportunity_gap import build_queue_opportunity_gaps
 from src.watch_priority import build_watch_priority_queue
+from src.simple_card_language import sold_evidence_text, identity_text, sellability_text
 from src.novice_navigation import (
     build_buy_view, build_ending_soon_view, build_watch_view, build_research_view,
 )
@@ -195,7 +197,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.11.86"
+APP_VERSION = "v0.11.88"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1946,7 +1948,9 @@ if st.session_state.get("results") is not None:
                     reasons.append(f"rimligt säljpris {card['expected_resale']:.0f} kr")
                 if card.get("expected_days") is not None:
                     reasons.append(f"verifierad säljtid ~{card['expected_days']:.0f} dagar")
-                reasons.append("exakt identitet tillräckligt verifierad")
+                reasons.append(identity_text(card.get("exact_identity_status")))
+                reasons.append(sold_evidence_text(card.get("sold_comparable_count")))
+                reasons.append(sellability_text(card.get("sellability_label"), card.get("sellability_score")))
                 st.caption(" · ".join(reasons))
                 if card.get("url"):
                     st.link_button("Öppna annonsen på Tradera ↗", card["url"], use_container_width=True)
@@ -1961,7 +1965,7 @@ if st.session_state.get("results") is not None:
         elif _main_view == "Slutar snart":
             ending_view = build_ending_soon_view(filtered)
             st.subheader("⏳ Slutar snart")
-            st.caption("Bara auktioner där sluttid och befintligt köpunderlag redan är tillräckligt verifierade.")
+            st.caption("Auktioner som slutar snart och där FlipFynd redan har tillräckligt underlag för att sätta ett säkert maxpris.")
             if ending_view["status"] == "EMPTY":
                 st.info("Inga verifierade auktioner som både slutar snart och klarar FlipFynds säkerhetskrav just nu.")
             for row in ending_view["rows"]:
@@ -1971,7 +1975,7 @@ if st.session_state.get("results") is not None:
                     st.markdown(f"**{row['title']}**")
                     st.write(f"{when} · nuvarande beslut: **{row.get('decision') or 'Ej bedömt'}**")
                     if row.get("total_cost") is not None and row.get("max_total_price") is not None:
-                        st.caption(f"Kostar nu {float(row['total_cost']):.0f} kr · befintligt maxpris {float(row['max_total_price']):.0f} kr")
+                        st.caption(f"Kostar nu {float(row['total_cost']):.0f} kr · betala högst {float(row['max_total_price']):.0f} kr")
                     if row.get("url"):
                         st.link_button("Öppna auktionen ↗", row["url"], use_container_width=True)
             st.caption(ending_view["note"])
@@ -1979,7 +1983,7 @@ if st.session_state.get("results") is not None:
         elif _main_view == "Bevaka":
             watch_view = build_watch_view(filtered)
             st.subheader("👀 Bevaka")
-            st.caption("Kort som är intressanta men ännu inte förtjänar ett KÖP.")
+            st.caption("Intressanta kort där något fortfarande saknas innan köp känns tillräckligt säkert.")
             if watch_view["status"] == "EMPTY":
                 st.info("Inga tydliga bevakningskandidater i den aktuella analysen.")
             for row in watch_view["rows"]:
@@ -1989,7 +1993,8 @@ if st.session_state.get("results") is not None:
                     if row.get("primary_blocker"):
                         st.caption("Det som stoppar köp nu: " + str(row["primary_blocker"]))
                     elif row.get("sold_comps", 0) < 2:
-                        st.caption("Det som stoppar köp nu: för tunt verifierat sold-underlag.")
+                        st.caption("Det som stoppar köp nu: för få verifierade försäljningar att jämföra med.")
+                    st.caption(identity_text(row.get("identity_status")) + " · " + sold_evidence_text(row.get("sold_comps")) + " · " + sellability_text(row.get("sellability_label"), row.get("sellability_score")))
                     if row.get("url"):
                         st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
             st.caption(watch_view["note"])
@@ -1997,7 +2002,7 @@ if st.session_state.get("results") is not None:
         else:
             research_view = build_research_view(filtered)
             st.subheader("🔬 Research")
-            st.caption("Ledtrådar att undersöka vidare. Research är aldrig samma sak som KÖP.")
+            st.caption("Saker som kan vara värda att kontrollera närmare. De är inte köpbeslut.")
             if research_view["status"] == "EMPTY":
                 st.info("Inga tydliga researchsignaler i den aktuella analysen.")
             for row in research_view["rows"]:

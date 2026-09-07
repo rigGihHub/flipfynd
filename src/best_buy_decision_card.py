@@ -43,7 +43,7 @@ def build_best_buy_decision_card(candidates):
         "max_total_price":_n(item.get("max_total_price")),"max_item_price":_n(item.get("max_item_price")),
         "shipping":_n(item.get("max_price_shipping_assumption") or item.get("frakt")),
         "capital_score":_n(ce.get("score")),"capital_label":ce.get("label") or "Ej bedömd",
-        "sale_probability":_n(item.get("sale_probability")),"exact_identity_support":True,
+        "sale_probability":_n(item.get("sale_probability")),"sold_comparable_count":int(item.get("sold_comparable_count") or 0),"sellability_label":item.get("liquidity_label") or item.get("sellability_label"),"sellability_score":_n(item.get("liquidity_score") or item.get("sellability_score")),"exact_identity_support":True,
         "exact_identity_status":item.get("exact_identity_gate_status") or "VERIFIERAD",
         "reasons":list(item.get("opportunity_reasons") or [])[:2],"url":item.get("lank")},
         "note":"Förstavalet rankas bara bland befintliga KÖP med beslutsstark exakt identitet och Capital Efficiency. Säljtid visas bara med verifierad sold-velocity."}
