@@ -24,6 +24,17 @@ def _title(item):
     return item.get("titel") or item.get("title") or "Okänd annons"
 
 
+def _shipping(item):
+    """Return explicit listing shipping, otherwise the existing cautious calculation assumption."""
+    raw = item.get("frakt")
+    if isinstance(raw, (int, float)) and raw >= 0:
+        return float(raw), True
+    assumed = item.get("max_price_shipping_assumption")
+    if isinstance(assumed, (int, float)) and assumed >= 0:
+        return float(assumed), False
+    return 29.0, False
+
+
 def build_buy_view(candidates):
     """Return the existing fail-closed best-buy card without changing its decision."""
     result = build_best_buy_decision_card(candidates or [])
@@ -48,6 +59,8 @@ def build_ending_soon_view(candidates, limit=8):
             "url": _url(item),
             "decision": item.get("beslut") or item.get("decision") or item.get("recommendation"),
             "total_cost": item.get("analysis_total_cost") or item.get("total_cost"),
+            "shipping": _shipping(item)[0],
+            "shipping_known": _shipping(item)[1],
             "max_total_price": item.get("dynamic_max_total_price") or item.get("max_total_price"),
             "remaining_minutes": ending.get("remaining_minutes"),
             "label": ending.get("label"),
@@ -80,6 +93,8 @@ def build_watch_view(candidates, limit=8):
             "url": _url(item),
             "decision": item.get("beslut") or item.get("decision"),
             "total_cost": item.get("analysis_total_cost") or item.get("total_cost"),
+            "shipping": _shipping(item)[0],
+            "shipping_known": _shipping(item)[1],
             "max_total_price": item.get("max_total_price"),
             "primary_blocker": (item.get("decision_diagnostics") or [None])[0],
             "identity_status": item.get("exact_identity_gate_status"),
@@ -163,6 +178,8 @@ def build_best_available_view(candidates, limit=3):
             "url": _url(item),
             "decision": decision or "EJ BESLUT",
             "total_cost": total_cost,
+            "shipping": _shipping(item)[0],
+            "shipping_known": _shipping(item)[1],
             "max_total_price": max_total_price,
             "net_profit": net_profit,
             "identity_status": item.get("exact_identity_gate_status") or item.get("exact_identity_status"),

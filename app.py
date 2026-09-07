@@ -197,7 +197,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.11.89"
+APP_VERSION = "v0.11.91"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1667,15 +1667,28 @@ else:
                     st.caption(f"⚠️ Luckor i sidtäckningen: {preview}{more}")
 
         if not market_overview["all_complete"]:
-            if st.button(
-                f"▶ Läs nästa sidblock – {fetch_scope_display(market_scope)}",
-                use_container_width=True,
-                disabled=_fetch_status == "running",
-                key="top_market_batch",
-                help=f"Läser nästa {MARKET_BATCH_PAGES} Tradera-sidor i ordning och sparar annonserna. Använd detta när du vill täcka mer än de nyaste annonserna.",
-            ):
-                start_fetch(market_fetch_category, True, "market_batch")
-                st.rerun()
+            st.caption("Välj direkt vilken marknad du vill läsa in mer av:")
+            batch_h, batch_f = st.columns(2)
+            with batch_h:
+                if st.button(
+                    "🏒 Läs nästa sidblock – Hockey",
+                    use_container_width=True,
+                    disabled=_fetch_status == "running" or coverage_h.get("complete", False),
+                    key="top_market_batch_hockey",
+                    help=f"Läser nästa {MARKET_BATCH_PAGES} Tradera-sidor för hockey och sparar annonserna.",
+                ):
+                    start_fetch("Hockey - NHL", True, "market_batch")
+                    st.rerun()
+            with batch_f:
+                if st.button(
+                    "⚽ Läs nästa sidblock – Fotboll",
+                    use_container_width=True,
+                    disabled=_fetch_status == "running" or coverage_f.get("complete", False),
+                    key="top_market_batch_football",
+                    help=f"Läser nästa {MARKET_BATCH_PAGES} Tradera-sidor för fotboll och sparar annonserna.",
+                ):
+                    start_fetch("Fotboll", True, "market_batch")
+                    st.rerun()
         else:
             st.success("Fullmarknadsscannern har nått slutet för både hockey och fotboll.")
 
@@ -1948,10 +1961,11 @@ if st.session_state.get("results") is not None:
             if simple_buy.get("status") == "READY" and simple_buy.get("card"):
                 card = simple_buy["card"]
                 st.success(f"### KÖP · {card['title']}")
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Kostar nu", f"{card['total_cost']:.0f} kr" if card.get("total_cost") is not None else "Ej säkert")
-                c2.metric("Betala högst", f"{card['max_total_price']:.0f} kr" if card.get("max_total_price") is not None else "Ej säkert")
-                c3.metric("Möjlig nettovinst", f"{card['net_profit']:+.0f} kr" if card.get("net_profit") is not None else "Ej säkert")
+                c2.metric("Frakt", f"{card['shipping']:.0f} kr" if card.get("shipping") is not None else "Ej säkert")
+                c3.metric("Betala högst", f"{card['max_total_price']:.0f} kr" if card.get("max_total_price") is not None else "Ej säkert")
+                c4.metric("Möjlig nettovinst", f"{card['net_profit']:+.0f} kr" if card.get("net_profit") is not None else "Ej säkert")
                 reasons=[]
                 if card.get("expected_resale") is not None:
                     reasons.append(f"rimligt säljpris {card['expected_resale']:.0f} kr")
@@ -1982,6 +1996,9 @@ if st.session_state.get("results") is not None:
                             facts=[]
                             if row.get("total_cost") is not None:
                                 facts.append(f"kostar {float(row['total_cost']):.0f} kr")
+                            if row.get("shipping") is not None:
+                                shipping_label = "frakt" if row.get("shipping_known") else "antagen frakt"
+                                facts.append(f"{shipping_label} {float(row['shipping']):.0f} kr")
                             if row.get("max_total_price") is not None:
                                 facts.append(f"betala högst {float(row['max_total_price']):.0f} kr")
                             if row.get("net_profit") is not None:
@@ -2012,7 +2029,8 @@ if st.session_state.get("results") is not None:
                     st.markdown(f"**{row['title']}**")
                     st.write(f"{when} · nuvarande beslut: **{row.get('decision') or 'Ej bedömt'}**")
                     if row.get("total_cost") is not None and row.get("max_total_price") is not None:
-                        st.caption(f"Kostar nu {float(row['total_cost']):.0f} kr · betala högst {float(row['max_total_price']):.0f} kr")
+                        shipping_part = f"frakt {float(row['shipping']):.0f} kr" if row.get("shipping_known") else f"antagen frakt {float(row.get('shipping') or 29):.0f} kr"
+                        st.caption(f"Kostar nu {float(row['total_cost']):.0f} kr · {shipping_part} · betala högst {float(row['max_total_price']):.0f} kr")
                     if row.get("url"):
                         st.link_button("Öppna auktionen ↗", row["url"], use_container_width=True)
             st.caption(ending_view["note"])
@@ -2996,6 +3014,10 @@ if st.session_state.get("results") is not None:
                 if valuation_display_safe else "Otillräckligt underlag"
             )
             quick_profit = f"{net_profit:.0f} kr" if valuation_display_safe else "Ej beräknad"
+            shipping_raw = item.get("frakt")
+            shipping_known = isinstance(shipping_raw, (int, float)) and shipping_raw >= 0
+            shipping_used = float(shipping_raw) if shipping_known else float(item.get("max_price_shipping_assumption") or 29.0)
+            shipping_display = f"{shipping_used:.0f} kr" if shipping_known else f"{shipping_used:.0f} kr*"
             result_html = f"""<div class="ff-result-head">
                     <div class="ff-result-topline">
                       <span class="ff-rank-chip">RANK #{index:02d}</span>
@@ -3006,6 +3028,7 @@ if st.session_state.get("results") is not None:
                     <div class="ff-result-sub">{decision_help}</div>
                     <div class="ff-quick-grid">
                       <div class="ff-quick-cell"><div class="ff-quick-label">{quick_price_label}</div><div class="ff-quick-value">{total_cost:.0f} kr</div></div>
+                      <div class="ff-quick-cell"><div class="ff-quick-label">FRAKT</div><div class="ff-quick-value">{shipping_display}</div></div>
                       <div class="ff-quick-cell"><div class="ff-quick-label">REALISTISKT VÄRDE</div><div class="ff-quick-value">{quick_resale}</div></div>
                       <div class="ff-quick-cell"><div class="ff-quick-label">MÖJLIG NETTOVINST</div><div class="ff-quick-value">{quick_profit}</div></div>
                       <div class="ff-quick-cell"><div class="ff-quick-label">SÄLJBARHET</div><div class="ff-quick-value">{item.get('liquidity_label', 'Ej bedömd')}</div></div>
@@ -3047,9 +3070,6 @@ if st.session_state.get("results") is not None:
                 )
                 st.caption("Visual Edge är en granskningssignal. Bildinnehållet är ännu inte automatiskt verifierat av modellen.")
 
-            shipping_raw = item.get("frakt")
-            shipping_known = isinstance(shipping_raw, (int, float)) and shipping_raw >= 0
-            shipping_used = float(shipping_raw) if shipping_known else 29.0
             if not shipping_known:
                 st.caption("⚠️ Frakten kunde inte läsas säkert. 29 kr används som kalkylantagande tills annonsen verifierats.")
             elif sale_type == "Auktion" and auction_buffer:
