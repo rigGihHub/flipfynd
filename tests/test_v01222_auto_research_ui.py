@@ -5,4 +5,3 @@ def test_auto_research_ui_is_low_click():
     assert "Automatisk research" in app
     assert "utan extra knapptryckningar" in app
     assert "Enda nästa steget" in app
-    assert 'APP_VERSION = "v0.12.22"' in app

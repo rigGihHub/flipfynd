@@ -54,6 +54,7 @@ from src.sold_gap_planner import build_sold_research_queue
 from src.sold_research_assist import build_exact_research_query, ebay_sold_search_url, build_manual_sold_row, build_quick_capture_defaults, research_progress
 from src.sold_acquisition_pipeline import acquire_sold_batch
 from src.market_overview import build_market_overview
+from src.market_coverage_autopilot import build_autopilot_plan, autopilot_progress_text
 from src.visual_detective import analyze_listing_images
 from src.visual_identity import build_visual_card_candidates
 from src.exact_comp_hunter import hunt_exact_comps
@@ -70,6 +71,8 @@ from src.finding_funnel_diagnostic import build_finding_funnel_diagnostic
 from src.find_more_cards import select_second_pass_indices
 from src.discovery_engine import build_discovery_map, select_discovery_indices
 from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_indices
+from src.budget_discovery_coverage import add_budget_coverage_indices, budget_coverage_summary
+from src.decision_tiers import build_decision_tiers
 from src.market_gap_hunter import build_market_gap_queue
 from src.active_supply_intelligence import verify_active_supply, classify_verified_supply
 from src.exact_card_supply import build_exact_supply_query, count_analyzed_exact_matches, verify_exact_query_supply, exact_identity_key
@@ -222,7 +225,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.22"
+APP_VERSION = "v0.12.24"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1183,11 +1186,21 @@ def analyze_data(
         coverage_slots=6,
         max_per_player=3,
     )
+    full_indices, budget_added = add_budget_coverage_indices(
+        candidates,
+        full_indices,
+        budget=max_price,
+        extra_slots=8,
+        hard_cap=38,
+        max_per_player=2,
+    )
     full_index_set = set(full_indices)
     debug["adaptive_full_selected"] = len(adaptive_indices)
     debug["adaptive_extra_full"] = max(0, len(adaptive_indices) - min(full_limit, len(candidates)))
     debug["coverage_full_selected"] = len(full_indices)
     debug["coverage_diversified_added"] = len(set(full_indices) - set(adaptive_indices))
+    debug["budget_coverage_added"] = len(budget_added)
+    debug["budget_coverage_bands"] = budget_coverage_summary(candidates, full_indices, max_price)
     discovery_map = build_discovery_map(candidates)
     debug["discovery_hunter_counts"] = discovery_map.get("hunter_counts", {})
     market_sweep_map = build_market_sweep_map(candidates)
@@ -1708,19 +1721,31 @@ else:
             freshness_icon = "🟢" if coverage.get("freshness") == "fresh" else ("🟡" if coverage.get("freshness") == "aging" else "🔴" if coverage.get("freshness") == "stale" else "⚪")
             st.caption(f"{freshness_icon} {coverage.get('freshness_label', 'Färskhet okänd')} • {format_freshness_age(coverage.get('age_hours'))}")
 
+    coverage_plan = build_autopilot_plan(coverage_h, coverage_f, refresh_h, refresh_f)
     main_refresh_left, main_refresh_right = st.columns([3, 1])
     with main_refresh_left:
-        st.caption("**Normalt behöver du bara göra detta:** uppdatera de nyaste annonserna och börja sedan söka fynd.")
+        st.caption("**En knapp räcker:** FlipFynd väljer själv om marknaden först behöver fräschas upp eller byggas ut.")
+        if coverage_plan.get("status") != "READY":
+            st.caption(coverage_plan.get("reason", ""))
+            progress_text = autopilot_progress_text(coverage_plan)
+            if progress_text:
+                st.caption(progress_text)
     with main_refresh_right:
-        if st.button(
-            "🔄 Uppdatera marknaden",
-            type="primary" if market_overview["status"] == "needs_update" else "secondary",
+        if coverage_plan.get("status") == "READY":
+            st.success("✅ Marknaden är redo")
+        elif st.button(
+            f"🔄 {coverage_plan.get('label')}",
+            type="primary",
             use_container_width=True,
             disabled=_fetch_status == "running",
-            key="top_refresh_all_simple",
-            help="Kontrollerar de nyaste Tradera-sidorna för både hockey och fotboll.",
+            key="top_market_autopilot",
+            help="FlipFynd väljer automatiskt rätt säkra marknadshämtning för hockey och fotboll.",
         ):
-            start_fetch("__all__", True, "incremental")
+            start_fetch(
+                coverage_plan.get("category") or "__all__",
+                True,
+                coverage_plan.get("mode") or "incremental",
+            )
             st.rerun()
 
     if _fetch_status == "running":
@@ -1728,8 +1753,8 @@ else:
 
     with st.expander("⚙️ Avancerad marknadshämtning"):
         st.caption(
-            "Här kan du bygga en större historik av Tradera-annonser eller fräscha upp äldre sidor. "
-            "För vanlig användning räcker knappen Uppdatera marknaden ovanför."
+            "Detta är manuella reservverktyg. Normalt ska du inte behöva använda dem; "
+            "marknadsknappen ovan väljer själv rätt nästa steg."
         )
         st.markdown("#### 📡 Läs in mer av marknaden")
         st.caption("Knappen nedan fortsätter bakåt sida för sida på Tradera. Bra när du vill bygga större marknadstäckning; inte nödvändigt för en snabb dagsaktuell sökning.")
@@ -2078,46 +2103,43 @@ if st.session_state.get("results") is not None:
                 st.info("**KÖP INGET JUST NU.** Inget kort har tillräckligt starkt underlag för ett säkert förstaval.")
                 st.caption(simple_buy.get("note") or "")
 
-            # Permanent Top 3: always show the strongest already-analysed cards,
-            # while preserving each card's existing KÖP/BEVAKA/SKIP decision.
-            best_available = build_best_available_view(st.session_state.get("results") or [], limit=3)
-            if best_available.get("status") == "READY":
-                st.markdown("### 🏆 Topp 3 i den här sökningen")
+            # Evidence-aware Top 3: separate opportunity potential from certainty.
+            decision_tiers = build_decision_tiers(st.session_state.get("results") or [], total_limit=3)
+            if decision_tiers.get("rows"):
+                st.markdown("### 🏆 Bästa alternativen i den här sökningen")
                 st.caption(
-                    "Det här är de tre starkaste analyserade alternativen i din sökning. "
-                    "Ett kort som står som BEVAKA eller SKIP blir inte ett KÖP bara för att det ligger i Topp 3."
+                    "FlipFynd skiljer nu på **fyndpotential** och **säkerhet**. "
+                    "Ett kort kan se lovande ut men ändå vara för osäkert för KÖP."
                 )
-                for rank, row in enumerate(best_available.get("rows") or [], start=1):
+                tier_labels = {
+                    "VERIFIED": "✅ Bästa verifierade fynd",
+                    "PROMISING": "🟡 Lovande – behöver verifieras",
+                    "REMAINDER": "⚪ Bästa av resten",
+                }
+                for rank, row in enumerate(decision_tiers.get("rows") or [], start=1):
                     with st.container(border=True):
-                        top = st.columns([4, 1])
+                        st.markdown(f"**{tier_labels.get(row.get('tier'), 'Alternativ')}**")
+                        top = st.columns([4,1])
                         top[0].markdown(f"**#{rank} {row['title']}**")
                         top[1].markdown(f"**{row.get('decision') or 'EJ BESLUT'}**")
+                        m1,m2=st.columns(2)
+                        m1.metric("Fyndpotential", f"{row.get('potential',0):.0f}/100")
+                        m2.metric("Säkerhet", f"{row.get('certainty',0):.0f}/100")
                         facts=[]
                         if row.get("total_cost") is not None:
                             facts.append(f"kostar {float(row['total_cost']):.0f} kr")
-                        if row.get("shipping") is not None:
-                            shipping_label = "frakt" if row.get("shipping_known") else "antagen frakt"
-                            facts.append(f"{shipping_label} {float(row['shipping']):.0f} kr")
                         if row.get("market_value") is not None:
-                            facts.append(f"uppskattat marknadsvärde {float(row['market_value']):.0f} kr")
+                            facts.append(f"verifieringsbart marknadsvärde {float(row['market_value']):.0f} kr")
                         else:
-                            facts.append("uppskattat marknadsvärde: otillräckligt underlag")
-                        if row.get("max_total_price") is not None:
-                            facts.append(f"betala högst {float(row['max_total_price']):.0f} kr")
-                        if row.get("net_profit") is not None:
-                            facts.append(f"möjlig vinst {float(row['net_profit']):+.0f} kr")
-                        if facts:
-                            st.write(" · ".join(facts))
-                        plain=[]
-                        plain.append(sold_evidence_text(row.get("sold_comps")))
-                        plain.append(identity_text(row.get("identity_status")))
-                        plain.append(sellability_text(row.get("sellability_label"), row.get("sellability_score")))
-                        st.caption(" · ".join(x for x in plain if x))
-                        if row.get("primary_blocker") and str(row.get("decision") or "").upper() not in {"KÖP", "KÖP (STARKT FYND)"}:
-                            st.caption("Varför inte KÖP: " + str(row["primary_blocker"]))
+                            facts.append("marknadsvärde: otillräckligt underlag")
+                        facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
+                        facts.append("exakt identitet redo" if row.get("identity_ok") else "identitet ej tillräckligt säker")
+                        st.write(" · ".join(facts))
+                        if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
+                            st.caption("Största blockerare: " + str(row["primary_blocker"]))
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
-                st.caption(best_available.get("note") or "")
+                st.caption(decision_tiers.get("note") or "")
 
         elif _main_view == "Slutar snart":
             ending_view = build_ending_soon_view(filtered)

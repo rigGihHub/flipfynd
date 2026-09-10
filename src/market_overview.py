@@ -54,7 +54,7 @@ def build_market_overview(
     elif "building" in states:
         status = "building"
         headline = "Marknaden är användbar men inte fullt inläst"
-        message = "Du kan söka fynd nu. Full marknadstäckning kan byggas vidare i avancerade inställningar."
+        message = "Du kan söka fynd nu. FlipFynd kan bygga ut marknadstäckningen automatiskt med en enda åtgärd."
     elif states == {"ready"}:
         status = "ready"
         headline = "Marknaden är tillräckligt färsk"
