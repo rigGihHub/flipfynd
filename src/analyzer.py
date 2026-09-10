@@ -14,6 +14,7 @@ from src.mispriced_rookie_hunter import build_mispriced_rookie_signal
 from src.misclassified_card_hunter import build_misclassified_card_signal
 from src.detail_evidence_fusion import build_detail_evidence_fusion
 from src.exact_identity_gate import build_exact_identity_gate
+from src.valuation_evidence_gate import build_valuation_evidence_gate
 from src.chase_knowledge_graph import build_chase_knowledge_graph
 from src.visual_edge import build_visual_edge
 from src.information_edge_hunter import build_information_edge_hunter
@@ -22,6 +23,7 @@ from src.comments import build_comment
 from src.market_analysis import build_market_analysis
 from src.player_market import get_player_database, match_player, normalize_player_name
 from src.pricing import normalize_shipping, total_acquisition_cost
+from src.shipping_truth import resolve_shipping
 from src.premium_comp_hunter import hunt_premium_comps
 from src.premium_valuation import build_exact_premium_valuation
 from src.decision_confidence_audit import audit_decision_confidence
@@ -2576,7 +2578,8 @@ def compute_max_purchase_price(
     if confidence < 0.28 or player_match_confidence == "low":
         return None
 
-    shipping = normalize_shipping(item.get("frakt"))
+    shipping_info = resolve_shipping(item)
+    shipping = shipping_info["shipping"]
     sale_type = detect_sale_type(item)
     risk_ceiling_factor = max(0.50, min(1.0, float(risk_ceiling_factor or 1.0)))
     risk_adjusted_expected = float(expected_resale or 0) * risk_ceiling_factor
@@ -2631,6 +2634,8 @@ def compute_max_purchase_price(
         "max_total_price": ceiling_total,
         "max_item_price": max_item_price,
         "assumed_shipping": round(shipping, 2),
+        "shipping_known": bool(shipping_info["known"]),
+        "shipping_source": shipping_info["source"],
         "sale_type": sale_type,
         "risk_ceiling_factor": round(risk_ceiling_factor, 2),
     }
@@ -3081,13 +3086,16 @@ def analyze_core(
     premium_comp_hunter = hunt_premium_comps(features, comparable_details)
     premium_exact_sold_count = int(premium_comp_hunter.get("exact_count", 0) or 0)
     premium_valuation = build_exact_premium_valuation(premium_comp_hunter.get("exact") or [])
-    sold_evidence_sufficient = (
-        comp_valuation_basis == "sold"
-        and sold_comparable_count >= 2
-        and valuation_confidence_score >= 60
-        and (not premium_identity or premium_exact_sold_count >= 2)
+    valuation_evidence_gate = build_valuation_evidence_gate(
+        comp_valuation_basis=comp_valuation_basis,
+        sold_comparable_count=sold_comparable_count,
+        valuation_confidence_score=valuation_confidence_score,
+        exact_identity_gate=exact_identity_gate,
+        premium_identity=premium_identity,
+        premium_exact_sold_count=premium_exact_sold_count,
     )
-    valuation_display_safe = not premium_identity or sold_evidence_sufficient
+    sold_evidence_sufficient = bool(valuation_evidence_gate.get("market_value_safe"))
+    valuation_display_safe = sold_evidence_sufficient
     valuation_display_note = ""
     if premium_identity and sold_evidence_sufficient and premium_valuation.get("safe_for_display"):
         # Premium economics must come from exact premium sales, not broad comps or rarity heuristics.
@@ -3103,6 +3111,14 @@ def analyze_core(
             f"{premium_valuation.get('count', 0)} exakta premiumförsäljningar; "
             "färskare avslut väger tyngre i basvärdet"
         )
+    if not premium_identity and not valuation_display_safe:
+        valuation_display_note = (
+            "FlipFynd visar inte uppskattat marknadsvärde eller Betala högst ännu. "
+            + "; ".join((valuation_evidence_gate.get("blockers") or [])[:3])
+            + "."
+        )
+        risks.append("marknadsvärde/maxpris dolt tills identitet och verifierad sold-data räcker")
+
     if premium_identity and not sold_evidence_sufficient:
         premium_bits = []
         if features.get("is_auto"):
@@ -3370,6 +3386,7 @@ def analyze_core(
     max_purchase = None if (
         features.get("is_lot")
         or not listing_quality["clear_buy_safe"]
+        or not valuation_evidence_gate.get("max_purchase_safe", False)
         or not decision_confidence_audit.get("allow_max_purchase", False)
         or not decision_conflict_audit.get("allow_max_purchase", False)
     ) else compute_max_purchase_price(
@@ -3604,6 +3621,10 @@ def analyze_core(
 
         "max_price_shipping_assumption":
             (max_purchase or {}).get("assumed_shipping"),
+        "max_price_shipping_known":
+            (max_purchase or {}).get("shipping_known", False),
+        "max_price_shipping_source":
+            (max_purchase or {}).get("shipping_source"),
         "auction_bid_strategy": auction_strategy,
 
         "player_name":
@@ -3821,6 +3842,11 @@ def analyze_core(
 
         "valuation_display_safe": valuation_display_safe,
         "valuation_display_note": valuation_display_note,
+        "valuation_evidence_gate_safe": valuation_evidence_gate.get("market_value_safe", False),
+        "valuation_evidence_gate_blockers": valuation_evidence_gate.get("blockers", []),
+        "valuation_evidence_gate_strengths": valuation_evidence_gate.get("strengths", []),
+        "valuation_evidence_gate_max_purchase_safe": valuation_evidence_gate.get("max_purchase_safe", False),
+        "valuation_evidence_gate_dynamic_max_bid_safe": valuation_evidence_gate.get("dynamic_max_bid_safe", False),
         "premium_identity_requires_sold_evidence": premium_identity,
         "premium_comp_hunter_active": premium_comp_hunter.get("active", False),
         "premium_comp_hunter_status": premium_comp_hunter.get("status"),

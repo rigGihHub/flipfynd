@@ -1,0 +1,22 @@
+# FlipFynd v0.11.96 – Sold Data Expansion
+
+- Externa sold-adaptrar bevarar nu explicit strukturerad kortidentitet från källfiler:
+  - player_name
+  - set_name
+  - season
+  - card_number
+  - parallel / serial
+  - grading
+  - explicit identity verification + källa
+- Identitet härleds fortfarande aldrig från fri rubriktext i sold-importen.
+- Detta löser en viktig flaskhals där externa verifierade avslut tidigare kunde importeras som riktiga försäljningar men tappa identitetsfälten och därför aldrig bli exact-ready.
+- Ny **Sold Data Expansion-kö** i Administration & data:
+  - visar analyserade kandidater som helt saknar exakt sold-underlag
+  - visar kandidater med endast 1 exakt verifierat avslut
+  - skiljer ut kandidater där kortidentiteten måste verifieras först
+  - visar kandidater som redan har minst 2 exakta verifierade avslut
+- Kön prioriterar luckor i sold-data före redan täckta kort och återanvänder endast befintlig opportunity/deal/rank-prioritet.
+- Ny CSV-mall för verifierade sold comps med strukturerade identitetsfält.
+- Ingen automatisk extern scraping eller påstådd live-integration har lagts till.
+- Aktiva/ended annonser räknas fortfarande aldrig som sålda utan explicit såld-evidens.
+- Ingen KÖP-, värderings-, maxpris- eller risktröskel ändras.

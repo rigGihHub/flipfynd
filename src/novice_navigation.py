@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from src.best_buy_decision_card import build_best_buy_decision_card
 from src.ending_soon_hunter import build_ending_soon_opportunity
+from src.shipping_truth import resolve_shipping
 
 
 def _num(value, default=0.0):
@@ -25,14 +26,20 @@ def _title(item):
 
 
 def _shipping(item):
-    """Return explicit listing shipping, otherwise the existing cautious calculation assumption."""
-    raw = item.get("frakt")
-    if isinstance(raw, (int, float)) and raw >= 0:
-        return float(raw), True
-    assumed = item.get("max_price_shipping_assumption")
-    if isinstance(assumed, (int, float)) and assumed >= 0:
-        return float(assumed), False
-    return 29.0, False
+    """Return shipping value plus provenance from the shared truth helper."""
+    info = resolve_shipping(item)
+    return info["shipping"], info["known"]
+
+def _market_value(item):
+    """Expose an estimated market value only when the existing valuation is display-safe."""
+    if not bool(item.get("valuation_display_safe", False)):
+        return None
+    raw = item.get("expected_resale")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def build_buy_view(candidates):
@@ -61,6 +68,7 @@ def build_ending_soon_view(candidates, limit=8):
             "total_cost": item.get("analysis_total_cost") or item.get("total_cost"),
             "shipping": _shipping(item)[0],
             "shipping_known": _shipping(item)[1],
+            "market_value": _market_value(item),
             "max_total_price": item.get("dynamic_max_total_price") or item.get("max_total_price"),
             "remaining_minutes": ending.get("remaining_minutes"),
             "label": ending.get("label"),
@@ -95,6 +103,7 @@ def build_watch_view(candidates, limit=8):
             "total_cost": item.get("analysis_total_cost") or item.get("total_cost"),
             "shipping": _shipping(item)[0],
             "shipping_known": _shipping(item)[1],
+            "market_value": _market_value(item),
             "max_total_price": item.get("max_total_price"),
             "primary_blocker": (item.get("decision_diagnostics") or [None])[0],
             "identity_status": item.get("exact_identity_gate_status"),
@@ -131,12 +140,15 @@ def build_research_view(candidates, limit=10):
             signals.append("Kan vara felklassificerad")
         if item.get("mispriced_rookie_candidate"):
             signals.append("Rookie-signal kräver verifiering")
+        if item.get("is_lot") or item.get("lot_count"):
+            signals.append("Lot/paket – kontrollera kort för kort")
         if not signals:
             continue
         rows.append({
             "title": _title(item),
             "url": _url(item),
             "decision": item.get("beslut") or item.get("decision"),
+            "market_value": _market_value(item),
             "signals": signals,
             "verify_first": list(item.get("information_edge_verify_first") or [])[:4],
             "_priority": _num(item.get("opportunity_priority_score"), _num(item.get("deal_score"))),
@@ -180,6 +192,7 @@ def build_best_available_view(candidates, limit=3):
             "total_cost": total_cost,
             "shipping": _shipping(item)[0],
             "shipping_known": _shipping(item)[1],
+            "market_value": _market_value(item),
             "max_total_price": max_total_price,
             "net_profit": net_profit,
             "identity_status": item.get("exact_identity_gate_status") or item.get("exact_identity_status"),

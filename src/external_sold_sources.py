@@ -48,6 +48,24 @@ COMMON_MAP = {
     "sold_price_sek": ("sold_price_sek", "pris_sek"),
     "sold_total_price_sek": ("sold_total_price_sek", "total_sek"),
     "fx_rate_to_sek": ("fx_rate_to_sek", "sek_rate"),
+    # Preserve explicit structured card identity from exports. These fields are
+    # never inferred from title text by the adapter.
+    "player_name": ("player_name", "player", "athlete"),
+    "set_name": ("set_name", "set", "product"),
+    "season": ("season", "year"),
+    "card_number": ("card_number", "checklist_number", "card_no"),
+    "parallel": ("parallel", "variant"),
+    "serial_denominator": ("serial_denominator", "serial_number"),
+    "grading_company": ("grading_company", "grader"),
+    "grade": ("grade",),
+    "identity_verified": ("identity_verified", "exact_identity_confirmed"),
+    "identity_evidence_source": ("identity_evidence_source", "identity_source"),
+    "is_parallel": ("is_parallel",),
+    "is_serial_numbered": ("is_serial_numbered",),
+    "is_graded": ("is_graded",),
+    "is_rookie": ("is_rookie",),
+    "is_auto": ("is_auto",),
+    "is_patch": ("is_patch",),
 }
 
 ADAPTERS = {

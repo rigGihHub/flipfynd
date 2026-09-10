@@ -3,7 +3,7 @@ from pathlib import Path
 
 def test_primary_card_keeps_core_decision_fields():
     text = Path('app.py').read_text(encoding='utf-8')
-    assert 'REALISTISKT VÄRDE' in text
+    assert 'UPPSKATTAT MARKNADSVÄRDE' in text
     assert 'MÖJLIG NETTOVINST' in text
     assert 'SÄLJBARHET' in text
     assert '**Varför?**' in text
