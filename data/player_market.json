@@ -7,7 +7,11 @@
     },
     "Macklin Celebrini": {
       "score": 98,
-      "tier": "elite"
+      "tier": "elite",
+      "career_status": "active_star",
+      "era": "modern",
+      "career_context_source": "NHL 2026",
+      "career_context_verified": true
     },
     "Ivan Demidov": {
       "score": 97,
@@ -15,11 +19,19 @@
     },
     "Connor McDavid": {
       "score": 96,
-      "tier": "elite"
+      "tier": "elite",
+      "career_status": "active_superstar",
+      "era": "modern",
+      "career_context_source": "NHL/player-market context",
+      "career_context_verified": true
     },
     "Wayne Gretzky": {
       "score": 94,
-      "tier": "elite"
+      "tier": "elite",
+      "career_status": "retired_legend",
+      "era": "late_1970s_1990s",
+      "career_context_source": "NHL",
+      "career_context_verified": true
     },
     "Matthew Schaefer": {
       "score": 94,
@@ -209,7 +221,11 @@
   "football": {
     "Lamine Yamal": {
       "score": 100,
-      "tier": "elite"
+      "tier": "elite",
+      "career_status": "active_young_star",
+      "era": "modern",
+      "career_context_source": "UEFA 2026",
+      "career_context_verified": true
     },
     "Kylian Mbappé": {
       "score": 98,
@@ -225,11 +241,19 @@
     },
     "Lionel Messi": {
       "score": 95,
-      "tier": "elite"
+      "tier": "elite",
+      "career_status": "active_legend",
+      "era": "modern",
+      "career_context_source": "UEFA 2026",
+      "career_context_verified": true
     },
     "Cristiano Ronaldo": {
       "score": 94,
-      "tier": "elite"
+      "tier": "elite",
+      "career_status": "active_legend",
+      "era": "modern",
+      "career_context_source": "UEFA 2026",
+      "career_context_verified": true
     },
     "Vinícius Júnior": {
       "score": 93,
@@ -427,5 +451,7 @@
     "Estevao": "Estêvão",
     "Julian Alvarez": "Julián Alvarez",
     "Viktor Gyokeres": "Viktor Gyökeres"
-  }
+  },
+  "career_context_version": "2026-09-11",
+  "career_context_policy": "Only explicit verified metadata may drive career/era context; missing players stay unknown."
 }

@@ -4,6 +4,7 @@ import unicodedata
 from difflib import SequenceMatcher
 from functools import lru_cache
 from pathlib import Path
+from src.player_knowledge import get_player_knowledge
 
 DATA_FILE = Path(__file__).resolve().parents[1] / 'data' / 'player_market.json'
 
@@ -103,3 +104,21 @@ def match_player(title, sport):
             return {'name': best_name, 'confidence': 'medium', 'match_type': 'fuzzy', 'ratio': round(best_ratio, 3)}
 
     return {'name': None, 'confidence': 'low', 'match_type': 'none', 'ratio': 0.0}
+
+
+def get_player_context(name, sport):
+    """Return explicit source-backed context; never infer missing career status."""
+    canonical = normalize_player_name(name)
+    kb = get_player_knowledge(canonical, sport)
+    raw = load_player_market().get('football' if sport == 'football' else 'hockey', {}).get(canonical or '', {})
+    return {
+        'career_status': kb.get('career_status') or raw.get('career_status'),
+        'era': kb.get('era') or raw.get('era'),
+        'activity_status': kb.get('activity_status'),
+        'position': kb.get('position'),
+        'team': kb.get('team'),
+        'date_of_birth': kb.get('date_of_birth'),
+        'career_context_source': kb.get('source_name') or raw.get('career_context_source'),
+        'career_context_source_url': kb.get('source_url'),
+        'career_context_verified': bool(kb.get('verified') or raw.get('career_context_verified', False)),
+    }

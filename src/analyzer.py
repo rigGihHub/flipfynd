@@ -7,6 +7,13 @@ from src.card_intelligence import build_card_intelligence
 from src.card_knowledge_library import explain_library_match
 from src.variant_hierarchy import build_variant_hierarchy
 from src.collector_intelligence import build_collector_intelligence_matrix
+from src.collector_worth_profile import build_collector_worth_profile
+from src.card_hierarchy_engine import build_card_hierarchy_engine
+from src.player_card_hierarchy import build_player_card_hierarchy
+from src.career_era_context import build_career_era_context
+from src.player_market import get_player_context
+from src.player_knowledge import get_player_knowledge, derive_lifecycle_context
+from src.rookie_window_context import build_rookie_window_context
 from src.player_card_demand import build_player_card_demand
 from src.valuable_card_knowledge import build_valuable_card_knowledge
 from src.rookie_importance import build_player_rookie_importance
@@ -3409,6 +3416,23 @@ def analyze_core(
     card_intelligence = build_card_intelligence(market_knowledge_signals, features)
     card_knowledge_library = explain_library_match(market_knowledge_signals)
     variant_hierarchy = build_variant_hierarchy(market_knowledge_signals, features)
+    card_hierarchy = build_card_hierarchy_engine(
+        sport=sport,
+        signals=market_knowledge_signals,
+        features=features,
+    )
+    player_card_hierarchy = build_player_card_hierarchy(
+        player_name=profile.get("name"),
+        player_market_score=profile.get("score", 0),
+        player_market_tier=profile.get("tier"),
+        card_hierarchy_score=card_hierarchy.get("score", 0),
+        card_hierarchy_tier=card_hierarchy.get("tier"),
+        card_hierarchy_role=card_hierarchy.get("role"),
+        is_rookie=features.get("is_rookie", False),
+        sold_comparable_count=sold_comparable_count,
+        valuation_confidence_score=valuation_confidence_score,
+        identity_confidence_score=features.get("identity_confidence_score", 0),
+    )
     collector_intelligence = build_collector_intelligence_matrix(
         player_name=profile.get("name"),
         player_market_score=profile.get("score", 0),
@@ -3457,6 +3481,37 @@ def analyze_core(
         sold_comparable_count=sold_comparable_count,
         identity_confidence_score=features.get("identity_confidence_score", 0),
         valuation_confidence_score=valuation_confidence_score,
+    )
+    player_knowledge = get_player_knowledge(profile.get("name"), sport)
+    player_lifecycle = derive_lifecycle_context(player_knowledge)
+    rookie_window_context = build_rookie_window_context(
+        features=features,
+        player_knowledge=player_knowledge,
+        player_market_score=profile.get("score", 0),
+        player_market_tier=profile.get("tier"),
+    )
+    career_era_context = build_career_era_context(
+        player_name=profile.get("name"),
+        context=get_player_context(profile.get("name"), sport),
+        is_rookie=features.get("is_rookie", False),
+        lifecycle=player_lifecycle,
+    )
+
+    collector_worth = build_collector_worth_profile(
+        player_name=profile.get("name"),
+        player_market_score=profile.get("score", 0),
+        variant_rung=variant_hierarchy.get("variant_rung", 0),
+        rookie_importance_score=rookie_importance.get("importance_score", 0),
+        rookie_importance_matched=rookie_importance.get("matched", False),
+        valuable_structure_score=valuable_card_knowledge.get("structure_score", 0),
+        valuable_tags=valuable_card_knowledge.get("tags", []),
+        sold_comparable_count=sold_comparable_count,
+        valuation_confidence_score=valuation_confidence_score,
+        identity_confidence_score=features.get("identity_confidence_score", 0),
+        liquidity_score=liquidity,
+        features=features,
+        hierarchy_score=card_hierarchy.get("score", 0),
+        hierarchy_tier=card_hierarchy.get("tier"),
     )
     hidden_find = compute_hidden_find_signal(
         item, features, listing_quality, market_knowledge_signals
@@ -3721,6 +3776,68 @@ def analyze_core(
         "collector_intelligence_cautions": collector_intelligence.get("cautions", []),
         "collector_intelligence_next_action": collector_intelligence.get("next_action"),
         "collector_intelligence_note": collector_intelligence.get("note"),
+        "card_hierarchy_score": card_hierarchy.get("score", 0),
+        "card_hierarchy_tier": card_hierarchy.get("tier"),
+        "card_hierarchy_tier_label": card_hierarchy.get("tier_label"),
+        "card_hierarchy_role": card_hierarchy.get("role"),
+        "card_hierarchy_role_label": card_hierarchy.get("role_label"),
+        "card_hierarchy_reasons": card_hierarchy.get("reasons", []),
+        "card_hierarchy_hobby_traps": card_hierarchy.get("hobby_traps", []),
+        "card_hierarchy_note": card_hierarchy.get("note"),
+        "player_card_hierarchy_score": player_card_hierarchy.get("score", 0),
+        "player_card_hierarchy_confidence_score": player_card_hierarchy.get("confidence_score", 0),
+        "player_card_hierarchy_profile": player_card_hierarchy.get("profile"),
+        "player_card_hierarchy_label": player_card_hierarchy.get("label"),
+        "player_card_hierarchy_player_band": player_card_hierarchy.get("player_band"),
+        "player_card_hierarchy_player_band_label": player_card_hierarchy.get("player_band_label"),
+        "player_card_hierarchy_reasons": player_card_hierarchy.get("reasons", []),
+        "player_card_hierarchy_cautions": player_card_hierarchy.get("cautions", []),
+        "player_card_hierarchy_hobby_traps": player_card_hierarchy.get("hobby_traps", []),
+        "player_card_hierarchy_career_status": player_card_hierarchy.get("career_status"),
+        "player_card_hierarchy_career_status_note": player_card_hierarchy.get("career_status_note"),
+        "player_card_hierarchy_note": player_card_hierarchy.get("note"),
+        "career_status": career_era_context.get("career_status"),
+        "career_status_label": career_era_context.get("career_status_label"),
+        "career_era": career_era_context.get("era"),
+        "career_era_label": career_era_context.get("era_label"),
+        "career_context_verified": career_era_context.get("verified", False),
+        "career_context_source": career_era_context.get("source"),
+        "career_context_reasons": career_era_context.get("reasons", []),
+        "career_context_cautions": career_era_context.get("cautions", []),
+        "player_knowledge_verified": player_knowledge.get("verified", False),
+        "player_activity_status": career_era_context.get("activity_status"),
+        "player_position": career_era_context.get("position"),
+        "player_team": career_era_context.get("team"),
+        "player_date_of_birth": career_era_context.get("date_of_birth"),
+        "player_age": career_era_context.get("age"),
+        "player_lifecycle_stage": career_era_context.get("lifecycle_stage"),
+        "player_lifecycle_label": career_era_context.get("lifecycle_label"),
+        "player_knowledge_source_url": career_era_context.get("source_url"),
+        "rookie_window_card_year": rookie_window_context.get("card_year"),
+        "rookie_window_age_at_card_season": rookie_window_context.get("age_at_card_season"),
+        "rookie_window_label": rookie_window_context.get("career_window_label"),
+        "rookie_window_status": rookie_window_context.get("career_window"),
+        "rookie_claim_support": rookie_window_context.get("rookie_claim_support"),
+        "player_archetype": rookie_window_context.get("player_archetype"),
+        "player_archetype_label": rookie_window_context.get("player_archetype_label"),
+        "rookie_window_research_priority": rookie_window_context.get("research_priority"),
+        "rookie_window_reasons": rookie_window_context.get("reasons", []),
+        "rookie_window_cautions": rookie_window_context.get("cautions", []),
+        "official_rookie_year": rookie_window_context.get("official_rookie_year"),
+        "official_rookie_year_verified": rookie_window_context.get("official_rookie_year_verified", False),
+        "collector_worth_score": collector_worth.get("score", 0),
+        "collector_worth_verdict": collector_worth.get("verdict"),
+        "collector_worth_label": collector_worth.get("label"),
+        "collector_worth_value_basis": collector_worth.get("value_basis", []),
+        "collector_worth_strengths": collector_worth.get("strengths", []),
+        "collector_worth_cautions": collector_worth.get("cautions", []),
+        "collector_worth_hobby_traps": collector_worth.get("hobby_traps", []),
+        "collector_worth_player_strength": collector_worth.get("player_strength", 0),
+        "collector_worth_structure_strength": collector_worth.get("structure_strength", 0),
+        "collector_worth_market_proof_strength": collector_worth.get("market_proof_strength", 0),
+        "collector_worth_identity_strength": collector_worth.get("identity_strength", 0),
+        "collector_worth_liquidity_strength": collector_worth.get("liquidity_strength", 0),
+        "collector_worth_note": collector_worth.get("note"),
         "player_card_demand_score": player_card_demand.get("score", 0),
         "player_card_demand_confidence_score": player_card_demand.get("confidence_score", 0),
         "player_card_demand_profile": player_card_demand.get("profile"),

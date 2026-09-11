@@ -5,6 +5,8 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from src.player_knowledge import knowledge_coverage
+
 
 import streamlit as st
 
@@ -55,6 +57,7 @@ from src.sold_research_assist import build_exact_research_query, ebay_sold_searc
 from src.sold_acquisition_pipeline import acquire_sold_batch
 from src.market_overview import build_market_overview
 from src.market_coverage_autopilot import build_autopilot_plan, autopilot_progress_text
+from src.autopilot_compat import build_autopilot_plan_compat
 from src.visual_detective import analyze_listing_images
 from src.visual_identity import build_visual_card_candidates
 from src.exact_comp_hunter import hunt_exact_comps
@@ -73,6 +76,7 @@ from src.discovery_engine import build_discovery_map, select_discovery_indices
 from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_indices
 from src.budget_discovery_coverage import add_budget_coverage_indices, budget_coverage_summary
 from src.segment_discovery_coverage import add_segment_coverage_indices, segment_coverage_summary
+from src.segment_yield_learning import build_segment_yield_report, best_observed_segments
 from src.decision_tiers import build_decision_tiers
 from src.market_gap_hunter import build_market_gap_queue
 from src.active_supply_intelligence import verify_active_supply, classify_verified_supply
@@ -226,7 +230,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.26"
+APP_VERSION = "v0.12.35"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1732,7 +1736,8 @@ else:
             freshness_icon = "🟢" if coverage.get("freshness") == "fresh" else ("🟡" if coverage.get("freshness") == "aging" else "🔴" if coverage.get("freshness") == "stale" else "⚪")
             st.caption(f"{freshness_icon} {coverage.get('freshness_label', 'Färskhet okänd')} • {format_freshness_age(coverage.get('age_hours'))}")
 
-    coverage_plan = build_autopilot_plan(
+    coverage_plan = build_autopilot_plan_compat(
+        build_autopilot_plan,
         coverage_h,
         coverage_f,
         refresh_h,
@@ -2157,11 +2162,107 @@ if st.session_state.get("results") is not None:
                         facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
                         facts.append("exakt identitet redo" if row.get("identity_ok") else "identitet ej tillräckligt säker")
                         st.write(" · ".join(facts))
+                        if row.get("collector_worth_label"):
+                            st.markdown(
+                                f"**Samlarprofil: {row.get('collector_worth_label')}** "
+                                f"({row.get('collector_worth_score', 0):.0f}/100)"
+                            )
+                            if row.get("card_hierarchy_tier_label"):
+                                st.caption(
+                                    f"Hobbyhierarki: **{row.get('card_hierarchy_tier_label')}** · "
+                                    f"{row.get('card_hierarchy_role_label') or 'okänd roll'} · "
+                                    f"{row.get('card_hierarchy_score', 0):.0f}/100"
+                                )
+                            if row.get("player_card_hierarchy_label"):
+                                st.caption(
+                                    f"Spelare × kort: **{row.get('player_card_hierarchy_label')}** · "
+                                    f"{row.get('player_card_hierarchy_score', 0):.0f}/100 · "
+                                    f"evidens {row.get('player_card_hierarchy_confidence_score', 0):.0f}/100"
+                                )
+                            if row.get("career_context_verified") and row.get("career_status_label"):
+                                era = f" · {row.get('career_era_label')}" if row.get("career_era_label") else ""
+                                st.caption(f"Karriärkontext: **{row.get('career_status_label')}**{era}")
+                            if row.get("player_archetype_label"):
+                                st.caption(
+                                    f"Spelararketyp: **{row.get('player_archetype_label')}**"
+                                    + (f" · {row.get('rookie_window_label')}" if row.get("rookie_window_label") else "")
+                                )
+                            if row.get("rookie_claim_support") == "CHRONOLOGICALLY_SUSPICIOUS":
+                                st.warning("RC/rookie-anspråket ser kronologiskt tveksamt ut – verifiera checklist/program innan värdering.")
+                            if row.get("player_knowledge_verified"):
+                                player_bits=[]
+                                if row.get("player_lifecycle_label"):
+                                    player_bits.append(str(row.get("player_lifecycle_label")))
+                                if row.get("player_age") is not None:
+                                    player_bits.append(f"{int(row.get('player_age'))} år")
+                                if row.get("player_position"):
+                                    player_bits.append(f"pos {row.get('player_position')}")
+                                if row.get("player_team"):
+                                    player_bits.append(str(row.get("player_team")))
+                                if player_bits:
+                                    st.caption("Spelarkunskap: " + " · ".join(player_bits))
+                            basis=row.get("collector_worth_value_basis") or []
+                            if basis:
+                                st.caption("Värdedrivare: " + " · ".join(str(x) for x in basis[:5]))
+                            traps=row.get("collector_worth_hobby_traps") or []
+                            if traps:
+                                st.caption("⚠️ Samlarfälla: " + str(traps[0]))
+                            with st.expander("Varför är kortet samlarvärt – eller inte?", expanded=False):
+                                for reason in row.get("card_hierarchy_reasons") or []:
+                                    st.write("🧭 " + str(reason))
+                                for trap in row.get("card_hierarchy_hobby_traps") or []:
+                                    st.write("⚠️ " + str(trap))
+                                for reason in row.get("player_card_hierarchy_reasons") or []:
+                                    st.write("👤×🃏 " + str(reason))
+                                for caution in row.get("player_card_hierarchy_cautions") or []:
+                                    st.write("⚠️ " + str(caution))
+                                for trap in row.get("player_card_hierarchy_hobby_traps") or []:
+                                    st.write("🧠 " + str(trap))
+                                for reason in row.get("rookie_window_reasons") or []:
+                                    st.write("🕒 " + str(reason))
+                                for caution in row.get("rookie_window_cautions") or []:
+                                    st.write("⚠️ " + str(caution))
+                                for reason in row.get("collector_worth_strengths") or []:
+                                    st.write("✅ " + str(reason))
+                                for caution in row.get("collector_worth_cautions") or []:
+                                    st.write("⚠️ " + str(caution))
+                                for trap in row.get("collector_worth_hobby_traps") or []:
+                                    st.write("🧠 " + str(trap))
+                                st.caption(
+                                    "Samlarprofilen är inte ett pris. Marknadsvärde kräver fortfarande relevanta verifierade SOLD."
+                                )
                         if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
                             st.caption("Största blockerare: " + str(row["primary_blocker"]))
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
                 st.caption(decision_tiers.get("note") or "")
+
+                segment_yield = build_segment_yield_report(
+                    st.session_state.get("results") or [],
+                    budget=max_price,
+                    minimum_hits=8,
+                )
+                if segment_yield.get("rows"):
+                    with st.expander("📊 Vilka delar av marknaden ger bäst fyndunderlag?", expanded=False):
+                        st.caption(
+                            "Detta är observerad yield från den aktuella analysen. "
+                            "FlipFynd ändrar inte KÖP-regler eller analysbudget automatiskt."
+                        )
+                        strongest = best_observed_segments(segment_yield, limit=3)
+                        if strongest:
+                            for srow in strongest:
+                                st.write(f"**{srow['segment']}**")
+                                st.caption(
+                                    f"{srow['hits']} analyserade · {srow['verified']} verifierade fynd · "
+                                    f"{srow['promising']} lovande · {srow['safe_value']} med säkert värde · "
+                                    f"{srow['evidence_status']}"
+                                )
+                        else:
+                            st.info(
+                                f"Inget segment har ännu minst {segment_yield.get('minimum_hits', 8)} analyserade kort. "
+                                "FlipFynd samlar mer underlag innan segment jämförs."
+                            )
+                        st.caption(segment_yield.get("note") or "")
 
         elif _main_view == "Slutar snart":
             ending_view = build_ending_soon_view(filtered)
@@ -5518,3 +5619,16 @@ with st.expander("⚙️ Administration & data"):
     if st.session_state.get("debug"):
         with st.expander("Teknisk analysstatistik"):
             st.json(st.session_state["debug"])
+        try:
+            from src.player_market import load_player_market
+            kb_cov = knowledge_coverage(load_player_market())
+            with st.expander("Spelarkunskap – täckning", expanded=False):
+                for sport_key, label in (("hockey","Hockey"),("football","Fotboll")):
+                    info=kb_cov.get(sport_key,{})
+                    st.caption(
+                        f"{label}: {info.get('covered_players',0)}/{info.get('known_players',0)} spelare "
+                        f"({info.get('coverage_pct',0):.1f} %) har verifierad Player Knowledge."
+                    )
+                st.caption("Saknad spelarkunskap gissas inte; den lämnas okänd tills den verifierats.")
+        except Exception:
+            pass

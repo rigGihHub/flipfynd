@@ -7,4 +7,3 @@ def test_segment_coverage_runs_after_budget_coverage():
     assert pos_budget > 0
     assert pos_segment > pos_budget
     assert 'debug["segment_coverage_added"]' in app
-    assert 'APP_VERSION = "v0.12.26"' in app

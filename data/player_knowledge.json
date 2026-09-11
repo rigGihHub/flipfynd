@@ -1,0 +1,142 @@
+{
+  "version": "2026-09-11",
+  "policy": "Only explicit source-backed factual metadata is stored. Missing fields stay unknown.",
+  "hockey": {
+    "Wayne Gretzky": {
+      "activity_status": "retired",
+      "career_status": "retired_legend",
+      "era": "late_1970s_1990s",
+      "position": "C",
+      "source_name": "NHL",
+      "verified_at": "2026-09-11"
+    },
+    "Connor McDavid": {
+      "activity_status": "active",
+      "career_status": "active_superstar",
+      "era": "modern",
+      "position": "C",
+      "source_name": "NHL/player-market context",
+      "verified_at": "2026-09-11"
+    },
+    "Macklin Celebrini": {
+      "activity_status": "active",
+      "career_status": "active_star",
+      "era": "modern",
+      "position": "C",
+      "source_name": "NHL 2026",
+      "verified_at": "2026-09-11"
+    },
+    "Connor Bedard": {
+      "activity_status": "active",
+      "era": "modern",
+      "date_of_birth": "2005-07-17",
+      "position": "C",
+      "team": "Chicago Blackhawks",
+      "source_name": "NHL.com",
+      "source_url": "https://www.nhl.com/news/topic/free-agency/connor-bedard-signs-five-year-contract-with-chicago-blackhawks",
+      "verified_at": "2026-09-11"
+    },
+    "Cale Makar": {
+      "activity_status": "active",
+      "era": "modern",
+      "position": "D",
+      "team": "Colorado Avalanche",
+      "source_name": "NHL.com",
+      "source_url": "https://www.nhl.com/news/cale-makar-signs-eight-year-contract-with-colorado-avalanche",
+      "verified_at": "2026-09-11"
+    },
+    "Alex Ovechkin": {
+      "activity_status": "active",
+      "era": "modern",
+      "position": "LW",
+      "team": "Washington Capitals",
+      "source_name": "NHL.com",
+      "source_url": "https://www.nhl.com/news/alex-ovechkin-to-return-for-2026-2027-season",
+      "verified_at": "2026-09-11"
+    },
+    "Sidney Crosby": {
+      "activity_status": "active",
+      "era": "modern",
+      "position": "C",
+      "team": "Pittsburgh Penguins",
+      "source_name": "NHL.com/sv",
+      "source_url": "https://www.nhl.com/sv/news/sidney-crosby-vill-fortsatta-spela-ett-par-ar-till-med-penguins",
+      "verified_at": "2026-09-11"
+    },
+    "Nathan MacKinnon": {
+      "activity_status": "active",
+      "era": "modern",
+      "position": "C",
+      "team": "Colorado Avalanche",
+      "source_name": "NHL.com",
+      "source_url": "https://www.nhl.com/avalanche/news/nathan-mackinnon-voted-hart-trophy-finalist",
+      "verified_at": "2026-09-11"
+    }
+  },
+  "football": {
+    "Lamine Yamal": {
+      "activity_status": "active",
+      "career_status": "active_young_star",
+      "era": "modern",
+      "date_of_birth": "2007-07-13",
+      "position": "F",
+      "team": "Barcelona",
+      "source_name": "UEFA.com",
+      "source_url": "https://www.uefa.com/uefachampionsleague/clubs/players/250176450/",
+      "verified_at": "2026-09-11"
+    },
+    "Kylian Mbappé": {
+      "activity_status": "active",
+      "era": "modern",
+      "date_of_birth": "1998-12-20",
+      "position": "F",
+      "team": "Real Madrid",
+      "source_name": "UEFA.com",
+      "source_url": "https://www.uefa.com/uefachampionsleague/clubs/players/250076574--kylian-mbappe/",
+      "verified_at": "2026-09-11"
+    },
+    "Jude Bellingham": {
+      "activity_status": "active",
+      "era": "modern",
+      "date_of_birth": "2003-06-29",
+      "position": "M",
+      "team": "Real Madrid",
+      "source_name": "UEFA.com",
+      "source_url": "https://www.uefa.com/uefachampionsleague/clubs/players/250128377--jude-bellingham/",
+      "verified_at": "2026-09-11"
+    },
+    "Vinícius Júnior": {
+      "activity_status": "active",
+      "era": "modern",
+      "date_of_birth": "2000-07-12",
+      "position": "F",
+      "team": "Real Madrid",
+      "source_name": "UEFA.com",
+      "source_url": "https://www.uefa.com/uefachampionsleague/clubs/players/250121533--vinicius-junior/",
+      "verified_at": "2026-09-11"
+    },
+    "Erling Haaland": {
+      "activity_status": "active",
+      "era": "modern",
+      "position": "F",
+      "team": "Manchester City",
+      "source_name": "UEFA.com",
+      "source_url": "https://www.uefa.com/news/0268-11f9321e7599-fde3dd4a7bd0-1000--haaland-in-champions-league/",
+      "verified_at": "2026-09-11"
+    },
+    "Lionel Messi": {
+      "activity_status": "active",
+      "career_status": "active_legend",
+      "era": "modern",
+      "source_name": "UEFA/player-market context",
+      "verified_at": "2026-09-11"
+    },
+    "Cristiano Ronaldo": {
+      "activity_status": "active",
+      "career_status": "active_legend",
+      "era": "modern",
+      "source_name": "UEFA/player-market context",
+      "verified_at": "2026-09-11"
+    }
+  }
+}

@@ -63,6 +63,23 @@ def _base_row(item):
         "shipping":item.get("frakt"),
         "shipping_known":item.get("shipping_known"),
         "primary_blocker":blockers[0] if blockers else None,
+        "collector_worth_score":_n(item.get("collector_worth_score")),
+        "collector_worth_label":item.get("collector_worth_label"),
+        "collector_worth_value_basis":list(item.get("collector_worth_value_basis") or []),
+        "collector_worth_strengths":list(item.get("collector_worth_strengths") or []),
+        "collector_worth_cautions":list(item.get("collector_worth_cautions") or []),
+        "collector_worth_hobby_traps":list(item.get("collector_worth_hobby_traps") or []),
+        "card_hierarchy_score":_n(item.get("card_hierarchy_score")),
+        "card_hierarchy_tier_label":item.get("card_hierarchy_tier_label"),
+        "card_hierarchy_role_label":item.get("card_hierarchy_role_label"),
+        "card_hierarchy_reasons":list(item.get("card_hierarchy_reasons") or []),
+        "card_hierarchy_hobby_traps":list(item.get("card_hierarchy_hobby_traps") or []),
+        "player_card_hierarchy_score":_n(item.get("player_card_hierarchy_score")),
+        "player_card_hierarchy_confidence_score":_n(item.get("player_card_hierarchy_confidence_score")),
+        "player_card_hierarchy_label":item.get("player_card_hierarchy_label"),
+        "player_card_hierarchy_reasons":list(item.get("player_card_hierarchy_reasons") or []),
+        "player_card_hierarchy_cautions":list(item.get("player_card_hierarchy_cautions") or []),
+        "player_card_hierarchy_hobby_traps":list(item.get("player_card_hierarchy_hobby_traps") or []),
     }
 
 
