@@ -72,6 +72,7 @@ from src.find_more_cards import select_second_pass_indices
 from src.discovery_engine import build_discovery_map, select_discovery_indices
 from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_indices
 from src.budget_discovery_coverage import add_budget_coverage_indices, budget_coverage_summary
+from src.segment_discovery_coverage import add_segment_coverage_indices, segment_coverage_summary
 from src.decision_tiers import build_decision_tiers
 from src.market_gap_hunter import build_market_gap_queue
 from src.active_supply_intelligence import verify_active_supply, classify_verified_supply
@@ -225,7 +226,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.24"
+APP_VERSION = "v0.12.26"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1194,6 +1195,14 @@ def analyze_data(
         hard_cap=38,
         max_per_player=2,
     )
+    full_indices, segment_added = add_segment_coverage_indices(
+        candidates,
+        full_indices,
+        budget=max_price,
+        extra_slots=6,
+        hard_cap=42,
+        max_per_player=2,
+    )
     full_index_set = set(full_indices)
     debug["adaptive_full_selected"] = len(adaptive_indices)
     debug["adaptive_extra_full"] = max(0, len(adaptive_indices) - min(full_limit, len(candidates)))
@@ -1201,6 +1210,8 @@ def analyze_data(
     debug["coverage_diversified_added"] = len(set(full_indices) - set(adaptive_indices))
     debug["budget_coverage_added"] = len(budget_added)
     debug["budget_coverage_bands"] = budget_coverage_summary(candidates, full_indices, max_price)
+    debug["segment_coverage_added"] = len(segment_added)
+    debug["segment_coverage"] = segment_coverage_summary(candidates, full_indices, max_price)
     discovery_map = build_discovery_map(candidates)
     debug["discovery_hunter_counts"] = discovery_map.get("hunter_counts", {})
     market_sweep_map = build_market_sweep_map(candidates)
@@ -1249,7 +1260,7 @@ def analyze_data(
             candidates,
             full_index_set,
             extra_limit=8,
-            total_hard_cap=45,
+            total_hard_cap=48,
             max_per_player=2,
         )
         after_sweep = full_index_set.union(market_sweep_indices)
@@ -1257,15 +1268,15 @@ def analyze_data(
             candidates,
             after_sweep,
             extra_limit=8,
-            total_hard_cap=45,
+            total_hard_cap=48,
             max_per_player=2,
         )
-        remaining_room = max(0, 45 - len(full_index_set) - len(market_sweep_indices) - len(discovery_indices))
+        remaining_room = max(0, 48 - len(full_index_set) - len(market_sweep_indices) - len(discovery_indices))
         fallback_indices = select_second_pass_indices(
             len(candidates),
             after_sweep.union(discovery_indices),
             extra_limit=min(12, remaining_room),
-            total_hard_cap=45,
+            total_hard_cap=48,
         )
         extra_indices = market_sweep_indices + discovery_indices + fallback_indices
         debug["market_sweep_deepened"] = len(market_sweep_indices)
@@ -1721,15 +1732,26 @@ else:
             freshness_icon = "🟢" if coverage.get("freshness") == "fresh" else ("🟡" if coverage.get("freshness") == "aging" else "🔴" if coverage.get("freshness") == "stale" else "⚪")
             st.caption(f"{freshness_icon} {coverage.get('freshness_label', 'Färskhet okänd')} • {format_freshness_age(coverage.get('age_hours'))}")
 
-    coverage_plan = build_autopilot_plan(coverage_h, coverage_f, refresh_h, refresh_f)
+    coverage_plan = build_autopilot_plan(
+        coverage_h,
+        coverage_f,
+        refresh_h,
+        refresh_f,
+        analyzed_results=st.session_state.get("results") or [],
+    )
     main_refresh_left, main_refresh_right = st.columns([3, 1])
     with main_refresh_left:
-        st.caption("**En knapp räcker:** FlipFynd väljer själv om marknaden först behöver fräschas upp eller byggas ut.")
+        st.caption("**En knapp räcker:** FlipFynd väljer själv om marknaden behöver fräschas upp eller vilken sport som behöver mer marknadsdata först.")
         if coverage_plan.get("status") != "READY":
             st.caption(coverage_plan.get("reason", ""))
             progress_text = autopilot_progress_text(coverage_plan)
             if progress_text:
                 st.caption(progress_text)
+            if coverage_plan.get("status") == "BUILD" and coverage_plan.get("need_reasons"):
+                st.caption(
+                    "Varför denna marknad: "
+                    + " · ".join(coverage_plan.get("need_reasons", [])[:3])
+                )
     with main_refresh_right:
         if coverage_plan.get("status") == "READY":
             st.success("✅ Marknaden är redo")
