@@ -97,6 +97,21 @@ def _market_value(item):
     return None
 
 
+def _economic_edge(item, decision, sold_count, identity_ok, market_value, total_cost):
+    reasons=[]
+    if not identity_ok: reasons.append("exakt identitet ej verifierad")
+    if sold_count < 2: reasons.append("färre än 2 verifierade exact SOLD")
+    if market_value is None or market_value <= 0: reasons.append("inget verifieringsbart marknadsvärde")
+    if total_cost is None or _n(total_cost, -1) < 0: reasons.append("total köpkostnad saknas")
+    max_total=item.get("dynamic_max_total_price")
+    if max_total is None: max_total=item.get("max_total_price")
+    max_total=_n(max_total, 0)
+    if max_total <= 0: reasons.append("evidensbaserat maxpris saknas")
+    elif total_cost is not None and _n(total_cost) > max_total: reasons.append("köpkostnaden överstiger evidensbaserat maxpris")
+    if not (decision.startswith("KÖP") or decision.startswith("KOP")): reasons.append("analysen ger inte KÖP")
+    return (not reasons), reasons, max_total
+
+
 def _base_row(item):
     decision=str(item.get("beslut") or item.get("decision") or item.get("recommendation") or "EJ BESLUT").upper()
     sold=int(_n(item.get("sold_comparable_count"),0))
@@ -106,6 +121,9 @@ def _base_row(item):
     )
     certainty,raw_certainty,certainty_limits=_decision_certainty(item,sold,identity_ok)
     blockers=list(item.get("decision_diagnostics") or [])
+    market_value=_market_value(item)
+    total_cost=item.get("analysis_total_cost") if item.get("analysis_total_cost") is not None else item.get("total_cost")
+    economic_edge_ok,economic_edge_blockers,max_total_price=_economic_edge(item,decision,sold,identity_ok,market_value,total_cost)
     return {
         "title":_title(item),
         "url":_url(item),
@@ -117,8 +135,11 @@ def _base_row(item):
         "player_key":_player_key(item),
         "sold_comps":sold,
         "identity_ok":identity_ok,
-        "market_value":_market_value(item),
-        "total_cost":item.get("analysis_total_cost") if item.get("analysis_total_cost") is not None else item.get("total_cost"),
+        "market_value":market_value,
+        "total_cost":total_cost,
+        "max_total_price":max_total_price,
+        "economic_edge_ok":economic_edge_ok,
+        "economic_edge_blockers":economic_edge_blockers,
         "shipping":item.get("frakt"),
         "shipping_known":item.get("shipping_known"),
         "primary_blocker":blockers[0] if blockers else None,
@@ -146,63 +167,37 @@ def _base_row(item):
     }
 
 
-def build_decision_tiers(candidates, total_limit=3):
-    rows=[_base_row(i) for i in (candidates or [])]
-    for r in rows:
+def build_decision_tiers(candidates, total_limit=3, require_verified_economic_edge=False):
+    all_rows=[_base_row(i) for i in (candidates or [])]
+    for r in all_rows:
         is_buy=r["decision"].startswith("KÖP") or r["decision"].startswith("KOP")
-        r["tier"]=(
-            "VERIFIED"
-            if is_buy and r["certainty"]>=60 and r["sold_comps"]>=2 and r["identity_ok"] and r["market_value"] is not None
-            else "PROMISING"
-            if r["potential"]>=55
-            else "REMAINDER"
-        )
-
+        r["tier"]=("VERIFIED" if is_buy and r["certainty"]>=60 and r["sold_comps"]>=2 and r["identity_ok"] and r["market_value"] is not None else "PROMISING" if r["potential"]>=55 else "REMAINDER")
+    rows=[r for r in all_rows if r["economic_edge_ok"]] if require_verified_economic_edge else list(all_rows)
     tier_order={"VERIFIED":2,"PROMISING":1,"REMAINDER":0}
     rows.sort(key=lambda r:(tier_order[r["tier"]],r["certainty"],r["potential"],r["sold_comps"]),reverse=True)
-
-    selected=[]
-    used_players=set()
-
-    def add_if_diverse(row):
-        if not row or row in selected or len(selected)>=total_limit:
-            return False
-        player=row.get("player_key") or ""
-        if player and player in used_players:
-            return False
-        selected.append(row)
-        if player:
-            used_players.add(player)
-        return True
-
-    # First pass: preserve the tier concept but prefer different players. A star
-    # can still appear more than once later if there truly are no alternatives.
+    selected=[]; used_players=set()
     for tier in ("VERIFIED","PROMISING","REMAINDER"):
         for row in rows:
-            if row["tier"]==tier and add_if_diverse(row):
-                break
-
-    # Second pass: fill with the strongest still-diverse alternatives.
-    for row in rows:
-        if len(selected)>=total_limit:
-            break
-        add_if_diverse(row)
-
-    # Final fallback: if the market slice really contains only one player, do not
-    # return fewer than requested solely for cosmetic diversity.
-    for row in rows:
-        if len(selected)>=total_limit:
-            break
-        if row not in selected:
+            if len(selected)>=total_limit: break
+            if row["tier"]!=tier or row in selected: continue
+            player=row.get("player_key") or ""
+            if player and player in used_players: continue
             selected.append(row)
-
-    duplicate_player_count=max(0,len(selected)-len({r.get("player_key") for r in selected if r.get("player_key")}))
-
-    return {
-        "rows":selected,
-        "verified_count":sum(1 for r in rows if r["tier"]=="VERIFIED"),
-        "promising_count":sum(1 for r in rows if r["tier"]=="PROMISING"),
-        "creates_new_decision":False,
-        "duplicate_player_count":duplicate_player_count,
-        "note":"Fyndpotential och säkerhet visas separat. Topplistan försöker dessutom visa olika spelare när jämförbara alternativ finns; säkerhet kapas när exakt identitet eller SOLD-underlag saknas.",
-    }
+            if player: used_players.add(player)
+            break
+    for row in rows:
+        if len(selected)>=total_limit: break
+        player=row.get("player_key") or ""
+        if row not in selected and (not player or player not in used_players):
+            selected.append(row)
+            if player: used_players.add(player)
+    for row in rows:
+        if len(selected)>=total_limit: break
+        if row not in selected: selected.append(row)
+    rejected=[r for r in all_rows if not r["economic_edge_ok"]]
+    blocker_counts={}
+    for r in rejected:
+        for reason in r.get("economic_edge_blockers") or []: blocker_counts[reason]=blocker_counts.get(reason,0)+1
+    return {"rows":selected,"verified_count":sum(1 for r in all_rows if r["tier"]=="VERIFIED"),"promising_count":sum(1 for r in all_rows if r["tier"]=="PROMISING"),"creates_new_decision":False,
+        "duplicate_player_count":max(0,len(selected)-len({r.get("player_key") for r in selected if r.get("player_key")})),"rejected_count":len(rejected),"rejection_reasons":blocker_counts,
+        "note":"Topplistan kan köras med hård verifierad economic-edge gate; spelarstatus och samlarintresse får då bara rangordna redan verifierade fynd."}

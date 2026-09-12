@@ -52,7 +52,9 @@ except ImportError:
 from src.external_sold_sources import available_adapters, import_external_sold_rows
 from src.sold_source_registry import sold_source_registry, source_readiness_summary
 from src.comp_source_intelligence import build_comp_research_plan
+from src.seller_bundle_opportunity import find_same_seller_listings, build_shared_shipping_scenario, classify_same_seller_addon, build_best_same_seller_basket
 from src.multi_source_comp_consensus import build_multi_source_consensus
+from src.comp_acquisition_router import build_comp_acquisition_router
 from src.sold_comp_quality import audit_sold_comp_records
 from src.sold_comp_intake import sold_comp_intake_audit
 from src.sold_gap_planner import build_sold_research_queue
@@ -99,6 +101,9 @@ from src.bad_listing_hunter import build_bad_listing_queue
 from src.lot_treasure_hunter import build_lot_treasure_queue
 from src.search_expansion import build_search_expansion_plan, tradera_api_readiness
 from src.tradera_api_search import run_search_plan, save_expansion_items
+from src.tradera_seller_inventory import discover_active_seller_inventory
+from src.seller_live_quick_analysis import quick_analyze_seller_inventory
+from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.search_yield_learning import build_yield_report, route_budget_guidance
 from src.near_buy_guidance import build_near_buy_guidance
 from src.detail_evidence_fusion import build_detail_evidence_fusion
@@ -235,7 +240,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.51"
+APP_VERSION = "v0.12.59"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2087,6 +2092,205 @@ if run:
     st.session_state["results_data_version"] = get_data_version()
 
 
+def render_same_seller_button(item: dict, key: str) -> None:
+    """Find more cards from the same seller so shipping may be shared."""
+    seller = get_seller(item)
+    label = "🧺 Fler kort från samma säljare"
+    with st.popover(label, use_container_width=True):
+        if seller == "Okänd":
+            st.info("FlipFynd kan inte säkert identifiera säljaren i den här annonsen ännu.")
+            return
+        seller_market = list(data or [])
+        st.markdown(f"### 🧺 Samfraktsjakt hos {seller}")
+        st.caption("FlipFynd börjar med den inlästa marknaden. Med Tradera API kan du dessutom hämta säljarens hela aktiva lager direkt.")
+
+        creds = _resolve_tradera_api_credentials()
+        api_key = f"seller_inventory_api_{key}_{seller}"
+        if creds:
+            if st.button("🌐 Hämta alla aktiva annonser från säljaren", key=api_key, use_container_width=True):
+                with st.spinner(f"Hämtar aktiva annonser från {seller} via Tradera…"):
+                    fetched = discover_active_seller_inventory(
+                        seller_alias=seller,
+                        app_id=creds[0],
+                        app_key=creds[1],
+                        category_id=0,
+                    )
+                st.session_state[f"seller_inventory_result_{key}"] = fetched
+            fetched = st.session_state.get(f"seller_inventory_result_{key}") or {}
+            if fetched.get("ok"):
+                api_items = fetched.get("items") or []
+                seller_market.extend(api_items)
+                st.success(f"Tradera API hittade {len(api_items)} aktiva annonser hos {seller}.")
+                st.caption("API-listan är discovery-data. Varje kort måste fortfarande analyseras och verifieras innan det kan bli en add-on-rekommendation.")
+
+                quick_key = f"seller_inventory_quick_{key}_{seller}"
+                if st.button("⚡ Snabbanalysera säljarens livekort", key=quick_key, use_container_width=True):
+                    anchor_sport = infer_item_sport(item) or "hockey"
+                    with st.spinner("Snabbanalyserar säljarens mest lovande kort…"):
+                        quick = quick_analyze_seller_inventory(
+                            item,
+                            api_items,
+                            analyze_fn=analyze_item,
+                            sport=anchor_sport,
+                            strategy_mode="quick_flip",
+                            limit=20,
+                            shortlist=5,
+                        )
+                    st.session_state[f"seller_inventory_quick_result_{key}"] = quick
+
+                quick = st.session_state.get(f"seller_inventory_quick_result_{key}") or {}
+                if quick.get("rows"):
+                    # Feed fast-analysis results back into the same-seller list so
+                    # existing add-on labels can use the newly discovered evidence.
+                    seller_market.extend([r.get("source_item") for r in quick.get("rows", []) if r.get("source_item")])
+                    st.markdown("#### ⚡ 2–5 kort att titta vidare på")
+                    st.caption("Det här är en research-shortlist, inte en köporder. Full analys krävs innan ett kort kan rekommenderas.")
+                    for qidx, qrow in enumerate(quick.get("shortlist") or [], start=1):
+                        qprice = qrow.get("price")
+                        price_text = f" · {qprice:.0f} kr" if isinstance(qprice, (int, float)) else ""
+                        st.markdown(f"**{qidx}. {qrow.get('title')}**{price_text}")
+                        st.caption(
+                            f"{qrow.get('label')} · researchscore {qrow.get('quick_score', 0):.0f}/100 · "
+                            f"identitet {qrow.get('identity_score', 0):.0f}/100 · {qrow.get('sold_comps', 0)} SOLD"
+                        )
+                        st.caption(qrow.get("reason"))
+                        action_cols = st.columns(2)
+                        with action_cols[0]:
+                            full_key = f"seller_quick_full_{key}_{qidx}"
+                            if st.button("🔬 Fullanalysera", key=full_key, use_container_width=True):
+                                anchor_sport = infer_item_sport(item) or "hockey"
+                                with st.spinner("Kör full FlipFynd-analys av kortet…"):
+                                    try:
+                                        full_result = full_analyze_live_seller_item(
+                                            qrow.get("source_item") or {},
+                                            analyze_fn=analyze_item,
+                                            all_items=seller_market,
+                                            sport=anchor_sport,
+                                            strategy_mode="quick_flip",
+                                        )
+                                    except Exception as exc:
+                                        full_result = {"ok": False, "error": str(exc)}
+                                st.session_state[f"seller_live_full_{key}_{qidx}"] = full_result
+                        with action_cols[1]:
+                            if qrow.get("url"):
+                                st.link_button("Öppna annons ↗", qrow["url"], key=f"seller_quick_link_{key}_{qidx}", use_container_width=True)
+
+                        full_result = st.session_state.get(f"seller_live_full_{key}_{qidx}") or {}
+                        if full_result:
+                            if not full_result.get("ok"):
+                                st.warning("Fullanalysen kunde inte slutföras för den här annonsen just nu.")
+                            else:
+                                st.markdown(f"**{full_result.get('label')} · {full_result.get('decision')}**")
+                                st.caption(full_result.get("reason"))
+                                facts = [
+                                    f"identitet {full_result.get('identity_score', 0):.0f}/100",
+                                    f"{full_result.get('sold_comps', 0)} SOLD",
+                                    f"värderingssäkerhet {full_result.get('valuation_confidence', 0):.0f}/100",
+                                ]
+                                total_cost = full_result.get("total_cost")
+                                max_buy = full_result.get("max_price")
+                                if isinstance(total_cost, (int, float)):
+                                    facts.append(f"kostnad {total_cost:.0f} kr")
+                                if isinstance(max_buy, (int, float)):
+                                    facts.append(f"maxpris {max_buy:.0f} kr")
+                                st.caption(" · ".join(facts))
+                                if full_result.get("source_item"):
+                                    seller_market.append(full_result["source_item"])
+                    if quick.get("failed_count"):
+                        st.caption(f"{quick['failed_count']} liveannons kunde inte snabbanalyseras och ignorerades.")
+            elif fetched:
+                st.warning("Tradera kunde inte hämta säljarens aktiva lager just nu. FlipFynd använder den redan inlästa marknaden som fallback.")
+        else:
+            st.caption("Tradera API-nycklar saknas, så samfraktsjakten använder den lokalt inlästa marknaden.")
+
+        bundle = find_same_seller_listings(
+            item,
+            seller_market,
+            results=st.session_state.get("results") or [],
+            limit=30,
+        )
+        if not bundle.get("rows"):
+            st.info("Inga andra aktiva annonser från samma säljare hittades i tillgänglig marknadsdata.")
+            return
+        st.success(f"Hittade {bundle['count']} andra kortannonser från samma säljare.")
+        st.markdown("#### 🎯 Bygg bästa paketet automatiskt")
+        anchor_price = float(item.get("pris") or item.get("price") or 0)
+        default_budget = max(500, int(anchor_price + 250))
+        basket_budget = st.number_input(
+            "Maxbudget inklusive huvudkort och ett samfraktsscenario",
+            min_value=50,
+            max_value=100000,
+            value=int(default_budget),
+            step=50,
+            key=f"seller_basket_budget_{key}",
+        )
+        best_basket = build_best_same_seller_basket(item, bundle["rows"], basket_budget)
+        if best_basket.get("status") == "FOUND":
+            names = [r.get("title") or "Kort" for r in best_basket.get("selected", [])]
+            st.success(
+                f"Bästa verifierbara paketet under {basket_budget:.0f} kr: "
+                f"huvudkortet + {best_basket['selected_count']} extra kort · "
+                f"scenario {best_basket['scenario_total']:.0f} kr · "
+                f"{best_basket['remaining_budget']:.0f} kr kvar."
+            )
+            for name in names:
+                st.write(f"• {name}")
+            scenario = best_basket.get("scenario") or {}
+            if scenario.get("potential_shipping_saving"):
+                st.caption(f"Teoretisk fraktbesparing: {scenario['potential_shipping_saving']:.0f} kr.")
+            st.caption(best_basket.get("note"))
+        elif best_basket.get("status") == "NO_ELIGIBLE_ADDONS":
+            st.info("Inga extra kort är ännu tillräckligt starka och verifierade för att FlipFynd automatiskt ska lägga dem i paketet.")
+        elif best_basket.get("status") == "NO_FIT":
+            st.info("Det finns starka add-on-kandidater, men ingen ryms inom den valda totalbudgeten.")
+        elif best_basket.get("status") == "ANCHOR_OVER_BUDGET":
+            st.warning("Huvudkortet plus dess angivna frakt ligger redan över vald budget.")
+        else:
+            st.caption("Automatisk paketoptimering kräver känt pris och känd frakt på huvudkortet.")
+        if best_basket.get("excluded_unknown_shipping"):
+            st.caption(f"{best_basket['excluded_unknown_shipping']} stark kandidat med okänd frakt hölls utanför auto-korgen för att budgeten inte ska bli missvisande.")
+        st.divider()
+        selected = []
+        for idx, row in enumerate(bundle["rows"], start=1):
+            with st.container(border=True):
+                cols=st.columns([5,1])
+                cols[0].markdown(f"**{idx}. {row['title']}**")
+                cols[1].markdown(f"**{row['price']:.0f} kr**")
+                bits=[]
+                if row.get("shipping") is not None:
+                    bits.append(f"ordinarie frakt {row['shipping']:.0f} kr")
+                if row.get("analysed"):
+                    bits.append(f"analyserad · {row.get('decision') or 'ej köpbeslut'}")
+                    if row.get("potential") is not None:
+                        bits.append(f"fyndpotential {row['potential']:.0f}/100")
+                    bits.append(f"{row.get('sold_comps',0)} SOLD")
+                else:
+                    bits.append("inte fullanalyserad ännu")
+                st.caption(" · ".join(bits))
+                addon = classify_same_seller_addon(row)
+                if addon.get("status") == "ADD":
+                    st.success(f"✅ {addon['label']} — {addon['reason']}")
+                elif addon.get("status") == "REVIEW":
+                    st.info(f"🟡 {addon['label']} — {addon['reason']}")
+                else:
+                    st.caption(f"⚪ {addon['label']} — {addon['reason']}")
+                if st.checkbox("Ta med i samfraktsscenario", key=f"seller_bundle_{key}_{idx}"):
+                    selected.append(row)
+                if row.get("url"):
+                    st.link_button("Öppna den här annonsen ↗", row["url"], use_container_width=True)
+        if selected:
+            scenario=build_shared_shipping_scenario(item, selected)
+            st.markdown("#### Frakt-som-betalas-en-gång-scenario")
+            c1,c2,c3=st.columns(3)
+            c1.metric("Kortens pris", f"{scenario.get('item_total',0):.0f} kr")
+            c2.metric("Frakt en gång", f"{scenario['shipping_once']:.0f} kr" if scenario.get("shipping_once") is not None else "Ej känt")
+            c3.metric("Scenario totalt", f"{scenario['scenario_total']:.0f} kr" if scenario.get("scenario_total") is not None else "Ej känt")
+            if scenario.get("potential_shipping_saving") is not None and scenario.get("potential_shipping_saving") > 0:
+                st.success(f"Teoretisk fraktbesparing: {scenario['potential_shipping_saving']:.0f} kr jämfört med att betala de angivna frakterna separat.")
+            st.warning(scenario.get("note"))
+            st.caption("FlipFynd ändrar inte kortens marknadsvärde bara för att frakten kan delas. Varje extrakort måste fortfarande vara ett rimligt köp i sig.")
+
+
 def render_card_explanation_button(item: dict, key: str) -> None:
     """Render a one-click, evidence-aware explanation for a listing card."""
     explanation = build_card_explanation(item)
@@ -2174,6 +2378,7 @@ if st.session_state.get("results") is not None:
                 reasons.append(sellability_text(card.get("sellability_label"), card.get("sellability_score")))
                 st.caption(" · ".join(reasons))
                 render_card_explanation_button(card, "simple_buy")
+                render_same_seller_button(card, "simple_buy")
                 if card.get("url"):
                     st.link_button("Öppna annonsen på Tradera ↗", card["url"], use_container_width=True)
                 with st.expander("Varför väljer FlipFynd detta kort?", expanded=False):
@@ -2185,7 +2390,12 @@ if st.session_state.get("results") is not None:
                 st.caption(simple_buy.get("note") or "")
 
             # Evidence-aware Top 3: separate opportunity potential from certainty.
-            decision_tiers = build_decision_tiers(st.session_state.get("results") or [], total_limit=3)
+            decision_tiers = build_decision_tiers(st.session_state.get("results") or [], total_limit=3, require_verified_economic_edge=True)
+            if not decision_tiers.get("rows"):
+                st.info("**Inga verifierade fynd för Top 3 just nu.** Billigt eller känt är inte samma sak som felprissatt; listan kräver verifierad ekonomisk edge.")
+                if decision_tiers.get("rejection_reasons"):
+                    common=sorted(decision_tiers["rejection_reasons"].items(), key=lambda kv: kv[1], reverse=True)[:3]
+                    st.caption("Vanligaste skälen: " + " · ".join(f"{reason} ({count})" for reason,count in common))
             if decision_tiers.get("rows"):
                 st.markdown("### 🏆 Bästa alternativen i den här sökningen")
                 st.caption(
@@ -2290,6 +2500,7 @@ if st.session_state.get("results") is not None:
                         if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
                             st.caption("Största blockerare: " + str(row["primary_blocker"]))
                         render_card_explanation_button(row.get("_source_item") or row, f"top3_{rank}")
+                        render_same_seller_button(row.get("_source_item") or row, f"top3_{rank}")
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
                 st.caption(decision_tiers.get("note") or "")
@@ -5227,7 +5438,32 @@ with st.expander("⚙️ Administration & data"):
                             st.write(f"**{source_row['priority']}. {source_row['label']}** · {source_row['evidence_class']}")
                             st.caption(f"{source_row['use_for']} Historik: {source_row['history']}")
 
-                    consensus = build_multi_source_consensus(research_identity, get_sold_comp_data())
+                    sold_library = get_sold_comp_data()
+                    consensus = build_multi_source_consensus(research_identity, sold_library)
+                    router = build_comp_acquisition_router(research_identity, sold_library)
+                    with st.expander("🧭 Nästa bästa comp-källa", expanded=True):
+                        r1, r2, r3 = st.columns(3)
+                        r1.metric("Exact SOLD", router.get("exact_sold_count", 0))
+                        r2.metric("Källor", router.get("source_count", 0))
+                        r3.metric("Källquorum", "Ja" if router.get("source_quorum") else "Nej")
+                        st.write(f"**Nästa steg:** {router.get('reason')}")
+                        for coverage_row in router.get("coverage") or []:
+                            st.caption(f"{coverage_row['label']}: {coverage_row['count']} exact SOLD")
+                        next_source = router.get("next_source") or {}
+                        if next_source.get("direct_query_url"):
+                            st.link_button(
+                                f"Sök nästa källa: {next_source.get('label')} ↗",
+                                next_source["direct_query_url"],
+                                use_container_width=True,
+                            )
+                        elif next_source.get("research_url"):
+                            st.link_button(
+                                f"Öppna nästa källa: {next_source.get('label')} ↗",
+                                next_source["research_url"],
+                                use_container_width=True,
+                            )
+                        st.caption(router.get("note") or "")
+
                     with st.expander("🌐 Multi-Source Comp Consensus", expanded=False):
                         c1,c2,c3=st.columns(3)
                         c1.metric("Exact SOLD", consensus.get("exact_sold_count",0))
