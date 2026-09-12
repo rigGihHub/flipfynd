@@ -52,6 +52,7 @@ except ImportError:
 from src.external_sold_sources import available_adapters, import_external_sold_rows
 from src.sold_source_registry import sold_source_registry, source_readiness_summary
 from src.comp_source_intelligence import build_comp_research_plan
+from src.multi_source_comp_consensus import build_multi_source_consensus
 from src.sold_comp_quality import audit_sold_comp_records
 from src.sold_comp_intake import sold_comp_intake_audit
 from src.sold_gap_planner import build_sold_research_queue
@@ -234,7 +235,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.49"
+APP_VERSION = "v0.12.51"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2188,8 +2189,8 @@ if st.session_state.get("results") is not None:
             if decision_tiers.get("rows"):
                 st.markdown("### 🏆 Bästa alternativen i den här sökningen")
                 st.caption(
-                    "FlipFynd skiljer nu på **fyndpotential** och **säkerhet**. "
-                    "Ett kort kan se lovande ut men ändå vara för osäkert för KÖP."
+                    "FlipFynd skiljer nu på **fyndpotential** och **beslutssäkerhet**. "
+                    "Topplistan försöker visa olika spelare när jämförbara alternativ finns, så en enda superstjärna inte tar plats 1–3 bara genom stark spelarefterfrågan."
                 )
                 tier_labels = {
                     "VERIFIED": "✅ Bästa verifierade fynd",
@@ -2205,6 +2206,8 @@ if st.session_state.get("results") is not None:
                         m1,m2=st.columns(2)
                         m1.metric("Fyndpotential", f"{row.get('potential',0):.0f}/100")
                         m2.metric("Säkerhet", f"{row.get('certainty',0):.0f}/100")
+                        if row.get("certainty_limits"):
+                            st.caption("Beslutssäkerheten är begränsad av: " + "; ".join(row.get("certainty_limits") or []))
                         facts=[]
                         if row.get("total_cost") is not None:
                             facts.append(f"kostar {float(row['total_cost']):.0f} kr")
@@ -2840,6 +2843,19 @@ if st.session_state.get("results") is not None:
                         f"({biggest['drop']} annonser försvinner där)."
                     )
 
+                readiness = funnel.get("decision_readiness") or []
+                if readiness:
+                    st.markdown("**Beslutsunderlag – var saknas evidens?**")
+                    st.caption(
+                        "Dessa mått är oberoende evidensgrindar, inte en påhittad sekventiell funnel. "
+                        "De visar hur många analyserade annonser som faktiskt har respektive typ av underlag."
+                    )
+                    rcols = st.columns(min(3, len(readiness)))
+                    for idx, row in enumerate(readiness):
+                        count = int(row.get("count", 0) or 0)
+                        share = float(row.get("share", 0) or 0)
+                        rcols[idx % len(rcols)].metric(row.get("label", "Underlag"), count, f"{share:.0%} av analyserade")
+
                 blockers = funnel.get("blockers") or []
                 if blockers:
                     st.markdown("**Vanligaste skälen till att analyserade kort inte blir KÖP:**")
@@ -2851,7 +2867,8 @@ if st.session_state.get("results") is not None:
                 if primary:
                     with st.expander("Visa exakta stopporsaker", expanded=False):
                         for row in primary:
-                            st.write(f"• **{row['count']} st** – {row['reason']}")
+                            category = row.get("category") or "Övrigt"
+                            st.write(f"• **{row['count']} st · {category}** – {row['reason']}")
 
                 if stages and stages[-1]["count"] == 0:
                     st.warning(
@@ -5204,28 +5221,57 @@ with st.expander("⚙️ Administration & data"):
                     st.code(research_query["query"], language=None)
                     comp_plan = build_comp_research_plan(research_identity)
                     with st.expander("Vilken comp-källa ska jag lita mest på?", expanded=False):
-                        st.write("**Prioritet:** eBay Product Research → eBay Sold → Card Ladder → 130 Point → SportsCardsPro/eBay Price Guide som sekundär prisbild.")
+                        st.write("**Prioritet:** Tradera verifierade avslut + eBay Product Research/eBay Sold först; därefter Card Ladder, Fanatics Collect och COMC. 130 Point och SportsCardsPro används främst som kontroll/context beroende på om en individuell sale kan verifieras.")
                         st.caption(comp_plan["rule"])
                         for source_row in comp_plan["sources"]:
                             st.write(f"**{source_row['priority']}. {source_row['label']}** · {source_row['evidence_class']}")
                             st.caption(f"{source_row['use_for']} Historik: {source_row['history']}")
+
+                    consensus = build_multi_source_consensus(research_identity, get_sold_comp_data())
+                    with st.expander("🌐 Multi-Source Comp Consensus", expanded=False):
+                        c1,c2,c3=st.columns(3)
+                        c1.metric("Exact SOLD", consensus.get("exact_sold_count",0))
+                        c2.metric("Källor", consensus.get("source_count",0))
+                        c3.metric("Konsensus", f"{consensus['weighted_median_sek']:.0f} kr" if consensus.get("weighted_median_sek") is not None else "Otillräckligt underlag")
+                        if consensus.get("tradera_median_sek") is not None:
+                            st.write(f"**Tradera median:** {consensus['tradera_median_sek']:.0f} kr")
+                        if consensus.get("international_median_sek") is not None:
+                            st.write(f"**Internationell median:** {consensus['international_median_sek']:.0f} kr")
+                        divergence=consensus.get("local_vs_international_divergence_pct")
+                        if divergence is not None:
+                            if divergence >= 25:
+                                st.warning(f"Svensk och internationell prisbild skiljer sig med cirka {divergence:.0f} %. Kontrollera lokal efterfrågan innan värderingen används.")
+                            else:
+                                st.caption(f"Svensk/internationell avvikelse: cirka {divergence:.0f} %.")
+                        for source_row in consensus.get("sources") or []:
+                            st.caption(f"{source_row['source']}: {source_row['count']} sale(s) · median {source_row['median_sek']:.0f} kr")
+                        st.caption(consensus.get("note") or "")
+
                     ebay_url = ebay_sold_search_url(research_identity)
-                    src_cols = st.columns(5)
-                    if ebay_url:
-                        src_cols[0].link_button("eBay Sold ↗", ebay_url, use_container_width=True)
                     source_by_key = {source["key"]: source for source in sold_source_registry()}
-                    for col, key, label in [
-                        (src_cols[1], "130point", "130 Point ↗"),
-                        (src_cols[2], "card_ladder", "Card Ladder ↗"),
-                        (src_cols[3], "sportscardspro", "SportsCardsPro ↗"),
-                        (src_cols[4], "ebay_price_guide", "eBay Price Guide ↗"),
+                    research_links=[]
+                    tradera_url=next((r.get("direct_query_url") for r in comp_plan["sources"] if r.get("key")=="tradera_sold"),None)
+                    if tradera_url:
+                        research_links.append(("Tradera ↗",tradera_url))
+                    if ebay_url:
+                        research_links.append(("eBay Sold ↗",ebay_url))
+                    for key,label in [
+                        ("card_ladder","Card Ladder ↗"),
+                        ("fanatics_collect","Fanatics ↗"),
+                        ("comc","COMC ↗"),
+                        ("130point","130 Point ↗"),
+                        ("sportscardspro","SportsCardsPro ↗"),
+                        ("ebay_price_guide","eBay Price Guide ↗"),
                     ]:
-                        source = source_by_key.get(key)
+                        source=source_by_key.get(key)
                         if source:
-                            col.link_button(label, source["research_url"], use_container_width=True)
+                            research_links.append((label,source["research_url"]))
+                    for start in range(0,len(research_links),4):
+                        cols=st.columns(4)
+                        for col,(label,url) in zip(cols,research_links[start:start+4]):
+                            col.link_button(label,url,use_container_width=True)
                     st.caption(
-                        "eBay-knappen öppnar en sold/completed-sökning med den strukturerade identiteten. "
-                        "Övriga källor öppnas som research-only; kopiera sökfrasen dit. FlipFynd läser inte deras resultat automatiskt."
+                        "Tradera-sökningen kan visa aktiva annonser. De är utbud, inte SOLD. FlipFynds konsensus räknar bara exact identity + explicit sålda poster som redan verifierats/importerats."
                     )
 
                     defaults = build_quick_capture_defaults(research_identity)
@@ -5238,7 +5284,7 @@ with st.expander("⚙️ Administration & data"):
                         f3, f4 = st.columns(2)
                         source_platform = f3.selectbox(
                             "Källa",
-                            ["eBay", "eBay Product Research", "130 Point", "Card Ladder", "SportsCardsPro", "Tradera", "Annan verifierad källa"],
+                            ["Tradera", "eBay", "eBay Product Research", "Card Ladder", "Fanatics Collect", "COMC", "130 Point", "SportsCardsPro", "Annan verifierad källa"],
                         )
                         shipping_text = f4.text_input("Frakt (valfritt)", value="")
                         fx_rate_text = ""

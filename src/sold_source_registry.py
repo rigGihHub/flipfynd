@@ -8,6 +8,16 @@ from __future__ import annotations
 
 SOURCES = (
     {
+        "key": "tradera_sold",
+        "label": "Tradera verifierade avslut",
+        "research_url": "https://www.tradera.com/",
+        "supports_sports_cards": True,
+        "automated_ingestion": False,
+        "status": "RESEARCH_AND_EXPLICIT_IMPORT",
+        "evidence_type": "DIRECT_REALIZED_SALES",
+        "note": "Prioriterad lokal svensk comp-källa. Aktiv annons eller avslutad osåld annons är inte SOLD. Import kräver explicit sale-status/pris och exakt identitet.",
+    },
+    {
         "key": "ebay_product_research",
         "label": "eBay Product Research",
         "research_url": "https://www.ebay.com/sh/research",
@@ -36,6 +46,26 @@ SOURCES = (
         "status": "RESEARCH_ONLY",
         "evidence_type": "AGGREGATED_PRICE_GUIDE",
         "note": "Sekundär prisguide byggd på completed sales; uppges använda accepted Best Offer och upp till två års transaktioner. Inte en enskild exact sold comp.",
+    },
+    {
+        "key": "fanatics_collect",
+        "label": "Fanatics Collect Sales History",
+        "research_url": "https://sales-history.fanaticscollect.com/",
+        "supports_sports_cards": True,
+        "automated_ingestion": False,
+        "status": "RESEARCH_ONLY",
+        "evidence_type": "DIRECT_REALIZED_SALES",
+        "note": "Individuella verifierbara realiserade sales kan användas som comps. Ingen scraping eller antagen API-åtkomst.",
+    },
+    {
+        "key": "comc",
+        "label": "COMC",
+        "research_url": "https://www.comc.com/",
+        "supports_sports_cards": True,
+        "automated_ingestion": False,
+        "status": "RESEARCH_ONLY",
+        "evidence_type": "MARKETPLACE_SALES_DATABASE",
+        "note": "Användbar som kompletterande marknadskontroll. Bara individuellt verifierade realiserade sales får bli SOLD-comps.",
     },
     {
         "key": "130point",

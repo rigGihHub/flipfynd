@@ -10,6 +10,15 @@ from urllib.parse import quote_plus
 
 
 SOURCE_PROFILES = {
+    "tradera_sold": {
+        "label": "Tradera verifierade avslut",
+        "evidence_class": "DIRECT_REALIZED_SALES",
+        "priority": 3,
+        "history": "beror på tillgängliga avslut/export",
+        "best_offer_actual": None,
+        "use_for": "Svensk lokal prisbild och faktisk efterfrågan. Endast explicit sålda avslut räknas som comps.",
+        "valuation_role": "PRIMARY_LOCAL_MARKET_WHEN_EXACT_IDENTITY_VERIFIED",
+    },
     "ebay_product_research": {
         "label": "eBay Product Research",
         "evidence_class": "DIRECT_REALIZED_SALES",
@@ -31,16 +40,34 @@ SOURCE_PROFILES = {
     "card_ladder": {
         "label": "Card Ladder",
         "evidence_class": "MULTI_MARKET_SALES_DATABASE",
-        "priority": 3,
+        "priority": 4,
         "history": "bred historik; tjänsten uppger offentliga försäljningar tillbaka till 2000",
         "best_offer_actual": None,
         "use_for": "Korsmarknadskontroll, äldre försäljningar och tunna marknader.",
         "valuation_role": "PRIMARY_IF_INDIVIDUAL_SALE_IS_VERIFIABLE",
     },
+    "fanatics_collect": {
+        "label": "Fanatics Collect Sales History",
+        "evidence_class": "DIRECT_REALIZED_SALES",
+        "priority": 5,
+        "history": "publik sales history enligt tjänstens tillgängliga historik",
+        "best_offer_actual": None,
+        "use_for": "Verifiera individuella realiserade försäljningar från Fanatics Collect.",
+        "valuation_role": "PRIMARY_IF_INDIVIDUAL_SALE_IS_VERIFIABLE",
+    },
+    "comc": {
+        "label": "COMC",
+        "evidence_class": "MARKETPLACE_SALES_DATABASE",
+        "priority": 6,
+        "history": "tjänsten visar historisk försäljnings-/prisdata där tillgängligt",
+        "best_offer_actual": None,
+        "use_for": "Sekundär marknadskontroll och individuella sales när exakt kort och realiserat pris kan verifieras.",
+        "valuation_role": "PRIMARY_IF_INDIVIDUAL_SALE_IS_VERIFIABLE",
+    },
     "130point": {
         "label": "130 Point",
         "evidence_class": "SALES_RESEARCH_AGGREGATOR",
-        "priority": 4,
+        "priority": 7,
         "history": "beror på källa/tjänst",
         "best_offer_actual": None,
         "use_for": "Manuell dubbelkontroll när eBay-resultat är tunna eller Best Offer är otydligt.",
@@ -49,7 +76,7 @@ SOURCE_PROFILES = {
     "sportscardspro": {
         "label": "SportsCardsPro",
         "evidence_class": "AGGREGATED_PRICE_GUIDE",
-        "priority": 5,
+        "priority": 8,
         "history": "historiska försäljningar synliga på webbplatsen; API/CSV ger nuvärden, inte historiska sales",
         "best_offer_actual": None,
         "use_for": "Snabb prisnivå, rå/grade-segmentering och sanity check mot annan comp-data.",
@@ -58,7 +85,7 @@ SOURCE_PROFILES = {
     "ebay_price_guide": {
         "label": "eBay Price Guide",
         "evidence_class": "AGGREGATED_PRICE_GUIDE",
-        "priority": 6,
+        "priority": 9,
         "history": "upp till 2 år av completed transactions enligt eBay",
         "best_offer_actual": True,
         "use_for": "Sekundär prisbild och grade-matchad marknadskontext.",
@@ -111,7 +138,13 @@ def build_comp_research_plan(identity: dict | None) -> dict:
     for key, profile in sorted(SOURCE_PROFILES.items(), key=lambda item: item[1]["priority"]):
         row = {"key": key, **profile}
         row["query"] = query
-        row["direct_query_url"] = ebay_sold_url_for_query(query) if key == "ebay_sold_search" else None
+        if key == "ebay_sold_search":
+            row["direct_query_url"] = ebay_sold_url_for_query(query)
+        elif key == "tradera_sold":
+            row["direct_query_url"] = f"https://www.tradera.com/search?q={quote_plus(query)}" if query else "https://www.tradera.com/"
+            row["direct_query_note"] = "Tradera-sökningen kan innehålla aktiva annonser. Endast explicit sålda avslut får registreras som SOLD-comp."
+        else:
+            row["direct_query_url"] = None
         rows.append(row)
     return {
         "ready": bool(query),
