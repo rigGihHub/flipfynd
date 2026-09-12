@@ -105,81 +105,100 @@ def _what_would_make_it_stronger(item: dict) -> list[str]:
 
 
 def build_card_identity_summary(item: dict) -> dict:
-    """Return a compact, evidence-aware identity card for the listing.
+    """Return an identity card that separates observed, interpreted and verified facts.
 
-    The summary prefers fields from Exact Identity Gate because those are the
-    fields FlipFynd has already normalized for exact-comp decisions. Missing
-    facts stay explicitly unknown instead of being inferred from the title.
+    A field may be useful before Exact Identity Gate is ready.  We therefore
+    display structured/title-derived observations with their source while keeping
+    the gate verdict as the authority for exact-comp permission.
     """
     item = item or {}
     fields = item.get("exact_identity_gate_identity_fields") or {}
     if not isinstance(fields, dict):
         fields = {}
 
+    # Late title parsing is deliberately display-only.  It recovers information
+    # from reduced/legacy result payloads but never upgrades the exact identity gate.
+    try:
+        from src.card_parser import parse_card_features
+        observed = parse_card_features(str(item.get("titel") or item.get("title") or "")) or {}
+    except Exception:
+        observed = {}
+
     def pick(name, *fallbacks):
         value = fields.get(name)
         if value not in (None, ""):
-            return value
+            return value, "verified"
         for key in fallbacks:
             value = item.get(key)
             if value not in (None, ""):
-                return value
-        return None
+                return value, "interpreted"
+        value = observed.get(name)
+        if value not in (None, ""):
+            return value, "observed"
+        return None, "missing"
 
     rows = []
     missing = []
 
-    def add(label, value, missing_label=None):
+    def add(label, picked, missing_label=None):
+        value, level = picked
         if value in (None, ""):
-            rows.append({"label": label, "value": "Ej säkert identifierat", "known": False})
+            rows.append({"label": label, "value": "Ej säkert identifierat", "known": False, "level": "missing", "source": None})
             if missing_label:
                 missing.append(missing_label)
-        else:
-            rows.append({"label": label, "value": str(value), "known": True})
+            return
+        source_label = {"verified": "verifierat", "interpreted": "strukturerat", "observed": "från annonstitel"}.get(level, level)
+        rows.append({"label": label, "value": str(value), "known": True, "level": level, "source": source_label})
 
     add("Spelare", pick("player_name", "player_name"), "spelare")
     add("Set / program", pick("set_name", "set_name"), "set/program")
-    add("Säsong / år", pick("season", "rookie_window_card_year"), "säsong/år")
+    season = pick("season", "season", "rookie_window_card_year")
+    if season[0] in (None, ""):
+        year = item.get("year") or observed.get("year")
+        season = (year, "interpreted" if item.get("year") else "observed") if year not in (None, "") else season
+    add("Säsong / år", season, "säsong/år")
 
-    card_number = pick("card_number", "card_number")
+    card_number, card_level = pick("card_number", "card_number")
     if card_number not in (None, ""):
         card_number = str(card_number)
         if not card_number.startswith("#"):
             card_number = "#" + card_number
-    add("Kortnummer", card_number, "kortnummer")
+    add("Kortnummer", (card_number, card_level), "kortnummer")
 
-    variant = pick("parallel", "parallel") or item.get("variant_hierarchy_variant_label")
+    variant = pick("parallel", "parallel")
+    if variant[0] in (None, "") and item.get("variant_hierarchy_variant_label"):
+        variant = (item.get("variant_hierarchy_variant_label"), "interpreted")
     add("Variant / parallel", variant)
 
-    serial = pick("serial_denominator", "serial_number")
+    serial, serial_level = pick("serial_denominator", "serial_number")
     serial_display = None
     if serial not in (None, ""):
         serial_text = str(serial).strip().lstrip("/")
         serial_display = f"Numrerad till /{serial_text}"
-    add("Numrering", serial_display)
+    add("Numrering", (serial_display, serial_level))
 
     rookie_signal = fields.get("is_rookie")
     if item.get("official_rookie_year_verified") and item.get("official_rookie_year"):
-        rookie_value = f"Verifierat rookieår: {item.get('official_rookie_year')}"
-    elif rookie_signal:
-        rookie_value = "Rookie/RC-signal finns – officiellt rookieår ej verifierat"
+        rookie_value, rookie_level = f"Verifierat rookieår: {item.get('official_rookie_year')}", "verified"
+    elif rookie_signal or observed.get("is_rookie"):
+        rookie_value, rookie_level = "Rookie/RC-signal finns – officiellt rookieår ej verifierat", "interpreted"
     elif item.get("rookie_claim_support") == "CHRONOLOGICALLY_SUSPICIOUS":
-        rookie_value = "Rookie/RC-anspråk är kronologiskt tveksamt"
+        rookie_value, rookie_level = "Rookie/RC-anspråk är kronologiskt tveksamt", "interpreted"
     else:
-        rookie_value = "Ingen verifierad rookie-status"
-    rows.append({"label": "Rookie / RC", "value": rookie_value, "known": bool(item.get("official_rookie_year_verified"))})
+        rookie_value, rookie_level = "Ingen rookie-signal identifierad", "missing"
+    rows.append({"label": "Rookie / RC", "value": rookie_value, "known": rookie_level != "missing", "level": rookie_level, "source": "verifierat" if rookie_level == "verified" else ("strukturerat" if rookie_level == "interpreted" else None)})
 
     traits = []
-    if fields.get("is_auto"):
+    if fields.get("is_auto") or observed.get("is_auto"):
         traits.append("Autograf")
-    if fields.get("is_patch"):
+    if fields.get("is_patch") or observed.get("is_patch"):
         traits.append("Patch / memorabilia")
-    grading_company = pick("grading_company", "grading_company")
-    grade = pick("grade", "grade")
+    grading_company, gc_level = pick("grading_company", "grading_company")
+    grade, grade_level = pick("grade", "grade")
     if grading_company or grade:
         grading = " ".join(str(x) for x in (grading_company, grade) if x not in (None, ""))
         traits.append(f"Graderad: {grading}")
-    rows.append({"label": "Specialegenskaper", "value": ", ".join(traits) if traits else "Inga verifierade specialegenskaper", "known": bool(traits)})
+    rows.append({"label": "Specialegenskaper", "value": ", ".join(traits) if traits else "Inga specialegenskaper identifierade", "known": bool(traits), "level": "interpreted" if traits else "missing", "source": "strukturerat" if traits else None})
 
     gate_status = item.get("exact_identity_gate_status") or "LÅST"
     gate_label = item.get("exact_identity_gate_label") or "Exakt identitet inte verifierad"
@@ -188,7 +207,6 @@ def build_card_identity_summary(item: dict) -> dict:
     if isinstance(gate_score, (int, float)):
         status_text += f" · {float(gate_score):.0f}/100"
 
-    # Prefer the gate's own missing-field list where available.
     gate_missing = item.get("exact_identity_gate_blockers") or []
     return {
         "rows": rows,
@@ -197,6 +215,7 @@ def build_card_identity_summary(item: dict) -> dict:
         "missing": _unique(missing),
         "blockers": _unique(gate_missing)[:4],
         "supports_exact_comp_search": bool(item.get("exact_identity_gate_supports_exact_comp_search")),
+        "note": "Observerat/strukturerat är användbar identifikation men är inte samma sak som verifierad exact identity.",
     }
 
 def _rarity_context(item: dict) -> list[str]:

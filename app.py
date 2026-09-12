@@ -234,7 +234,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.48"
+APP_VERSION = "v0.12.49"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2093,11 +2093,13 @@ def render_card_explanation_button(item: dict, key: str) -> None:
     with st.popover("✨ Varför är just det här kortet intressant?", use_container_width=True):
         st.markdown("### 🪪 Vad är det här för kort?")
         for row in identity.get("rows", []):
-            icon = "✅" if row.get("known") else "◻️"
-            st.write(f"{icon} **{row.get('label')}:** {row.get('value')}")
+            level = row.get("level")
+            icon = "✅" if level == "verified" else "🔎" if row.get("known") else "◻️"
+            source = f" · _{row.get('source')}_" if row.get("source") else ""
+            st.write(f"{icon} **{row.get('label')}:** {row.get('value')}{source}")
         st.caption(f"Identitetsstatus: {identity.get('status_text')}")
         if identity.get("missing"):
-            st.caption("Saknas för säker exakt identitet: " + ", ".join(identity["missing"]))
+            st.caption("Saknas fortfarande för verifierad exact identity: " + ", ".join(identity["missing"]))
         if identity.get("supports_exact_comp_search"):
             st.success("Identiteten är tillräckligt komplett för exact-comp-sökning.")
         else:
@@ -2128,7 +2130,7 @@ def render_card_explanation_button(item: dict, key: str) -> None:
             st.markdown("**Det du inte ska övertolka**")
             for caution in explanation["cautions"]:
                 st.write("⚠️ " + str(caution))
-        st.caption("Förklaringen använder bara signaler som redan finns i analysen. Den hittar inte på rookieår, raritet eller marknadsvärde.")
+        st.caption("Observerade uppgifter från annonstiteln visas separat från verifierad exact identity. FlipFynd hittar inte på rookieår, raritet eller marknadsvärde.")
 
 
 if st.session_state.get("results") is not None:
@@ -2284,7 +2286,7 @@ if st.session_state.get("results") is not None:
                                 )
                         if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
                             st.caption("Största blockerare: " + str(row["primary_blocker"]))
-                        render_card_explanation_button(row, f"top3_{rank}")
+                        render_card_explanation_button(row.get("_source_item") or row, f"top3_{rank}")
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
                 st.caption(decision_tiers.get("note") or "")

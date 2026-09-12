@@ -8,6 +8,12 @@ KNOWN_PLAYERS = [name.casefold() for name in get_all_player_names()]
 
 
 SET_PATTERNS = [
+    ("upper deck collector's choice", "Upper Deck Collector's Choice"),
+    ("upper deck collector s choice", "Upper Deck Collector's Choice"),
+    ("upper deck collectors choice", "Upper Deck Collector's Choice"),
+    ("collector's choice", "Upper Deck Collector's Choice"),
+    ("collector s choice", "Upper Deck Collector's Choice"),
+    ("collectors choice", "Upper Deck Collector's Choice"),
     ("the cup", "The Cup"),
     ("sp authentic", "SP Authentic"),
     ("ultimate collection", "Ultimate Collection"),

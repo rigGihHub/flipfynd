@@ -80,6 +80,10 @@ def _base_row(item):
         "player_card_hierarchy_reasons":list(item.get("player_card_hierarchy_reasons") or []),
         "player_card_hierarchy_cautions":list(item.get("player_card_hierarchy_cautions") or []),
         "player_card_hierarchy_hobby_traps":list(item.get("player_card_hierarchy_hobby_traps") or []),
+        # Keep the full analyzed listing available for drill-down UI.  The
+        # novice Top-3 row is intentionally compact, but the explanation
+        # popover needs the original identity/checklist/visual evidence.
+        "_source_item": item,
     }
 
 
