@@ -82,3 +82,36 @@ class VisualDetectiveTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_visual_identity_completeness_rewards_back_photo_and_exact_fields():
+    from src.visual_detective import visual_identity_completeness
+    result = {
+        "player_name": "Connor Bedard",
+        "set_or_product": "Upper Deck Series 2",
+        "season_or_year": "2023-24",
+        "card_number": "451",
+        "parallel_or_variant": "Outburst",
+        "serial_numerator": None,
+        "serial_denominator": None,
+        "identity_confidence": 0.91,
+        "front_visible": "yes",
+        "back_visible": "yes",
+        "back_text_readable": "yes",
+        "photo_quality": "good",
+        "needs_back_image": False,
+        "needs_closeup": False,
+        "recommended_next_photo": None,
+    }
+    summary = visual_identity_completeness(result)
+    assert summary["status"] == "Stark visuell identitet"
+    assert summary["score"] >= 90
+    assert summary["safe_for_valuation"] is False
+
+
+def test_response_schema_contains_photo_quality_and_condition_without_price_fields():
+    props = response_schema()["properties"]
+    for field in ["front_visible", "back_visible", "photo_quality", "condition_clues", "identity_confidence", "needs_closeup"]:
+        assert field in props
+    assert "market_value" not in props
+    assert "price" not in props

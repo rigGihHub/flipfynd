@@ -1,6 +1,6 @@
 {
-  "version": "2026-09-02-v0.10.6",
-  "purpose": "Authoritative product/checklist knowledge used to recognize card structures that deserve attention. It is not a price guide: rarity/chase labels can prioritize deeper analysis but may never create a monetary value without market comps.",
+  "version": "2026-09-12-v0.12.47",
+  "purpose": "Authoritative product/checklist knowledge with auditable source-backed rarity structures. It is not a price guide: rarity/chase labels can prioritize deeper analysis but may never create a monetary value without market comps.",
   "sources": [
     {
       "id": "ud_series1_2526",
@@ -155,8 +155,8 @@
     {
       "id": "ud_series2_2526",
       "publisher": "Upper Deck",
-      "url": "https://upperdeck.com/2025-26-upper-deck-series-2/",
-      "notes": "Official product page confirms Young Guns Exclusives /100, High Gloss /10, Clear Cut, Outburst Red /25 and Outburst Gold 1/1."
+      "url": "https://upperdeck.com/checklist/2025-26-upper-deck-series-2-checklist/",
+      "notes": "Official checklist confirms Series 2 Young Guns, Clear Cut Young Guns odds, Outburst Red /25 and Outburst Gold 1/1 structures."
     },
     {
       "id": "topps_chrome_pl_2026",
@@ -175,6 +175,36 @@
       "publisher": "Topps",
       "url": "https://www.topps.com/pages/topps-museum-ucc",
       "notes": "Official product page confirms one autograph, one relic and one autograph-relic per hobby box plus Museum Roll of Honor insert."
+    },
+    {
+      "id": "topps_ucc_2526",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/uefa-club-competitions",
+      "notes": "Official 2025-26 UEFA Club Competitions page links checklist and odds and identifies Roots, Born Champ and 8Bit Ballers/Shots as chase inserts. Chase wording alone does not prove SSP/case-hit rarity."
+    },
+    {
+      "id": "topps_chrome_ucc_2526",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-chrome-uefa-club-competitions",
+      "notes": "Official 2025-26 Topps Chrome UCC page identifies Budapest at Night and box-format exclusive chase programs; exclusivity alone is not proof of SSP/case-hit odds."
+    },
+    {
+      "id": "ud_opc_platinum_2526",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2025-2026-o-pee-chee-platinum-checklist/",
+      "notes": "Official 2025-26 O-Pee-Chee Platinum checklist confirms Marquee Rookies and low-numbered parallels including Emerald Surge /10."
+    },
+    {
+      "id": "ud_metal_2526",
+      "publisher": "Upper Deck",
+      "url": "https://upperdeck.com/checklist/2025-2026-skybox-metal-universe-hockey-checklist/",
+      "notes": "Official 2025-26 Skybox Metal Universe checklist confirms Precious Metal Gems structures including rookie PMG Blue /50 and numerous /10 insert parallels."
+    },
+    {
+      "id": "topps_finest_ucc_2526",
+      "publisher": "Topps",
+      "url": "https://www.topps.com/pages/topps-finest-ucc",
+      "notes": "Official 2025-26 Topps Finest UCC page confirms ultra-rare parallels, HoloGlow Variations, Prized Footballers Fusion Variations, The Man and premium autograph programs. Product copy does not by itself quantify case odds for these programs."
     }
   ],
   "signals": [
@@ -654,9 +684,11 @@
       "rarity_signal": "acetate_parallel",
       "confidence": "high",
       "attention_priority": 5,
-      "source_id": "ud_series1_2425",
+      "source_id": "ud_series1_2526",
       "product_family": "Upper Deck Series",
-      "program_family": "Young Guns"
+      "program_family": "Young Guns",
+      "pull_odds": "1:144 Hobby",
+      "importance_reason": "Upper Deck publishes Clear Cut Young Guns at 1:144 Hobby in 2025-26 Series 1; this is objective pack-odds evidence, not a price multiplier."
     },
     {
       "label": "Clear Cut High Gloss Auto /10",
@@ -1201,6 +1233,319 @@
       "product_family": "Topps Museum Collection UCC",
       "program_family": "Museum Roll of Honor",
       "importance_reason": "Topps identifies Museum Roll of Honor as a named insert in the 2025/26 Museum UCC release."
+    },
+    {
+      "sport": "football",
+      "label": "2025-26 Topps UCC Roots",
+      "patterns": [
+        "roots"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "official_chase_rarity_unquantified",
+      "confidence": "high",
+      "attention_priority": 3,
+      "knowledge_tier": 4,
+      "source_id": "topps_ucc_2526",
+      "product_family": "Topps UEFA Club Competitions 2025-26",
+      "program_family": "Roots",
+      "importance_reason": "Topps identifies this as a chase insert/program, but the product page alone does not prove an SSP or case-hit frequency. Verify published odds before upgrading rarity."
+    },
+    {
+      "sport": "football",
+      "label": "2025-26 Topps UCC Born Champ",
+      "patterns": [
+        "born champ"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "official_chase_rarity_unquantified",
+      "confidence": "high",
+      "attention_priority": 3,
+      "knowledge_tier": 4,
+      "source_id": "topps_ucc_2526",
+      "product_family": "Topps UEFA Club Competitions 2025-26",
+      "program_family": "Born Champ",
+      "importance_reason": "Topps identifies this as a chase insert/program, but the product page alone does not prove an SSP or case-hit frequency. Verify published odds before upgrading rarity."
+    },
+    {
+      "sport": "football",
+      "label": "2025-26 Topps UCC 8Bit Ballers",
+      "patterns": [
+        "8bit ballers"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "official_chase_rarity_unquantified",
+      "confidence": "high",
+      "attention_priority": 3,
+      "knowledge_tier": 4,
+      "source_id": "topps_ucc_2526",
+      "product_family": "Topps UEFA Club Competitions 2025-26",
+      "program_family": "8Bit Ballers",
+      "importance_reason": "Topps identifies this as a chase insert/program, but the product page alone does not prove an SSP or case-hit frequency. Verify published odds before upgrading rarity."
+    },
+    {
+      "sport": "football",
+      "label": "2025-26 Topps UCC 8Bit Shots",
+      "patterns": [
+        "8bit shots"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "official_chase_rarity_unquantified",
+      "confidence": "high",
+      "attention_priority": 3,
+      "knowledge_tier": 4,
+      "source_id": "topps_ucc_2526",
+      "product_family": "Topps UEFA Club Competitions 2025-26",
+      "program_family": "8Bit Shots",
+      "importance_reason": "Topps identifies this as a chase insert/program, but the product page alone does not prove an SSP or case-hit frequency. Verify published odds before upgrading rarity."
+    },
+    {
+      "sport": "hockey",
+      "label": "2025-26 Upper Deck Series 2 Incarnations",
+      "patterns": [
+        "incarnations"
+      ],
+      "category": "published_odds_insert",
+      "rarity_signal": "very_rare_published_odds",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "pull_odds": "1:1920 Hobby",
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Series 2 2025-26",
+      "program_family": "Incarnations",
+      "importance_reason": "Upper Deck publishes Incarnations at 1:1920 in 2025-26 Series 2; this is objective pull-odds evidence, not a price guarantee."
+    },
+    {
+      "sport": "hockey",
+      "label": "2025-26 Upper Deck Series 2 Dazzlers Gold",
+      "patterns": [
+        "dazzlers gold"
+      ],
+      "category": "published_odds_parallel",
+      "rarity_signal": "very_rare_published_odds",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "pull_odds": "1:2880 Hobby",
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Series 2 2025-26",
+      "program_family": "Dazzlers Gold",
+      "importance_reason": "Upper Deck publishes Dazzlers Gold at 1:2880 in 2025-26 Series 2; exact player and card identity still drive value."
+    },
+    {
+      "sport": "hockey",
+      "label": "2025-26 Upper Deck Series 2 UD Canvas Program of Excellence",
+      "patterns_any": [
+        "canvas poe",
+        "program of excellence"
+      ],
+      "category": "published_odds_insert",
+      "rarity_signal": "rare_published_odds",
+      "confidence": "high",
+      "attention_priority": 4,
+      "knowledge_tier": 5,
+      "pull_odds": "1:864 Hobby",
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Series 2 2025-26",
+      "program_family": "UD Canvas Program of Excellence",
+      "importance_reason": "Upper Deck publishes UD Canvas Program of Excellence at 1:864 in 2025-26 Series 2."
+    },
+    {
+      "sport": "hockey",
+      "label": "2025-26 Upper Deck Series 2 Population Count 25",
+      "patterns": [
+        "population count 25"
+      ],
+      "category": "serial_numbered_insert",
+      "rarity_signal": "low_numbered_insert",
+      "confidence": "high",
+      "attention_priority": 5,
+      "knowledge_tier": 5,
+      "print_run": 25,
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Series 2 2025-26",
+      "program_family": "Population Count",
+      "importance_reason": "Upper Deck documents Population Count 25 as numbered to 25 in 2025-26 Series 2."
+    },
+    {
+      "sport": "hockey",
+      "label": "2025-26 Upper Deck Series 2 Young Guns base",
+      "patterns": [
+        "young guns"
+      ],
+      "category": "rookie_program",
+      "rarity_signal": "published_base_rookie_odds",
+      "confidence": "high",
+      "attention_priority": 3,
+      "knowledge_tier": 4,
+      "pull_odds": "1:2 Hobby",
+      "source_id": "ud_series2_2526",
+      "product_family": "Upper Deck Series 2 2025-26",
+      "program_family": "Young Guns",
+      "importance_reason": "Upper Deck publishes base Young Guns at 1:2 in 2025-26 Series 2; common rookie-program odds should not be confused with rare parallel odds."
+    },
+    {
+      "label": "2025-26 Topps Chrome UCC Budapest at Night",
+      "sport": "football",
+      "patterns": [
+        "budapest at night"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "manufacturer_chase",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_chrome_ucc_2526",
+      "product_family": "Topps Chrome UEFA 2025-26",
+      "program_family": "Budapest at Night",
+      "knowledge_tier": 1,
+      "importance_reason": "Topps highlights Budapest at Night as a Hobby-exclusive chase; exact scarcity is not quantified on the product page."
+    },
+    {
+      "label": "2025-26 Topps Chrome UCC Black Lazer Autographs",
+      "sport": "football",
+      "patterns": [
+        "black lazer",
+        "autograph"
+      ],
+      "category": "autograph_program",
+      "rarity_signal": "manufacturer_chase",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_chrome_ucc_2526",
+      "product_family": "Topps Chrome UEFA 2025-26",
+      "program_family": "Black Lazer Autographs",
+      "knowledge_tier": 1,
+      "importance_reason": "Topps identifies Black Lazer Autographs as Jumbo-exclusive chase content; box exclusivity does not itself prove SSP odds."
+    },
+    {
+      "label": "2025-26 Topps Chrome UCC Metaverse",
+      "sport": "football",
+      "patterns": [
+        "metaverse"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "manufacturer_chase",
+      "confidence": "high",
+      "attention_priority": 3,
+      "source_id": "topps_chrome_ucc_2526",
+      "product_family": "Topps Chrome UEFA 2025-26",
+      "program_family": "Metaverse",
+      "knowledge_tier": 1,
+      "importance_reason": "Topps highlights Metaverse as Mega-exclusive chase content; exact scarcity is not quantified on the product page."
+    },
+    {
+      "label": "2025-26 Topps Chrome UCC Bionic",
+      "sport": "football",
+      "patterns": [
+        "bionic"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "manufacturer_chase",
+      "confidence": "high",
+      "attention_priority": 3,
+      "source_id": "topps_chrome_ucc_2526",
+      "product_family": "Topps Chrome UEFA 2025-26",
+      "program_family": "Bionic",
+      "knowledge_tier": 1,
+      "importance_reason": "Topps highlights Bionic as Value-box-exclusive chase content; exact scarcity is not quantified on the product page."
+    },
+    {
+      "label": "2025-26 OPC Platinum Marquee Rookies",
+      "sport": "hockey",
+      "patterns_all": [
+        "marquee rookies",
+        "o-pee-chee platinum"
+      ],
+      "category": "rookie_program",
+      "rarity_signal": "flagship_rookie_program",
+      "confidence": "high",
+      "attention_priority": 3,
+      "source_id": "ud_opc_platinum_2526",
+      "product_family": "O-Pee-Chee Platinum 2025-26",
+      "program_family": "Marquee Rookies",
+      "importance_reason": "Upper Deck documents Marquee Rookies as the rookie subset. Rookie importance is separate from rarity."
+    },
+    {
+      "label": "2025-26 OPC Platinum Emerald Surge /10",
+      "sport": "hockey",
+      "patterns_all": [
+        "emerald surge",
+        "o-pee-chee platinum"
+      ],
+      "category": "parallel",
+      "rarity_signal": "low_numbered_parallel",
+      "confidence": "high",
+      "attention_priority": 5,
+      "print_run": 10,
+      "source_id": "ud_opc_platinum_2526",
+      "product_family": "O-Pee-Chee Platinum 2025-26",
+      "program_family": "Emerald Surge",
+      "importance_reason": "Official checklist shows Emerald Surge parallels numbered to 10, including Marquee Rookies."
+    },
+    {
+      "label": "2025-26 Skybox Metal Universe PMG Blue /50",
+      "sport": "hockey",
+      "patterns_any": [
+        "precious metal gems blue",
+        "pmg blue"
+      ],
+      "category": "parallel",
+      "rarity_signal": "numbered_parallel",
+      "confidence": "high",
+      "attention_priority": 5,
+      "print_run": 50,
+      "source_id": "ud_metal_2526",
+      "product_family": "Skybox Metal Universe 2025-26",
+      "program_family": "Precious Metal Gems",
+      "importance_reason": "Official checklist shows Precious Metal Gems Blue parallels numbered to 50, including rookies."
+    },
+    {
+      "label": "2025-26 Topps Finest UCC HoloGlow Variation",
+      "sport": "football",
+      "patterns_any": [
+        "hologlow variation",
+        "holo glow variation"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "manufacturer_chase",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_finest_ucc_2526",
+      "product_family": "Topps Finest UEFA 2025-26",
+      "program_family": "Base Set HoloGlow Variations",
+      "importance_reason": "Topps lists HoloGlow Variations among the deeper chase/variation lineup, but the product page does not quantify SSP/case odds."
+    },
+    {
+      "label": "2025-26 Topps Finest UCC Prized Footballers Fusion Variation",
+      "sport": "football",
+      "patterns_all": [
+        "prized footballers",
+        "fusion"
+      ],
+      "category": "chase_insert",
+      "rarity_signal": "manufacturer_chase",
+      "confidence": "high",
+      "attention_priority": 4,
+      "source_id": "topps_finest_ucc_2526",
+      "product_family": "Topps Finest UEFA 2025-26",
+      "program_family": "Prized Footballers Fusion Variations",
+      "importance_reason": "Topps lists Prized Footballers Fusion Variations as a notable variation program; exact rarity must come from odds/checklist evidence."
+    },
+    {
+      "label": "2025-26 Topps Finest UCC The Man",
+      "sport": "football",
+      "patterns_all": [
+        "the man",
+        "finest"
+      ],
+      "category": "key_insert",
+      "rarity_signal": "key_insert",
+      "confidence": "high",
+      "attention_priority": 3,
+      "source_id": "topps_finest_ucc_2526",
+      "product_family": "Topps Finest UEFA 2025-26",
+      "program_family": "The Man",
+      "importance_reason": "Topps confirms The Man returns as a fan-favorite insert. Importance is not equivalent to SSP rarity."
     }
   ]
 }

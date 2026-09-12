@@ -8,13 +8,24 @@ from __future__ import annotations
 
 SOURCES = (
     {
+        "key": "ebay_product_research",
+        "label": "eBay Product Research",
+        "research_url": "https://www.ebay.com/sh/research",
+        "supports_sports_cards": True,
+        "automated_ingestion": False,
+        "status": "RESEARCH_ONLY",
+        "evidence_type": "DIRECT_REALIZED_SALES",
+        "note": "Officiell eBay-research med upp till 3 års försäljningsdata och faktiskt accepted Best Offer-pris. Kräver manuell research/inloggning; inget webb-UI skrapas.",
+    },
+    {
         "key": "ebay_sold_search",
         "label": "eBay Sold",
         "research_url": "https://www.ebay.com/sch/i.html?LH_Sold=1&LH_Complete=1",
         "supports_sports_cards": True,
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
-        "note": "Bra primär kontrollkälla. FlipFynd importerar inte sidan automatiskt utan verifierbar integrationsväg.",
+        "evidence_type": "DIRECT_REALIZED_SALES",
+        "note": "Bra primär kontrollkälla för färska avslut. Regular sold search är kortare historik än Product Research och kan dölja accepted Best Offer-priset.",
     },
     {
         "key": "ebay_price_guide",
@@ -23,7 +34,8 @@ SOURCES = (
         "supports_sports_cards": True,
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
-        "note": "eBay visar historiska trading-card-försäljningar, men FlipFynd behandlar inte webbgränssnittet som ett API.",
+        "evidence_type": "AGGREGATED_PRICE_GUIDE",
+        "note": "Sekundär prisguide byggd på completed sales; uppges använda accepted Best Offer och upp till två års transaktioner. Inte en enskild exact sold comp.",
     },
     {
         "key": "130point",
@@ -32,7 +44,18 @@ SOURCES = (
         "supports_sports_cards": True,
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
-        "note": "Användbar manuell kontrollkälla. Ingen officiell publik utvecklarintegration antas av FlipFynd.",
+        "evidence_type": "SALES_RESEARCH_AGGREGATOR",
+        "note": "Användbar manuell dubbelkontroll av sales. FlipFynd antar ingen officiell publik utvecklarintegration och räknar inte ett visat riktpris som exact comp.",
+    },
+    {
+        "key": "sportscardspro",
+        "label": "SportsCardsPro",
+        "research_url": "https://www.sportscardspro.com/",
+        "supports_sports_cards": True,
+        "automated_ingestion": False,
+        "status": "RESEARCH_ONLY",
+        "evidence_type": "AGGREGATED_PRICE_GUIDE",
+        "note": "Dagligen uppdaterad prisguide byggd av eBay- och Marketplace-sales. Bra sanity check; API/CSV ger aktuella värden men inte historiska sales och får därför inte behandlas som direct sold comps.",
     },
     {
         "key": "card_ladder",
@@ -41,7 +64,8 @@ SOURCES = (
         "supports_sports_cards": True,
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
-        "note": "Bred historisk marknadsdata; eventuell framtida integration kräver verifierade villkor och teknisk åtkomst.",
+        "evidence_type": "MULTI_MARKET_SALES_DATABASE",
+        "note": "Bred historisk sales-databas från flera marknadsplatser. Enskilda verifierbara sales kan vara stark evidens; automatisk integration kräver verifierad åtkomst/licens.",
     },
 )
 

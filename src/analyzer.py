@@ -16,6 +16,7 @@ from src.player_knowledge import get_player_knowledge, derive_lifecycle_context
 from src.rookie_window_context import build_rookie_window_context
 from src.player_card_demand import build_player_card_demand
 from src.valuable_card_knowledge import build_valuable_card_knowledge
+from src.rarity_evidence import grade_rarity_evidence
 from src.rookie_importance import build_player_rookie_importance
 from src.mispriced_rookie_hunter import build_mispriced_rookie_signal
 from src.misclassified_card_hunter import build_misclassified_card_signal
@@ -3461,6 +3462,7 @@ def analyze_core(
         identity_confidence_score=features.get("identity_confidence_score", 0),
         valuation_confidence_score=valuation_confidence_score,
     )
+    rarity_evidence = grade_rarity_evidence(market_knowledge_signals)
     valuable_card_knowledge = build_valuable_card_knowledge(
         signals=market_knowledge_signals,
         player_name=profile.get("name"),
@@ -3851,6 +3853,15 @@ def analyze_core(
         "player_card_demand_cautions": player_card_demand.get("cautions", []),
         "player_card_demand_next_action": player_card_demand.get("next_action"),
         "player_card_demand_note": player_card_demand.get("note"),
+        "rarity_evidence_status": rarity_evidence.get("status"),
+        "rarity_evidence_confidence_score": rarity_evidence.get("confidence_score", 0),
+        "rarity_evidence_entries": rarity_evidence.get("evidence", []),
+        "rarity_evidence_objective_count": rarity_evidence.get("objective_evidence_count", 0),
+        "rarity_evidence_source_backed_count": rarity_evidence.get("source_backed_count", 0),
+        "rarity_evidence_unsupported_count": rarity_evidence.get("unsupported_claim_count", 0),
+        "rarity_evidence_warnings": rarity_evidence.get("warnings", []),
+        "rarity_evidence_exact_verified": rarity_evidence.get("exact_rarity_verified", False),
+        "rarity_evidence_note": rarity_evidence.get("note"),
         "valuable_card_priority_score": valuable_card_knowledge.get("priority_score", 0),
         "valuable_card_level": valuable_card_knowledge.get("level"),
         "valuable_card_archetype": valuable_card_knowledge.get("archetype"),

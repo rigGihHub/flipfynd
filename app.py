@@ -6,6 +6,7 @@ import sys
 import os
 from pathlib import Path
 from src.player_knowledge import knowledge_coverage
+from src.card_explanation import build_card_explanation, build_card_identity_summary
 
 
 import streamlit as st
@@ -50,6 +51,7 @@ except ImportError:
     smart_collect_local_sold_comps = None
 from src.external_sold_sources import available_adapters, import_external_sold_rows
 from src.sold_source_registry import sold_source_registry, source_readiness_summary
+from src.comp_source_intelligence import build_comp_research_plan
 from src.sold_comp_quality import audit_sold_comp_records
 from src.sold_comp_intake import sold_comp_intake_audit
 from src.sold_gap_planner import build_sold_research_queue
@@ -60,6 +62,8 @@ from src.market_coverage_autopilot import build_autopilot_plan, autopilot_progre
 from src.autopilot_compat import build_autopilot_plan_compat
 from src.visual_detective import analyze_listing_images
 from src.visual_identity import build_visual_card_candidates
+from src.visual_checklist_match import match_visual_to_checklist_knowledge
+from src.visual_exact_identity import resolve_visual_exact_identity
 from src.exact_comp_hunter import hunt_exact_comps
 from src.comp_evidence_ladder import build_exact_evidence_ladder, build_premium_evidence_ladder
 from src.comp_verdict import build_comp_verdict
@@ -230,7 +234,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.35"
+APP_VERSION = "v0.12.48"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -274,6 +278,7 @@ SOLD_COMPS_PATH = (
 
 FLIP_JOURNAL_PATH = BASE_DIR / "data" / "flip_journal.json"
 PENDING_SYNC_PATH = BASE_DIR / "data" / "pending_sync.json"
+EXACT_SUPPLY_HISTORY_PATH = BASE_DIR / "data" / "exact_supply_history.json"
 
 
 
@@ -2081,6 +2086,51 @@ if run:
     st.session_state["results_data_version"] = get_data_version()
 
 
+def render_card_explanation_button(item: dict, key: str) -> None:
+    """Render a one-click, evidence-aware explanation for a listing card."""
+    explanation = build_card_explanation(item)
+    identity = build_card_identity_summary(item)
+    with st.popover("✨ Varför är just det här kortet intressant?", use_container_width=True):
+        st.markdown("### 🪪 Vad är det här för kort?")
+        for row in identity.get("rows", []):
+            icon = "✅" if row.get("known") else "◻️"
+            st.write(f"{icon} **{row.get('label')}:** {row.get('value')}")
+        st.caption(f"Identitetsstatus: {identity.get('status_text')}")
+        if identity.get("missing"):
+            st.caption("Saknas för säker exakt identitet: " + ", ".join(identity["missing"]))
+        if identity.get("supports_exact_comp_search"):
+            st.success("Identiteten är tillräckligt komplett för exact-comp-sökning.")
+        else:
+            st.warning("Exakt kortidentitet är inte tillräckligt säker ännu. Värderingen ska därför tolkas försiktigt.")
+        st.divider()
+        st.markdown(f"**{explanation['headline']}**")
+        if explanation.get("strengths"):
+            st.markdown("**Det som talar för kortet**")
+            for reason in explanation["strengths"]:
+                st.write("✅ " + str(reason))
+        if explanation.get("comparison"):
+            st.markdown("**Varför samlare kan bry sig om just den här versionen**")
+            for point in explanation["comparison"]:
+                st.write("↔️ " + str(point))
+        if explanation.get("evidence"):
+            st.markdown("**Vad FlipFynd faktiskt har stöd för**")
+            for fact in explanation["evidence"]:
+                st.write("• " + str(fact))
+        if explanation.get("rarity_context"):
+            st.markdown("**Checklist / case hit / short print**")
+            for fact in explanation["rarity_context"]:
+                st.write("🎯 " + str(fact))
+        if explanation.get("stronger_if"):
+            st.markdown("**Vad som skulle göra caset starkare**")
+            for point in explanation["stronger_if"]:
+                st.write("🔎 " + str(point))
+        if explanation.get("cautions"):
+            st.markdown("**Det du inte ska övertolka**")
+            for caution in explanation["cautions"]:
+                st.write("⚠️ " + str(caution))
+        st.caption("Förklaringen använder bara signaler som redan finns i analysen. Den hittar inte på rookieår, raritet eller marknadsvärde.")
+
+
 if st.session_state.get("results") is not None:
     filtered = []
 
@@ -2120,6 +2170,7 @@ if st.session_state.get("results") is not None:
                 reasons.append(sold_evidence_text(card.get("sold_comparable_count")))
                 reasons.append(sellability_text(card.get("sellability_label"), card.get("sellability_score")))
                 st.caption(" · ".join(reasons))
+                render_card_explanation_button(card, "simple_buy")
                 if card.get("url"):
                     st.link_button("Öppna annonsen på Tradera ↗", card["url"], use_container_width=True)
                 with st.expander("Varför väljer FlipFynd detta kort?", expanded=False):
@@ -2233,6 +2284,7 @@ if st.session_state.get("results") is not None:
                                 )
                         if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
                             st.caption("Största blockerare: " + str(row["primary_blocker"]))
+                        render_card_explanation_button(row, f"top3_{rank}")
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
                 st.caption(decision_tiers.get("note") or "")
@@ -3344,7 +3396,8 @@ if st.session_state.get("results") is not None:
         with st.expander(f"👁️ Visual Edge ({len(visual_candidates)})", expanded=False):
             st.caption(
                 "Här prioriteras annonser där bilderna kan vara extra viktiga för att verifiera exakt kort. "
-                "v0.9.1 kan på begäran låta en bildmodell skapa försiktiga hypoteser om synliga kortdetaljer. Hypoteserna påverkar aldrig värdering eller maxbud automatiskt."
+                "Bildgranskaren analyserar nu upp till fyra annonsfoton tillsammans och använder fram-/baksida och närbilder för säkrare kortidentitet. "
+                "Den rapporterar bara visuella hypoteser; de påverkar aldrig värdering eller maxbud automatiskt."
             )
             for candidate in visual_candidates[:8]:
                 cols = st.columns([1, 3])
@@ -3362,8 +3415,8 @@ if st.session_state.get("results") is not None:
                     if candidate.get("lank"):
                         st.markdown(f"[Öppna på Tradera]({candidate.get('lank')})")
                     detective_key = "visual_detective_" + str(candidate.get("lank") or candidate.get("titel") or "")
-                    if st.button("🔬 Analysera bilden", key="btn_" + detective_key):
-                        with st.spinner("Granskar synliga kortdetaljer …"):
+                    if st.button("🔬 Analysera bilderna", key="btn_" + detective_key):
+                        with st.spinner("Granskar fram-/baksida, text, variant och fotokvalitet …"):
                             st.session_state[detective_key] = analyze_listing_images({
                                 "titel": candidate.get("titel", ""),
                                 "raw_text": candidate.get("raw_text", ""),
@@ -3376,11 +3429,40 @@ if st.session_state.get("results") is not None:
                         else:
                             comp = detective.get("comparison", {})
                             findings = detective.get("findings", {})
-                            st.markdown(f"**Visual Card Detective:** {comp.get('status', 'Granskad')} · säkerhet {comp.get('confidence', 0):.0f}/100")
-                            for discovery in comp.get("discoveries", [])[:4]:
+                            identity = detective.get("identity", comp.get("identity", {}))
+                            st.markdown(
+                                f"**Visual Card Detective:** {comp.get('status', 'Granskad')} · "
+                                f"säkerhet {comp.get('confidence', 0):.0f}/100 · "
+                                f"{identity.get('status', 'Bildidentitet')} {identity.get('score', 0)}/100"
+                            )
+                            st.caption(
+                                f"Analyserade bilder: {detective.get('images_analyzed', 0)} · "
+                                f"foto: {findings.get('photo_quality', 'unknown')} · "
+                                f"fram: {findings.get('front_visible', 'unknown')} · "
+                                f"baksida: {findings.get('back_visible', 'unknown')}"
+                            )
+                            visual_bits = []
+                            for label, key_name in [
+                                ("Spelare", "player_name"), ("Lag/klubb", "team_or_club"),
+                                ("Set", "set_or_product"), ("År", "season_or_year"),
+                                ("Kortnr", "card_number"), ("Variant", "parallel_or_variant")
+                            ]:
+                                if findings.get(key_name):
+                                    visual_bits.append(f"{label}: {findings.get(key_name)}")
+                            if visual_bits:
+                                st.caption("🪪 " + " · ".join(visual_bits[:6]))
+                            if findings.get("serial_numerator") and findings.get("serial_denominator"):
+                                st.caption(f"🔢 Synlig serialisering: {findings.get('serial_numerator')}/{findings.get('serial_denominator')}")
+                            if findings.get("condition_clues"):
+                                st.caption("🧪 Synligt skick: " + " • ".join(findings.get("condition_clues")[:3]))
+                            for discovery in comp.get("discoveries", [])[:5]:
                                 st.caption("🔎 " + discovery)
                             for conflict in comp.get("conflicts", [])[:3]:
                                 st.caption("⚠️ " + conflict)
+                            if identity.get("missing_fields"):
+                                st.caption("Saknas visuellt: " + " • ".join(identity.get("missing_fields")[:5]))
+                            if identity.get("recommended_next_photo"):
+                                st.info("📸 Nästa bästa foto: " + str(identity.get("recommended_next_photo")))
 
                             visual_fusion = build_detail_evidence_fusion(
                                 {
@@ -3427,7 +3509,49 @@ if st.session_state.get("results") is not None:
                                     st.caption("Stöd: " + " • ".join(evidence[:5]))
                             for blocker in identity.get("blockers", [])[:3]:
                                 st.caption("⛔ " + blocker)
-                            verified_candidates = [c for c in identity.get("candidates", []) if c.get("verified_identity")]
+
+                            checklist_match = match_visual_to_checklist_knowledge(findings, sport=candidate.get("sport") or candidate.get("kategori"))
+                            st.markdown(f"**📚 Visuell checklistmatch:** {checklist_match.get('status')}")
+                            for cm in checklist_match.get("matches", [])[:3]:
+                                icon = "⛔" if cm.get("conflict") else ("✅" if cm.get("match_score", 0) >= 80 else "🧩")
+                                st.caption(f"{icon} {cm.get('label')} · strukturmatch {cm.get('match_score', 0):.0f}/100")
+                                if cm.get("evidence"):
+                                    st.caption("Stöd: " + " • ".join(cm.get("evidence")[:3]))
+                                if cm.get("importance_reason"):
+                                    st.caption("Varför det spelar roll: " + str(cm.get("importance_reason")))
+                                if cm.get("source_url"):
+                                    publisher = cm.get("source_publisher") or "officiell källa"
+                                    st.markdown(f"[Kontrollera mot {publisher}]({cm.get('source_url')})")
+                            st.caption(checklist_match.get("note", ""))
+
+                            exact_identity = resolve_visual_exact_identity(
+                                findings,
+                                listing_title=candidate.get("titel", ""),
+                                listing_raw_text=candidate.get("raw_text", ""),
+                                observed_records=get_sold_comp_data(),
+                                sport=candidate.get("sport") or candidate.get("kategori"),
+                            )
+                            st.markdown(f"**🧠 Mest sannolika exakta kort:** {exact_identity.get('status')}")
+                            best_card = exact_identity.get("best_candidate")
+                            if best_card:
+                                icon = "✅" if exact_identity.get("exact_identity_ready") else "🧩"
+                                st.caption(
+                                    f"{icon} {best_card.get('label')} · kombinerad identitet "
+                                    f"{best_card.get('combined_score', 0):.0f}/100"
+                                )
+                                if best_card.get("reasons"):
+                                    st.caption("Varför: " + " • ".join(best_card.get("reasons")[:5]))
+                                for caution in best_card.get("cautions", [])[:3]:
+                                    st.caption("⚠️ " + caution)
+                            if exact_identity.get("alternatives"):
+                                st.caption("Alternativ om huvudkandidaten faller:")
+                                for alt in exact_identity.get("alternatives", [])[:2]:
+                                    st.caption(f"↳ {alt.get('label')} · {alt.get('combined_score', 0):.0f}/100")
+                            for action in exact_identity.get("next_actions", [])[:3]:
+                                st.caption("🔎 Nästa verifiering: " + action)
+                            st.caption(exact_identity.get("note", ""))
+
+                            verified_candidates = [c for c in exact_identity.get("candidates", []) if exact_identity.get("exact_identity_ready") and c is best_card]
                             if verified_candidates:
                                 st.success("Identiteten har oberoende stöd. Exact Comp Hunter är upplåst för denna kandidat.")
                                 exact_hunt = hunt_exact_comps(verified_candidates[0], get_sold_comp_data())
@@ -3893,6 +4017,8 @@ if st.session_state.get("results") is not None:
 
             # Detailed liquidity, confidence, velocity, risk and identity diagnostics live in
             # “Visa full analys”. The decision card intentionally stays action-first.
+
+            render_card_explanation_button(item, f"result_{index}")
 
             journal_key = f"journal_add_{index}_{hashlib.sha1(str(item.get('lank') or item.get('titel')).encode('utf-8')).hexdigest()[:8]}"
             if st.button("📒 Logga som köpt", key=journal_key, use_container_width=True):
@@ -4372,6 +4498,15 @@ if st.session_state.get("results") is not None:
                             st.write("**Värdekortssignaler:** " + " · ".join(tags[:6]))
                         if item.get("valuable_card_market_evidence"):
                             st.write(f"**Evidens:** {item.get('valuable_card_market_evidence')}")
+                        rarity_entries = item.get("rarity_evidence_entries") or []
+                        if rarity_entries:
+                            st.write(f"**Raritetsbevis:** {item.get('rarity_evidence_status') or 'Ej klassificerat'}")
+                            for rarity_row in rarity_entries[:4]:
+                                label = rarity_row.get("label") or "Känd struktur"
+                                status = rarity_row.get("status") or ""
+                                st.write(f"• {label}: {status}")
+                            for rarity_warning in (item.get("rarity_evidence_warnings") or [])[:3]:
+                                st.warning(rarity_warning)
                         for reason in (item.get("valuable_card_reasons") or [])[:5]:
                             st.write(f"• {reason}")
                         cautions = item.get("valuable_card_cautions") or []
@@ -5065,15 +5200,23 @@ with st.expander("⚙️ Administration & data"):
                     st.caption(progress["label"] + " · " + progress["note"])
                     st.caption("Exakt sökfras")
                     st.code(research_query["query"], language=None)
+                    comp_plan = build_comp_research_plan(research_identity)
+                    with st.expander("Vilken comp-källa ska jag lita mest på?", expanded=False):
+                        st.write("**Prioritet:** eBay Product Research → eBay Sold → Card Ladder → 130 Point → SportsCardsPro/eBay Price Guide som sekundär prisbild.")
+                        st.caption(comp_plan["rule"])
+                        for source_row in comp_plan["sources"]:
+                            st.write(f"**{source_row['priority']}. {source_row['label']}** · {source_row['evidence_class']}")
+                            st.caption(f"{source_row['use_for']} Historik: {source_row['history']}")
                     ebay_url = ebay_sold_search_url(research_identity)
-                    src_cols = st.columns(4)
+                    src_cols = st.columns(5)
                     if ebay_url:
                         src_cols[0].link_button("eBay Sold ↗", ebay_url, use_container_width=True)
                     source_by_key = {source["key"]: source for source in sold_source_registry()}
                     for col, key, label in [
                         (src_cols[1], "130point", "130 Point ↗"),
                         (src_cols[2], "card_ladder", "Card Ladder ↗"),
-                        (src_cols[3], "ebay_price_guide", "eBay Price Guide ↗"),
+                        (src_cols[3], "sportscardspro", "SportsCardsPro ↗"),
+                        (src_cols[4], "ebay_price_guide", "eBay Price Guide ↗"),
                     ]:
                         source = source_by_key.get(key)
                         if source:
@@ -5093,7 +5236,7 @@ with st.expander("⚙️ Administration & data"):
                         f3, f4 = st.columns(2)
                         source_platform = f3.selectbox(
                             "Källa",
-                            ["eBay", "130 Point", "Card Ladder", "Tradera", "Annan verifierad källa"],
+                            ["eBay", "eBay Product Research", "130 Point", "Card Ladder", "SportsCardsPro", "Tradera", "Annan verifierad källa"],
                         )
                         shipping_text = f4.text_input("Frakt (valfritt)", value="")
                         fx_rate_text = ""

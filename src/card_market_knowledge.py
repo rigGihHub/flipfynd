@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from src.card_parser import normalize_text
+from src.checklist_collectible_hierarchy import classify_collectible_signal
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "card_market_knowledge.json"
 
@@ -43,18 +44,24 @@ def detect_market_knowledge_signals(text: str, sport: str | None = None) -> list
         any_ok = (not patterns_any) or any(pattern in norm for pattern in patterns_any)
         has_rule = bool(patterns or patterns_all or patterns_any)
         if has_rule and legacy_ok and all_ok and any_ok:
+            hierarchy = classify_collectible_signal(signal)
             found.append({
                 "label": signal.get("label"),
                 "category": signal.get("category"),
                 "rarity_signal": signal.get("rarity_signal"),
                 "confidence": signal.get("confidence", "medium"),
                 "print_run": signal.get("print_run"),
+                "pull_odds": signal.get("pull_odds") or signal.get("published_odds"),
                 "attention_priority": int(signal.get("attention_priority", 0) or 0),
                 "source_id": signal.get("source_id"),
                 "product_family": signal.get("product_family"),
                 "program_family": signal.get("program_family"),
                 "importance_reason": signal.get("importance_reason"),
                 "knowledge_tier": signal.get("knowledge_tier"),
+                "collectible_hierarchy_tier": hierarchy.get("tier"),
+                "collectible_hierarchy_rank": hierarchy.get("rank"),
+                "collectible_hierarchy_label": hierarchy.get("label"),
+                "collectible_hierarchy_reason": hierarchy.get("reason"),
             })
     return found
 
