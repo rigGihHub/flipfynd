@@ -85,6 +85,7 @@ from src.budget_discovery_coverage import add_budget_coverage_indices, budget_co
 from src.segment_discovery_coverage import add_segment_coverage_indices, segment_coverage_summary
 from src.segment_yield_learning import build_segment_yield_report, best_observed_segments
 from src.decision_tiers import build_decision_tiers
+from src.decision_tiers_compat import build_decision_tiers_compat
 from src.market_gap_hunter import build_market_gap_queue
 from src.active_supply_intelligence import verify_active_supply, classify_verified_supply
 from src.exact_card_supply import build_exact_supply_query, count_analyzed_exact_matches, verify_exact_query_supply, exact_identity_key
@@ -240,7 +241,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.59"
+APP_VERSION = "v0.12.60"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2390,7 +2391,7 @@ if st.session_state.get("results") is not None:
                 st.caption(simple_buy.get("note") or "")
 
             # Evidence-aware Top 3: separate opportunity potential from certainty.
-            decision_tiers = build_decision_tiers(st.session_state.get("results") or [], total_limit=3, require_verified_economic_edge=True)
+            decision_tiers = build_decision_tiers_compat(build_decision_tiers, st.session_state.get("results") or [], total_limit=3, require_verified_economic_edge=True)
             if not decision_tiers.get("rows"):
                 st.info("**Inga verifierade fynd för Top 3 just nu.** Billigt eller känt är inte samma sak som felprissatt; listan kräver verifierad ekonomisk edge.")
                 if decision_tiers.get("rejection_reasons"):
