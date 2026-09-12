@@ -55,6 +55,7 @@ from src.comp_source_intelligence import build_comp_research_plan
 from src.seller_bundle_opportunity import find_same_seller_listings, build_shared_shipping_scenario, classify_same_seller_addon, build_best_same_seller_basket
 from src.multi_source_comp_consensus import build_multi_source_consensus
 from src.comp_acquisition_router import build_comp_acquisition_router
+from src.comp_research_workbench import build_research_links, fetch_sportscardspro_context, sportscardspro_api_configured, parse_verified_sales_batch
 from src.sold_comp_quality import audit_sold_comp_records
 from src.sold_comp_intake import sold_comp_intake_audit
 from src.sold_gap_planner import build_sold_research_queue
@@ -86,6 +87,8 @@ from src.segment_discovery_coverage import add_segment_coverage_indices, segment
 from src.segment_yield_learning import build_segment_yield_report, best_observed_segments
 from src.decision_tiers import build_decision_tiers
 from src.decision_tiers_compat import build_decision_tiers_compat
+from src.research_shortlist import build_research_shortlist, evidence_coverage
+from src.unlock_research_queue import build_unlock_research_queue
 from src.market_gap_hunter import build_market_gap_queue
 from src.active_supply_intelligence import verify_active_supply, classify_verified_supply
 from src.exact_card_supply import build_exact_supply_query, count_analyzed_exact_matches, verify_exact_query_supply, exact_identity_key
@@ -241,7 +244,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.60"
+APP_VERSION = "v0.12.63"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2393,10 +2396,60 @@ if st.session_state.get("results") is not None:
             # Evidence-aware Top 3: separate opportunity potential from certainty.
             decision_tiers = build_decision_tiers_compat(build_decision_tiers, st.session_state.get("results") or [], total_limit=3, require_verified_economic_edge=True)
             if not decision_tiers.get("rows"):
-                st.info("**Inga verifierade fynd för Top 3 just nu.** Billigt eller känt är inte samma sak som felprissatt; listan kräver verifierad ekonomisk edge.")
+                st.info("**Inga verifierade fynd för Top 3 just nu.** Det betyder inte att 12 inlästa sidor saknar fynd – det betyder att inget kort ännu har tillräckligt marknadsunderlag för att kallas verifierat fynd.")
+                coverage = evidence_coverage(st.session_state.get("results") or [])
+                if coverage.get("total"):
+                    st.caption(
+                        f"Evidenstäckning: {coverage['with_2_sold']}/{coverage['total']} har minst 2 exact SOLD · "
+                        f"{coverage['identity_ready']}/{coverage['total']} har exact-comp-redo identitet · "
+                        f"{coverage['market_value_ready']}/{coverage['total']} har säkert marknadsvärde · "
+                        f"{coverage['max_price_ready']}/{coverage['total']} har evidensbaserat maxpris."
+                    )
+                    if coverage['with_2_sold'] == 0:
+                        st.warning("**Flaskhalsen är comp-data, inte sökbredden.** FlipFynd har läst in annonserna men har ännu inte verifierade avslut för dem. Att läsa fler Tradera-sidor löser därför inte detta av sig självt.")
                 if decision_tiers.get("rejection_reasons"):
                     common=sorted(decision_tiers["rejection_reasons"].items(), key=lambda kv: kv[1], reverse=True)[:3]
-                    st.caption("Vanligaste skälen: " + " · ".join(f"{reason} ({count})" for reason,count in common))
+                    st.caption("Vanligaste verifieringsluckorna: " + " · ".join(f"{reason} ({count})" for reason,count in common))
+
+                unlock_queue = build_unlock_research_queue(st.session_state.get("results") or [], limit=10)
+                if unlock_queue.get("rows"):
+                    with st.expander("⚡ Närmast att låsa upp – research med högst hävstång", expanded=True):
+                        u1, u2, u3 = st.columns(3)
+                        u1.metric("1 sale från comp-tröskeln", unlock_queue.get("near_unlock_count", 0))
+                        u2.metric("Exact ID men 0 sales", unlock_queue.get("exact_ready_no_sales_count", 0))
+                        u3.metric("Researchkö", len(unlock_queue.get("rows") or []))
+                        st.caption("I stället för att forska på hundratals kort samtidigt prioriterar FlipFynd de kort där minsta nästa evidenssteg sannolikt gör mest nytta.")
+                        unlock_labels = {
+                            "ONE_SALE_AWAY": "🟢 1 SALE FRÅN TRÖSKEL",
+                            "EXACT_READY_NO_SALES": "🔵 EXACT ID – HITTA FÖRSTA SALE",
+                            "VALUATION_NEXT": "🟡 SOLD FINNS – LÅS UPP VÄRDERING",
+                            "MAX_PRICE_NEXT": "🟠 VÄRDERING FINNS – LÅS UPP MAXPRIS",
+                            "IDENTITY_FIRST": "⚪ IDENTITET FÖRST",
+                            "REVIEW": "⚪ GRANSKA",
+                        }
+                        for idx, uq in enumerate(unlock_queue.get("rows") or [], start=1):
+                            with st.container(border=True):
+                                st.markdown(f"**{idx}. {uq['title']}**")
+                                st.write(f"**{unlock_labels.get(uq['status'], uq['status'])}** · {uq['action']}")
+                                st.caption(
+                                    f"Exact SOLD: {uq['sold_comps']} · "
+                                    f"identitet {'redo' if uq['identity_ready'] else 'saknas'} · "
+                                    f"värdering {'redo' if uq['market_value_ready'] else 'saknas'} · "
+                                    f"maxpris {'redo' if uq['max_price_ready'] else 'saknas'}"
+                                )
+                                if uq.get("url"):
+                                    st.link_button("Öppna annonsen ↗", uq["url"], key=f"unlock_open_{idx}")
+                        st.caption(unlock_queue.get("note") or "")
+
+                research_rows = build_research_shortlist(st.session_state.get("results") or [], limit=5)
+                if research_rows:
+                    with st.expander("🔬 Mest lovande att verifiera nu – inte KÖP ännu", expanded=False):
+                        st.caption("Detta är en researchkö, inte en fyndlista. Syftet är att visa vilka kort FlipFynd bör hämta exact comps för först när den hårda KÖP-gaten ännu inte kan släppa igenom något.")
+                        for idx, rr in enumerate(research_rows, start=1):
+                            st.markdown(f"**{idx}. {rr['title']}**")
+                            st.caption(" · ".join(rr.get('reasons') or []))
+                            if rr.get('url'):
+                                st.link_button("Öppna annonsen ↗", rr['url'], key=f"research_open_{idx}")
             if decision_tiers.get("rows"):
                 st.markdown("### 🏆 Bästa alternativen i den här sökningen")
                 st.caption(
@@ -5510,6 +5563,72 @@ with st.expander("⚙️ Administration & data"):
                     st.caption(
                         "Tradera-sökningen kan visa aktiva annonser. De är utbud, inte SOLD. FlipFynds konsensus räknar bara exact identity + explicit sålda poster som redan verifierats/importerats."
                     )
+
+                    with st.expander("⚡ Comp Research Cockpit – snabbare research", expanded=True):
+                        workbench = build_research_links(research_identity)
+                        st.caption("Öppna flera relevanta källor från exakt strukturerad identitet. Ingen aktiv annons eller prisguide räknas automatiskt som SOLD.")
+                        if workbench.get("query"):
+                            st.code(workbench["query"], language=None)
+                        links = workbench.get("links") or []
+                        for start in range(0, len(links), 4):
+                            cols = st.columns(4)
+                            for col, link in zip(cols, links[start:start+4]):
+                                col.link_button(f"{link['label']} ↗", link["url"], use_container_width=True)
+
+                        if sportscardspro_api_configured():
+                            if st.button("Hämta SportsCardsPro guidevärde", key=f"scp_context_{selected_label}", use_container_width=True):
+                                try:
+                                    scp = fetch_sportscardspro_context(research_identity)
+                                    if scp.get("ok"):
+                                        st.session_state["scp_context_result"] = scp
+                                    else:
+                                        st.warning(scp.get("error") or "SportsCardsPro kunde inte hämtas.")
+                                except Exception as exc:
+                                    st.warning(f"SportsCardsPro kunde inte hämtas: {exc}")
+                            scp = st.session_state.get("scp_context_result")
+                            if isinstance(scp, dict) and scp.get("ok"):
+                                st.write(f"**{scp.get('product_name') or 'SportsCardsPro-match'}** · {scp.get('set_name') or ''}")
+                                sc1, sc2 = st.columns(2)
+                                sc1.metric("Ungraded guide (USD)", f"${scp['ungraded_usd']:.2f}" if scp.get("ungraded_usd") is not None else "Saknas")
+                                sc2.metric("PSA 10 guide (USD)", f"${scp['psa_10_usd']:.2f}" if scp.get("psa_10_usd") is not None else "Saknas")
+                                st.caption(scp.get("note") or "")
+                        else:
+                            st.caption("SportsCardsPro API kan aktiveras med Streamlit-secret `SPORTSCARDSPRO_TOKEN`. API-värdet används bara som guide/context, aldrig som SOLD.")
+
+                        st.markdown("**Batchregistrera flera verifierade exact SOLD**")
+                        st.caption("En rad per sale: `källa | pris | valuta | fx till SEK | datum | URL`. FX lämnas tom för SEK. Exempel: `eBay | 2.15 | USD | 9.50 | 2026-09-01 | https://...`")
+                        with st.form("batch_verified_sold_form", clear_on_submit=True):
+                            batch_text = st.text_area("Klistra in verifierade sales", height=130, placeholder="eBay | 2.15 | USD | 9.50 | 2026-09-01 | https://...\nTradera | 24 | SEK | | 2026-08-20 | https://...")
+                            batch_identity_source = st.text_input("Källa för identitetskontrollen", key="batch_identity_source", placeholder="t.ex. checklist + foto")
+                            b1, b2 = st.columns(2)
+                            batch_identity_verified = b1.checkbox("Exakt kortidentitet är verifierad", key="batch_identity_verified")
+                            batch_sales_confirmed = b2.checkbox("Varje rad är en faktisk genomförd försäljning", key="batch_sales_confirmed")
+                            batch_submit = st.form_submit_button("Importera verifierade sales", type="primary", use_container_width=True)
+                        if batch_submit:
+                            parsed = parse_verified_sales_batch(
+                                batch_text,
+                                research_identity,
+                                identity_verified=batch_identity_verified,
+                                identity_evidence_source=batch_identity_source,
+                                sales_confirmed=batch_sales_confirmed,
+                            )
+                            if parsed.get("errors"):
+                                for error in parsed["errors"][:8]:
+                                    st.error(error)
+                            if parsed.get("rows"):
+                                result = acquire_sold_batch(
+                                    parsed["rows"],
+                                    existing=_load_sold_comp_records(),
+                                    source_key="batch_research_workbench",
+                                )
+                                if result.get("added_count"):
+                                    _save_sold_comp_records(result["records"])
+                                    get_sold_comp_data.clear()
+                                    clear_analysis_cache()
+                                    st.session_state["result_cache"] = {}
+                                    st.success(f"{result['added_count']} verifierade sale(s) sparades. Kör om analysen för att använda det nya underlaget.")
+                                elif result.get("duplicate_count"):
+                                    st.info("Alla giltiga rader fanns redan i sold-comp-biblioteket.")
 
                     defaults = build_quick_capture_defaults(research_identity)
                     with st.form("manual_sold_research_form", clear_on_submit=True):
