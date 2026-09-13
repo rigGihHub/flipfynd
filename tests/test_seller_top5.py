@@ -41,3 +41,31 @@ def test_empty_inventory_is_explicit():
     out = build_seller_top5("seller1", [], analyze_fn=_fake_analyze)
     assert out["status"] == "NO_ITEMS"
     assert out["rows"] == []
+
+
+def test_large_inventory_scans_beyond_first_batch():
+    items = [
+        {"titel": f"Base {i}", "lank": f"u{i}", "pris": 20 + i, "edge": 5, "sold": 0, "decision": "SKIP"}
+        for i in range(130)
+    ]
+    items[-1].update({"titel": "Late hidden deal", "edge": 95, "sold": 3, "decision": "KÖP", "rank": 95})
+
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=40, full_limit=10)
+
+    assert out["status"] == "READY"
+    assert out["rows"][0]["title"] == "Late hidden deal"
+    assert out["quick_batches"] >= 4
+    assert out["quick_analysed"] == 130
+    assert out["coverage_complete"] is True
+
+
+def test_duplicate_inventory_rows_are_only_quick_scanned_once():
+    items = [
+        {"titel": "A", "lank": "same", "pris": 10, "edge": 10, "sold": 0},
+        {"titel": "A duplicate", "lank": "same", "pris": 10, "edge": 10, "sold": 0},
+        {"titel": "B", "lank": "b", "pris": 20, "edge": 20, "sold": 1},
+    ]
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=20, full_limit=5)
+    assert out["inventory_count"] == 3
+    assert out["inventory_unique_count"] == 2
+    assert out["quick_analysed"] == 2
