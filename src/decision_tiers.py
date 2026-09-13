@@ -96,20 +96,69 @@ def _economic_edge(item, decision, sold_count, identity_ok, market_value, total_
     return (not reasons), reasons, max_total
 
 
+def _research_ready(item):
+    return bool(
+        item.get("exact_identity_gate_supports_comp_research")
+        or item.get("exact_identity_gate_supports_exact_comp_search")
+        or item.get("exact_identity_gate_status") in {"SÖKBAR_TITEL","SÖKBAR","VERIFIERAD","READY","EXACT","STRONG"}
+    )
+
+
+def _investigate_score(item, potential, certainty, sold_count, research_ready, identity_ok):
+    """Rank research candidates by expected next-step usefulness, not hype alone.
+
+    This score is never a valuation and never creates BUY. It only decides which
+    unverified listings deserve attention first when the strict BUY gate is empty.
+    """
+    score = potential * 0.48 + certainty * 0.12
+    reasons=[]
+    if research_ready:
+        score += 18
+        reasons.append("sökbar comp-identitet")
+    if identity_ok:
+        score += 8
+        reasons.append("beslutsstark identitet")
+    if sold_count == 1:
+        score += 10
+        reasons.append("bara en exact SOLD saknas till två-comp-tröskeln")
+    elif sold_count >= 2:
+        score += 12
+        reasons.append("exact SOLD finns redan")
+    if item.get("is_information_edge_candidate") or item.get("is_market_edge_candidate"):
+        score += 7
+        reasons.append("informations-/marknadssignal")
+    if item.get("is_hidden_find_candidate") or item.get("misclassified_card_candidate") or item.get("mispriced_rookie_candidate"):
+        score += 6
+        reasons.append("discovery-signal")
+    oddity = _n(item.get("oddity_story_score") or item.get("nonstandard_value_driver_score"), 0)
+    if oddity > 0:
+        score += min(6, oddity * 0.06)
+        reasons.append("ovanlig värdedrivare värd kontroll")
+    collector = _n(item.get("collector_worth_score"), 0)
+    hierarchy = _n(item.get("card_hierarchy_score"), 0)
+    score += min(5, collector * 0.03)
+    score += min(5, hierarchy * 0.03)
+    return round(min(100.0, score), 1), reasons[:4]
+
+
 def _base_row(item):
     decision=str(item.get("beslut") or item.get("decision") or item.get("recommendation") or "EJ BESLUT").upper()
     sold=int(_n(item.get("sold_comparable_count"),0))
     identity_ok=bool(item.get("exact_identity_gate_supports_exact_comp_search") or item.get("exact_identity_gate_status") in {"READY","EXACT","STRONG"})
+    research_ready=_research_ready(item)
     certainty,raw_certainty,certainty_limits=_decision_certainty(item,sold,identity_ok)
     blockers=list(item.get("decision_diagnostics") or [])
     market_value=_market_value(item)
     total_cost=item.get("analysis_total_cost") if item.get("analysis_total_cost") is not None else item.get("total_cost")
     economic_edge_ok,economic_edge_blockers,max_total_price=_economic_edge(item,decision,sold,identity_ok,market_value,total_cost)
+    potential=_potential(item)
+    investigate_score, investigate_reasons = _investigate_score(item,potential,certainty,sold,research_ready,identity_ok)
     return {
         "title":_title(item),"url":_url(item),"decision":decision,"original_decision":decision,
-        "potential":_potential(item),"certainty":certainty,"raw_certainty":raw_certainty,"certainty_limits":certainty_limits,
-        "player_key":_player_key(item),"sold_comps":sold,"identity_ok":identity_ok,"market_value":market_value,
-        "total_cost":total_cost,"max_total_price":max_total_price,"economic_edge_ok":economic_edge_ok,
+        "potential":potential,"certainty":certainty,"raw_certainty":raw_certainty,"certainty_limits":certainty_limits,
+        "player_key":_player_key(item),"sold_comps":sold,"identity_ok":identity_ok,"research_ready":research_ready,
+        "investigate_score":investigate_score,"investigate_reasons":investigate_reasons,
+        "market_value":market_value,"total_cost":total_cost,"max_total_price":max_total_price,"economic_edge_ok":economic_edge_ok,
         "economic_edge_blockers":economic_edge_blockers,"shipping":item.get("frakt"),"shipping_known":item.get("shipping_known"),
         "primary_blocker":blockers[0] if blockers else None,
         "collector_worth_score":_n(item.get("collector_worth_score")),"collector_worth_label":item.get("collector_worth_label"),
@@ -157,9 +206,6 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
     if require_verified_economic_edge:
         rows=[r for r in all_rows if r["economic_edge_ok"]]
         if not rows:
-            # A strict BUY gate must not turn the product into an empty screen.
-            # Surface the best research candidates, but explicitly downgrade the
-            # action to UNDERSÖK and keep every valuation/evidence blocker visible.
             rows=list(all_rows)
             fallback_investigate_mode=bool(rows)
             for r in rows:
@@ -170,7 +216,10 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
         rows=list(all_rows)
 
     tier_order={"VERIFIED":2,"PROMISING":1,"REMAINDER":0}
-    rows.sort(key=lambda r:(tier_order[r["tier"]],r["potential"],r["certainty"],r["sold_comps"]),reverse=True)
+    if fallback_investigate_mode:
+        rows.sort(key=lambda r:(r["research_ready"],r["investigate_score"],r["potential"],r["certainty"]),reverse=True)
+    else:
+        rows.sort(key=lambda r:(tier_order[r["tier"]],r["potential"],r["certainty"],r["sold_comps"]),reverse=True)
     selected=_select_diverse(rows,total_limit)
     rejected=[r for r in all_rows if not r["economic_edge_ok"]]
     blocker_counts={}
@@ -179,4 +228,4 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
     return {"rows":selected,"verified_count":sum(1 for r in all_rows if r["tier"]=="VERIFIED"),"promising_count":sum(1 for r in all_rows if r["tier"]=="PROMISING"),"creates_new_decision":False,
         "fallback_investigate_mode":fallback_investigate_mode,"duplicate_player_count":max(0,len(selected)-len({r.get("player_key") for r in selected if r.get("player_key")})),
         "rejected_count":len(rejected),"rejection_reasons":blocker_counts,
-        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater; de skapar aldrig marknadsvärde, SOLD-evidens eller KÖP."}
+        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater, prioriterade efter hur researchbara och informationsrika de är. De skapar aldrig marknadsvärde, SOLD-evidens eller KÖP."}
