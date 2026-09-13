@@ -35,6 +35,7 @@ def test_low_raw_guide_is_research_triage_only(monkeypatch):
     assert row["exact_sold_count"] == 0
     assert row["creates_sold_evidence"] is False
     assert row["creates_buy_decision"] is False
+    assert "Guide ~$1.50 raw" in row["next_action"]
     assert "inte en verifierad försäljning" in row["next_action"]
 
 
@@ -60,7 +61,6 @@ def test_low_guide_context_sorts_after_normal_research_target():
 
 
 def test_two_verified_sales_are_not_demoted_by_guide_context(monkeypatch):
-    # Threshold-met evidence must continue to outrank guide-only triage.
     monkeypatch.setattr(
         research,
         "fetch_sportscardspro_context",
@@ -80,3 +80,34 @@ def test_two_verified_sales_are_not_demoted_by_guide_context(monkeypatch):
 
     assert row["status"] == "LOCAL_THRESHOLD_MET"
     assert row["exact_sold_count"] == 2
+
+
+def test_batch_exposes_only_three_best_research_actions(monkeypatch):
+    def fake_research_one(item, sold_records=None, scp_token=None):
+        title = item["titel"]
+        cheap = title.startswith("cheap")
+        return {
+            "title": title,
+            "identity_ready": True,
+            "research_identity_ready": True,
+            "exact_sold_count": 0,
+            "missing_exact_sales": 2,
+            "status": "LOW_GUIDE_CONTEXT" if cheap else "TWO_EXACT_SALES_NEEDED",
+            "guide_triage": {"priority": 3 if cheap else 1, "status": "LOW_GUIDE_CONTEXT" if cheap else "NO_GUIDE_CONTEXT"},
+        }
+
+    monkeypatch.setattr(research, "research_one", fake_research_one)
+    items = [
+        {"titel": "cheap 1"},
+        {"titel": "strong A"},
+        {"titel": "strong B"},
+        {"titel": "strong C"},
+        {"titel": "cheap 2"},
+    ]
+
+    pack = research.run_auto_comp_research(items, sold_records=[], limit=5)
+
+    assert pack["processed_count"] == 5
+    assert pack["displayed_count"] == 3
+    assert pack["hidden_after_triage_count"] == 2
+    assert [row["title"] for row in pack["rows"]] == ["strong A", "strong B", "strong C"]
