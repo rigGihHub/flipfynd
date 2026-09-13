@@ -104,6 +104,55 @@ def _research_ready(item):
     )
 
 
+def _guide_context(item):
+    """Read guide context already attached to an analysed candidate.
+
+    Guide values are research-triage only. They never create market value, SOLD,
+    max price or a BUY decision.
+    """
+    triage=item.get("guide_triage") or item.get("price_guide_triage") or {}
+    if isinstance(triage,dict) and triage.get("status"):
+        raw=triage.get("ungraded_usd")
+        return {
+            "status":str(triage.get("status")),
+            "ungraded_usd":None if raw is None else _n(raw),
+            "priority":int(_n(triage.get("priority"),1)),
+        }
+    scp=item.get("sports_cards_pro") or item.get("sportscardspro_context") or {}
+    raw=None
+    if isinstance(scp,dict) and scp.get("ok"):
+        raw=scp.get("ungraded_usd")
+    if raw is None:
+        raw=item.get("price_guide_ungraded_usd")
+    if raw is None:
+        return {"status":"NO_GUIDE_CONTEXT","ungraded_usd":None,"priority":1}
+    raw=_n(raw)
+    if raw <= 3:
+        return {"status":"LOW_GUIDE_CONTEXT","ungraded_usd":raw,"priority":3}
+    if raw <= 10:
+        return {"status":"MODEST_GUIDE_CONTEXT","ungraded_usd":raw,"priority":2}
+    return {"status":"MEANINGFUL_GUIDE_CONTEXT","ungraded_usd":raw,"priority":0}
+
+
+def _structural_merit(item):
+    """Best-effort card-specific merit for fallback research ordering."""
+    features=item.get("features") or item.get("card_features") or {}
+    if not isinstance(features,dict):
+        features={}
+    merit=max(
+        _n(item.get("collector_worth_score"),0),
+        _n(item.get("card_hierarchy_score"),0),
+        _n(item.get("player_card_hierarchy_score"),0),
+        _n(item.get("nonstandard_value_driver_score"),0),
+        _n(item.get("oddity_story_score"),0),
+    )
+    if any(features.get(k) for k in ("is_rookie","is_auto","is_patch","is_jersey","is_serial_numbered","is_case_hit","is_ssp","is_sp","is_1of1")):
+        merit=max(merit,70)
+    if item.get("is_hidden_find_candidate") or item.get("misclassified_card_candidate") or item.get("mispriced_rookie_candidate"):
+        merit=max(merit,65)
+    return min(100.0,merit)
+
+
 def _investigate_score(item, potential, certainty, sold_count, research_ready, identity_ok):
     """Rank research candidates by expected next-step usefulness, not hype alone.
 
@@ -138,7 +187,18 @@ def _investigate_score(item, potential, certainty, sold_count, research_ready, i
     hierarchy = _n(item.get("card_hierarchy_score"), 0)
     score += min(5, collector * 0.03)
     score += min(5, hierarchy * 0.03)
-    return round(min(100.0, score), 1), reasons[:4]
+
+    guide=_guide_context(item)
+    merit=_structural_merit(item)
+    if guide["status"]=="LOW_GUIDE_CONTEXT" and sold_count < 2:
+        score -= 28
+        reasons.append(f"låg prisguidekontext ~${guide['ungraded_usd']:.2f} raw")
+    elif guide["status"]=="MODEST_GUIDE_CONTEXT" and sold_count < 2:
+        score -= 8
+    if identity_ok and sold_count == 0 and merit < 35:
+        score -= 14
+        reasons.append("exact ID men svag kortspecifik merit")
+    return round(max(0.0,min(100.0, score)), 1), reasons[:5]
 
 
 def _base_row(item):
@@ -153,11 +213,15 @@ def _base_row(item):
     economic_edge_ok,economic_edge_blockers,max_total_price=_economic_edge(item,decision,sold,identity_ok,market_value,total_cost)
     potential=_potential(item)
     investigate_score, investigate_reasons = _investigate_score(item,potential,certainty,sold,research_ready,identity_ok)
+    guide=_guide_context(item)
+    merit=_structural_merit(item)
     return {
         "title":_title(item),"url":_url(item),"decision":decision,"original_decision":decision,
         "potential":potential,"certainty":certainty,"raw_certainty":raw_certainty,"certainty_limits":certainty_limits,
         "player_key":_player_key(item),"sold_comps":sold,"identity_ok":identity_ok,"research_ready":research_ready,
         "investigate_score":investigate_score,"investigate_reasons":investigate_reasons,
+        "guide_status":guide["status"],"guide_ungraded_usd":guide["ungraded_usd"],"guide_priority":guide["priority"],
+        "structural_merit":merit,
         "market_value":market_value,"total_cost":total_cost,"max_total_price":max_total_price,"economic_edge_ok":economic_edge_ok,
         "economic_edge_blockers":economic_edge_blockers,"shipping":item.get("frakt"),"shipping_known":item.get("shipping_known"),
         "primary_blocker":blockers[0] if blockers else None,
@@ -217,7 +281,7 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
 
     tier_order={"VERIFIED":2,"PROMISING":1,"REMAINDER":0}
     if fallback_investigate_mode:
-        rows.sort(key=lambda r:(r["research_ready"],r["investigate_score"],r["potential"],r["certainty"]),reverse=True)
+        rows.sort(key=lambda r:(r["research_ready"],-r["guide_priority"],r["investigate_score"],r["structural_merit"],r["potential"],r["certainty"]),reverse=True)
     else:
         rows.sort(key=lambda r:(tier_order[r["tier"]],r["potential"],r["certainty"],r["sold_comps"]),reverse=True)
     selected=_select_diverse(rows,total_limit)
@@ -228,4 +292,4 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
     return {"rows":selected,"verified_count":sum(1 for r in all_rows if r["tier"]=="VERIFIED"),"promising_count":sum(1 for r in all_rows if r["tier"]=="PROMISING"),"creates_new_decision":False,
         "fallback_investigate_mode":fallback_investigate_mode,"duplicate_player_count":max(0,len(selected)-len({r.get("player_key") for r in selected if r.get("player_key")})),
         "rejected_count":len(rejected),"rejection_reasons":blocker_counts,
-        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater, prioriterade efter hur researchbara och informationsrika de är. De skapar aldrig marknadsvärde, SOLD-evidens eller KÖP."}
+        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater, prioriterade efter researchnytta, kortspecifik merit och eventuell låg prisguidekontext. Guidevärden skapar aldrig marknadsvärde, SOLD-evidens, maxpris eller KÖP."}
