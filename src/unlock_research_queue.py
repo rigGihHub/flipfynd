@@ -58,17 +58,32 @@ def _player_key(item):
     return ""
 
 
-def _structural_merit(item):
-    """Return research merit from card-specific value drivers, never a price.
+def _guide_context(item):
+    triage = item.get("guide_triage") or item.get("price_guide_triage") or {}
+    if isinstance(triage, dict) and triage.get("status"):
+        return {
+            "status": str(triage.get("status")),
+            "ungraded_usd": None if triage.get("ungraded_usd") is None else _n(triage.get("ungraded_usd")),
+            "priority": int(_n(triage.get("priority"), 1)),
+        }
+    scp = item.get("sports_cards_pro") or item.get("sportscardspro_context") or {}
+    if isinstance(scp, dict) and scp.get("ok"):
+        raw = scp.get("ungraded_usd")
+        if raw is not None:
+            raw = _n(raw)
+            if raw <= 3:
+                return {"status": "LOW_GUIDE_CONTEXT", "ungraded_usd": raw, "priority": 3}
+            if raw <= 10:
+                return {"status": "MODEST_GUIDE_CONTEXT", "ungraded_usd": raw, "priority": 2}
+            return {"status": "MEANINGFUL_GUIDE_CONTEXT", "ungraded_usd": raw, "priority": 0}
+    return {"status": "NO_GUIDE_CONTEXT", "ungraded_usd": None, "priority": 1}
 
-    This deliberately rewards signals that can make *this exact card* special and
-    penalises the classic hobby trap where a superstar name sits on an otherwise
-    ordinary base/insert card. Missing fields simply contribute zero.
-    """
+
+def _structural_merit(item):
+    """Return research merit from card-specific value drivers, never a price."""
     score = 0.0
     reasons = []
 
-    # Strong card-specific value drivers.
     serial = _n(item.get("serial_number") or item.get("serial_denominator"), 0)
     if item.get("is_1of1"):
         score += 32
@@ -98,7 +113,6 @@ def _structural_merit(item):
         score += 15
         reasons.append("relevant rookie")
 
-    # Documented hierarchy / scarcity / oddity signals.
     valuable_structure = _n(item.get("valuable_structure_score"), 0)
     hierarchy = _n(item.get("card_hierarchy_score") or item.get("hierarchy_score"), 0)
     collector = _n(item.get("collector_worth_score"), 0)
@@ -122,8 +136,6 @@ def _structural_merit(item):
         score += 10
         reasons.append("oddity/story")
 
-    # A named parallel alone is weak evidence. Give only a small bump unless it
-    # is supported by numbering/hierarchy above.
     if item.get("parallel") or item.get("is_parallel"):
         score += 4
         reasons.append("parallel")
@@ -145,10 +157,8 @@ def _unlock_score(item):
     market = _market_value_ready(item)
     max_price = _max_price_ready(item)
     merit, _ = _structural_merit(item)
+    guide = _guide_context(item)
 
-    # Research leverage still matters, but exact identity is no longer a free
-    # pass to the top of the queue. Card-specific merit can move a candidate up;
-    # a generic star-player card can move down.
     if identity and sold == 1:
         score = 100.0
     elif identity and sold == 0:
@@ -163,6 +173,10 @@ def _unlock_score(item):
         score = 52.0
 
     score += min(18.0, merit * 0.30)
+    if guide["status"] == "LOW_GUIDE_CONTEXT" and sold < 2:
+        score -= 34.0
+    elif guide["status"] == "MODEST_GUIDE_CONTEXT" and sold < 2:
+        score -= 10.0
     if market:
         score += 4
     if max_price:
@@ -178,9 +192,14 @@ def _status(item):
     market = _market_value_ready(item)
     max_price = _max_price_ready(item)
     merit, _ = _structural_merit(item)
+    guide = _guide_context(item)
     if identity and sold == 1:
         return "ONE_SALE_AWAY", "1 extra verifierad exact SOLD kan räcka för att nå comp-tröskeln."
-    if identity and sold == 0 and merit < 18:
+    if identity and sold == 0 and guide["status"] == "LOW_GUIDE_CONTEXT":
+        raw = guide.get("ungraded_usd")
+        suffix = f" (~${raw:.2f} raw)" if raw is not None else ""
+        return "EXACT_READY_LOW_GUIDE", f"Exakt identitet finns, men prisguidekontexten är låg{suffix}. Researcha starkare kandidater först."
+    if identity and sold == 0 and merit < 40:
         return "EXACT_READY_LOW_MERIT", "Exakt identitet finns, men kortet saknar hittills starka kortspecifika värdedrivare. Researcha först starkare kandidater."
     if identity and sold == 0:
         return "EXACT_READY_NO_SALES", "Exakt identitet är redo; nästa steg är att hitta första verifierade exact SOLD."
@@ -206,6 +225,7 @@ def build_unlock_research_queue(items, limit=10):
         sold = int(_n(item.get("sold_comparable_count"), 0))
         status, action = _status(item)
         merit, merit_reasons = _structural_merit(item)
+        guide = _guide_context(item)
         rows.append({
             "title": title,
             "url": item.get("lank") or item.get("url"),
@@ -215,6 +235,8 @@ def build_unlock_research_queue(items, limit=10):
             "unlock_score": _unlock_score(item),
             "research_merit_score": round(merit),
             "research_merit_reasons": merit_reasons,
+            "guide_status": guide["status"],
+            "guide_ungraded_usd": guide["ungraded_usd"],
             "sold_comps": sold,
             "identity_ready": _identity_ready(item),
             "research_identity_ready": _research_identity_ready(item),
@@ -231,8 +253,9 @@ def build_unlock_research_queue(items, limit=10):
         "EXACT_READY_NO_SALES": 3,
         "RESEARCH_READY_NO_SALES": 4,
         "EXACT_READY_LOW_MERIT": 5,
-        "IDENTITY_FIRST": 6,
-        "REVIEW": 7,
+        "EXACT_READY_LOW_GUIDE": 6,
+        "IDENTITY_FIRST": 7,
+        "REVIEW": 8,
     }
     rows.sort(
         key=lambda r: (
@@ -270,5 +293,6 @@ def build_unlock_research_queue(items, limit=10):
         "near_unlock_count": counts.get("ONE_SALE_AWAY", 0),
         "exact_ready_no_sales_count": counts.get("EXACT_READY_NO_SALES", 0),
         "low_merit_exact_count": counts.get("EXACT_READY_LOW_MERIT", 0),
-        "note": "Researchkön prioriterar både evidenshävstång och kortspecifik samlarmerit. Exakt ID ensam räcker inte längre för topplacering och skapar aldrig KÖP.",
+        "low_guide_exact_count": counts.get("EXACT_READY_LOW_GUIDE", 0),
+        "note": "Researchkön prioriterar evidenshävstång, kortspecifik samlarmerit och eventuell prisguide-triage. Exact ID ensam räcker inte för topplacering och guidevärden skapar aldrig KÖP.",
     }
