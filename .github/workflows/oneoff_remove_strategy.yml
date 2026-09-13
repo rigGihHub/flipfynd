@@ -1,0 +1,48 @@
+name: One-off remove strategy selector
+
+on:
+  push:
+    paths:
+      - '.github/workflows/oneoff_remove_strategy.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove strategy selector and use unified best-find mode
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('app.py')
+          text = path.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r'''\n    p3, p4 = st\.columns\(2\)\n\n    with p3:\n        strategy_label = st\.selectbox\(\n            "Strategi",\n            \[\n                "Sälj snabbt",\n                "Tjäna mest",\n                "Bäst kort",\n            \],\n            help="Sälj snabbt prioriterar kort som verkar lättare att sälja\. Tjäna mest prioriterar realistisk vinst\. Bäst kort prioriterar kortets och spelarens kvalitet\.",\n        \)\n\n    with p4:\n        search = st\.text_input\(\n            "Sök spelare, set eller kort",\n            value="",\n            placeholder="T\.ex\. Bedard, Young Guns, Messi…",\n        \)\n\n    strategy_map = \{\n        "Sälj snabbt": "quick_flip",\n        "Tjäna mest": "premium_flip",\n        "Bäst kort": "kort",\n    \}\n    strategy = strategy_map\[strategy_label\]\n''',
+              re.MULTILINE,
+          )
+          replacement = '''\n    # En enda standardmotor: användaren ska inte behöva välja analysstrategi.\n    # premium_flip är den bredaste fyndmotorn och kombineras längre ned med\n    # efterfrågan, risk, samlarmerit, comps och verifierad ekonomisk edge.\n    strategy = "premium_flip"\n\n    search = st.text_input(\n        "Sök spelare, set eller kort",\n        value="",\n        placeholder="T.ex. Bedard, Young Guns, Messi…",\n        help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",\n    )\n'''
+          new_text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one strategy UI block, replaced {count}')
+          path.write_text(new_text, encoding='utf-8')
+          PY
+      - name: Commit patched app
+        shell: bash
+        run: |
+          if git diff --quiet -- app.py; then
+            echo 'No app.py change to commit.'
+            exit 0
+          fi
+          git config user.name 'FlipFynd automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app.py
+          git commit -m 'Remove strategy selector; always find best deals'
+          git push origin HEAD:main
