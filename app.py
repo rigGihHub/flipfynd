@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from src.player_knowledge import knowledge_coverage
 from src.card_explanation import build_card_explanation, build_card_identity_summary
+from src.card_parser import parse_card_features
 
 
 import streamlit as st
@@ -250,7 +251,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.80"
+APP_VERSION = "v0.12.81"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -951,26 +952,17 @@ def is_patch(item):
 
 
 def is_auto(item):
-    text = (
-        item.get(
-            "titel",
-            "",
-        )
-        or ""
-    ).lower()
+    """Return True only for a real autograph signal, using all listing text we have.
 
-    return bool(
-        re.search(
-            r"\b("
-            r"auto|"
-            r"autograph|"
-            r"autograf|"
-            r"signed|"
-            r"signature"
-            r")\b",
-            text,
-        )
+    The canonical parser deliberately does not treat a bare word like "Signature"
+    as proof of an autograph; names such as Signature Style and Silver Script are
+    product/parallel names and caused false positives in the old filter.
+    """
+    combined = " ".join(
+        str(item.get(key) or "")
+        for key in ("titel", "title", "raw_text", "full_description", "description")
     )
+    return bool(parse_card_features(combined).get("is_auto"))
 
 
 
@@ -1585,15 +1577,10 @@ if (
     st.session_state["debug"] = None
     st.session_state["results_stale_notice"] = True
 
-st.subheader("Vad vill du göra?")
-_main_view = st.radio(
-    "Huvudvy",
-    ["Vad ska jag köpa?", "Slutar snart", "Bevaka", "Research"],
-    horizontal=True,
-    label_visibility="collapsed",
-    help="Välj bara vad du vill göra. FlipFynd behåller hela analysmotorn i bakgrunden.",
-    key="main_novice_view",
-)
+# FlipFynd har en huvuduppgift: visa de bästa fynden just nu.
+# Slutar snart/bevakning/research finns kvar som analysmotorer i bakgrunden,
+# men användaren ska inte behöva välja arbetsläge innan fyndjakten.
+_main_view = "Vad ska jag köpa?"
 _advanced_terminal = st.checkbox(
     "Visa fördjupad analys",
     value=False,

@@ -601,7 +601,18 @@ def parse_card_features(title: str) -> dict:
     rookie_variant, rookie_tier = detect_rookie_variant(norm, set_name)
     parallel, parallel_tier, parallel_confidence = detect_parallel_info(norm)
     is_rookie = rookie_variant is not None
-    is_auto = bool(re.search(r"\bauto\b|\bautograph\b|\bautograf\b|\bsigned\b|\bsignature\b", norm))
+    # A bare "signature" is not proof of an autograph. Product/parallel names
+    # such as Signature Style or facsimile/printed signatures are common false positives.
+    # Strong autograph wording is required, while explicit negative wording wins.
+    auto_negative = bool(re.search(
+        r"\b(?:signature\s+style|facsimile|pre[- ]?printed|printed\s+signature|tryckt\s+autograf|ej\s+autograf|not\s+signed|unsigned)\b",
+        norm,
+    ))
+    auto_positive = bool(re.search(
+        r"\b(?:auto|autograph(?:ed)?|autograf|autograferad|signerad|hand[- ]?signed|on[- ]?card\s+auto|sticker\s+auto|signed\s+by)\b",
+        norm,
+    ))
+    is_auto = bool(auto_positive and not auto_negative)
     is_patch = "patch" in norm
     is_jersey = "jersey" in norm or "memorabilia" in norm
     is_game_worn = "game worn" in norm or "game-used" in norm or "game used" in norm
