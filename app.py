@@ -54,6 +54,7 @@ from src.external_sold_sources import available_adapters, import_external_sold_r
 from src.sold_source_registry import sold_source_registry, source_readiness_summary
 from src.comp_source_intelligence import build_comp_research_plan
 from src.seller_bundle_opportunity import find_same_seller_listings, build_shared_shipping_scenario, classify_same_seller_addon, build_best_same_seller_basket
+from src.seller_identity import recover_seller_from_market
 from src.multi_source_comp_consensus import build_multi_source_consensus
 from src.comp_acquisition_router import build_comp_acquisition_router
 from src.comp_research_workbench import build_research_links, fetch_sportscardspro_context, sportscardspro_api_configured, parse_verified_sales_batch
@@ -2076,13 +2077,13 @@ if run:
 
 def render_same_seller_button(item: dict, key: str) -> None:
     """Find more cards from the same seller so shipping may be shared."""
-    seller = get_seller(item)
+    seller_market = list(data or [])
+    seller, item = recover_seller_from_market(item, seller_market)
     label = "🧺 Fler kort från samma säljare"
     with st.popover(label, use_container_width=True):
-        if seller == "Okänd":
-            st.info("FlipFynd kan inte säkert identifiera säljaren i den här annonsen ännu.")
+        if not seller:
+            st.info("FlipFynd hittar ännu inget säkert säljaralias för just den här annonsen. Annonsen har först matchats mot den inlästa marknaden.")
             return
-        seller_market = list(data or [])
         st.markdown(f"### 🧺 Samfraktsjakt hos {seller}")
         st.caption("FlipFynd börjar med den inlästa marknaden. Med Tradera API kan du dessutom hämta säljarens hela aktiva lager direkt.")
 
