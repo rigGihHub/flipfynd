@@ -76,6 +76,67 @@ def test_low_guide_context_is_demoted_in_fallback_main_list():
     assert out["rows"][1]["decision"]=="UNDERSÖK"
 
 
+def test_low_value_noise_is_hidden_when_three_better_candidates_exist():
+    cheap={
+        "titel":"$1.50 base insert",
+        "beslut":"SKIP",
+        "deal_score":91,
+        "ranking_confidence_score":82,
+        "sold_comparable_count":0,
+        "exact_identity_gate_supports_exact_comp_search":True,
+        "exact_identity_gate_supports_comp_research":True,
+        "guide_triage":{"status":"LOW_GUIDE_CONTEXT","ungraded_usd":1.5,"priority":3},
+        "collector_worth_score":24,
+        "card_hierarchy_score":18,
+    }
+    better=[]
+    for idx in range(3):
+        better.append({
+            "titel":f"Better {idx}",
+            "beslut":"SKIP",
+            "deal_score":70-idx,
+            "ranking_confidence_score":65,
+            "sold_comparable_count":0,
+            "exact_identity_gate_supports_comp_research":True,
+            "collector_worth_score":70,
+            "card_hierarchy_score":72,
+            "features":{"is_serial_numbered":True},
+            "player_name":f"Player {idx}",
+        })
+    out=build_decision_tiers([cheap]+better, total_limit=3, require_verified_economic_edge=True)
+    titles=[row["title"] for row in out["rows"]]
+    assert "$1.50 base insert" not in titles
+    assert out["suppressed_low_value_count"]==1
+    assert out["suppressed_low_value_titles"]==["$1.50 base insert"]
+
+
+def test_low_value_noise_is_kept_when_not_enough_better_candidates_exist():
+    cheap={
+        "titel":"Only cheap fallback",
+        "beslut":"SKIP",
+        "deal_score":91,
+        "ranking_confidence_score":82,
+        "sold_comparable_count":0,
+        "exact_identity_gate_supports_exact_comp_search":True,
+        "guide_triage":{"status":"LOW_GUIDE_CONTEXT","ungraded_usd":1.25,"priority":3},
+        "collector_worth_score":20,
+        "card_hierarchy_score":15,
+    }
+    better={
+        "titel":"One better option",
+        "beslut":"SKIP",
+        "deal_score":70,
+        "ranking_confidence_score":65,
+        "sold_comparable_count":0,
+        "exact_identity_gate_supports_comp_research":True,
+        "collector_worth_score":70,
+        "card_hierarchy_score":72,
+    }
+    out=build_decision_tiers([cheap,better], total_limit=3, require_verified_economic_edge=True)
+    assert "Only cheap fallback" in [row["title"] for row in out["rows"]]
+    assert out["suppressed_low_value_count"]==0
+
+
 def test_verified_buy_not_demoted_by_low_guide_context():
     verified={
         "titel":"Verified buy",
