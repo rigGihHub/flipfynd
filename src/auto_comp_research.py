@@ -65,6 +65,58 @@ def _identity_candidate(item: dict) -> dict:
     }
 
 
+def _guide_triage(scp: dict | None) -> dict:
+    """Classify price-guide context for research effort only.
+
+    This deliberately does not convert USD to SEK, estimate market value, create
+    profit, or count as SOLD evidence.  It only answers whether a raw guide value
+    is so small that scarce research time is probably better spent elsewhere.
+    """
+    if not isinstance(scp, dict) or not scp.get("ok"):
+        return {
+            "status": "NO_GUIDE_CONTEXT",
+            "priority": 1,
+            "ungraded_usd": None,
+            "label": "Ingen prisguidekontext",
+            "note": "Ingen guide används i prioriteringen.",
+        }
+    try:
+        raw = float(scp.get("ungraded_usd"))
+    except (TypeError, ValueError):
+        raw = None
+    if raw is None:
+        return {
+            "status": "NO_RAW_GUIDE",
+            "priority": 1,
+            "ungraded_usd": None,
+            "label": "Raw-guide saknas",
+            "note": "Guideposten saknar ograderat värde och påverkar därför inte researchprioriteten.",
+        }
+    if raw <= 3.0:
+        return {
+            "status": "LOW_GUIDE_CONTEXT",
+            "priority": 3,
+            "ungraded_usd": raw,
+            "label": "Låg prisguidekontext",
+            "note": "Guidevärdet är lågt. Prioritera andra kort för SOLD-research först om de har starkare kortspecifik merit.",
+        }
+    if raw <= 10.0:
+        return {
+            "status": "MODEST_GUIDE_CONTEXT",
+            "priority": 2,
+            "ungraded_usd": raw,
+            "label": "Måttlig prisguidekontext",
+            "note": "Guidevärdet är måttligt och ger ingen anledning att hoppa över SOLD-verifiering.",
+        }
+    return {
+        "status": "MEANINGFUL_GUIDE_CONTEXT",
+        "priority": 0,
+        "ungraded_usd": raw,
+        "label": "Högre prisguidekontext",
+        "note": "Guidevärdet motiverar fortsatt research men är fortfarande inte marknadsvärde eller SOLD-evidens.",
+    }
+
+
 def research_one(item: dict, sold_records: Iterable[dict] | None = None, *, scp_token: str | None = None) -> dict:
     """Run safe automated research for one already-analyzed listing."""
     title = _clean(item.get("titel") or item.get("title")) or "Okänt kort"
@@ -83,6 +135,7 @@ def research_one(item: dict, sold_records: Iterable[dict] | None = None, *, scp_
             scp = fetch_sportscardspro_context(identity, token=scp_token)
         except Exception as exc:  # network/API failures are research status, never fatal app errors
             scp = {"ok": False, "status": "REQUEST_FAILED", "error": str(exc)}
+    guide_triage = _guide_triage(scp)
 
     exact_count = int(local.get("exact_sold_count") or 0)
     near_count = int(local.get("near_sold_count") or 0)
@@ -96,6 +149,12 @@ def research_one(item: dict, sold_records: Iterable[dict] | None = None, *, scp_
     elif missing_sales == 0:
         status = "LOCAL_THRESHOLD_MET"
         next_action = "Minst 2 verifierade exact SOLD finns redan i biblioteket. Kör om analysen för värdering/maxpris."
+    elif guide_triage["status"] == "LOW_GUIDE_CONTEXT":
+        status = "LOW_GUIDE_CONTEXT"
+        next_action = (
+            f"Låg prisguidekontext (${guide_triage['ungraded_usd']:.2f} raw). "
+            "Lägg SOLD-research på starkare kandidater först. Guidevärdet är inte en verifierad försäljning eller värdering."
+        )
     elif missing_sales == 1:
         status = "ONE_EXACT_SALE_NEEDED"
         next_action = "Hitta och verifiera 1 ytterligare exact SOLD från researchlänkarna."
@@ -120,9 +179,25 @@ def research_one(item: dict, sold_records: Iterable[dict] | None = None, *, scp_
         "status": status,
         "next_action": next_action,
         "sports_cards_pro": scp,
+        "guide_triage": guide_triage,
         "creates_sold_evidence": False,
         "creates_buy_decision": False,
     }
+
+
+def _batch_sort_key(row: dict) -> tuple:
+    """Keep cheap guide-only cards behind otherwise comparable research targets."""
+    status = row.get("status")
+    status_rank = {
+        "LOCAL_THRESHOLD_MET": 0,
+        "ONE_EXACT_SALE_NEEDED": 1,
+        "TWO_EXACT_SALES_NEEDED": 2,
+        "RESEARCH_ONLY": 3,
+        "IDENTITY_FIRST": 4,
+        "LOW_GUIDE_CONTEXT": 5,
+    }.get(status, 4)
+    triage_priority = int((row.get("guide_triage") or {}).get("priority", 1) or 1)
+    return (status_rank, triage_priority, int(row.get("missing_exact_sales") or 0), row.get("title") or "")
 
 
 def run_auto_comp_research(items: Iterable[dict] | None, sold_records: Iterable[dict] | None = None, *, limit: int = 5, scp_token: str | None = None) -> dict:
@@ -133,10 +208,12 @@ def run_auto_comp_research(items: Iterable[dict] | None, sold_records: Iterable[
     """
     selected = [x for x in (items or []) if isinstance(x, dict)][: max(0, int(limit))]
     rows = [research_one(item, sold_records=sold_records or [], scp_token=scp_token) for item in selected]
+    rows.sort(key=_batch_sort_key)
     ready = sum(1 for row in rows if row["identity_ready"])
     research_ready = sum(1 for row in rows if row.get("research_identity_ready"))
     threshold = sum(1 for row in rows if row["exact_sold_count"] >= 2)
     one_away = sum(1 for row in rows if row["missing_exact_sales"] == 1 and row["identity_ready"])
+    low_guide = sum(1 for row in rows if (row.get("guide_triage") or {}).get("status") == "LOW_GUIDE_CONTEXT")
     return {
         "rows": rows,
         "processed_count": len(rows),
@@ -144,11 +221,13 @@ def run_auto_comp_research(items: Iterable[dict] | None, sold_records: Iterable[
         "research_identity_ready_count": research_ready,
         "threshold_met_count": threshold,
         "one_sale_away_count": one_away,
+        "low_guide_context_count": low_guide,
         "note": (
             "Automatisk comp-jakt skannar lokalt verifierad SOLD-historik, bygger exakta researchlänkar och kan hämta "
-            "SportsCardsPro-guide via officiellt API. Query ladder provar även säkra alternativa sökfraser när marknadsplatser namnger samma kort olika. "
-            "Candidate matcher rankar möjliga träffar med hårda konflikter för spelare, kortnummer, säsong, parallel och premiumegenskaper. "
-            "Verification queue väljer sedan vilka starka träffar som är mest värda att kontrollera först och försöker sprida arbetet över oberoende källor. "
-            "Den skrapar inte marknadsplatser och skapar aldrig SOLD eller KÖP utan verifiering."
+            "SportsCardsPro-guide via officiellt API. Låg guidekontext används bara för att nedprioritera researcharbete; "
+            "den blir aldrig SOLD, marknadsvärde, maxpris eller KÖP. Query ladder provar även säkra alternativa sökfraser när "
+            "marknadsplatser namnger samma kort olika. Candidate matcher rankar möjliga träffar med hårda konflikter för spelare, "
+            "kortnummer, säsong, parallel och premiumegenskaper. Verification queue väljer sedan vilka starka träffar som är mest "
+            "värda att kontrollera först och försöker sprida arbetet över oberoende källor."
         ),
     }
