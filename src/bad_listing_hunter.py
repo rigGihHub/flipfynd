@@ -12,6 +12,20 @@ def _text_list(value):
     return [str(x).strip() for x in (value or []) if str(x).strip()]
 
 
+def _listing_url(item: dict) -> str | None:
+    """Return the original listing URL across the field names used by our feeds.
+
+    Some Tradera/fetcher paths store the URL as ``link`` rather than ``url``.
+    Bad Listing Hunter is specifically a manual-review queue, so dropping the
+    source link makes the queue much less useful.
+    """
+    for key in ("url", "link", "href", "item_url", "tradera_url"):
+        value = str(item.get(key) or "").strip()
+        if value.startswith(("http://", "https://")):
+            return value
+    return None
+
+
 def build_bad_listing_signal(item: dict | None) -> dict:
     item = item or {}
     reasons = []
@@ -122,7 +136,7 @@ def build_bad_listing_queue(items, limit=8):
             continue
         rows.append({
             "title": item.get("titel") or item.get("title") or "Okänd annons",
-            "url": item.get("url"),
+            "url": _listing_url(item),
             "decision": item.get("beslut") or item.get("decision"),
             "signal": signal,
             "_rank": (
