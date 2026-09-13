@@ -5,6 +5,8 @@ worth verifying next when the strict economic-edge gate has no eligible rows.
 """
 from __future__ import annotations
 
+MODULE_SCHEMA_VERSION = "2026-09-13-hotfix-1"
+
 
 def _n(v, default=0.0):
     try:
