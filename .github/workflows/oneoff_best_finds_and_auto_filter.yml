@@ -1,0 +1,73 @@
+name: One-off best finds and autograph filter
+
+on:
+  push:
+    paths:
+      - '.github/workflows/oneoff_best_finds_and_auto_filter.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch FlipFynd
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path('app.py')
+          text = app.read_text(encoding='utf-8')
+
+          # Import the canonical card parser so UI filters and analysis agree.
+          needle = 'from src.card_explanation import build_card_explanation, build_card_identity_summary\n'
+          if 'from src.card_parser import parse_card_features\n' not in text:
+              text = text.replace(needle, needle + 'from src.card_parser import parse_card_features\n', 1)
+
+          # Replace the old title-only autograph detector. It missed autos mentioned only
+          # in the description and accepted generic "Signature" product names as autos.
+          old = '''def is_auto(item):\n    text = (\n        item.get(\n            "titel",\n            "",\n        )\n        or ""\n    ).lower()\n\n    return bool(\n        re.search(\n            r"\\b("\n            r"auto|"\n            r"autograph|"\n            r"autograf|"\n            r"signed|"\n            r"signature"\n            r")\\b",\n            text,\n        )\n    )\n'''
+          new = '''def is_auto(item):\n    """Return True only for a real autograph signal, using all listing text we have.\n\n    The canonical parser deliberately does not treat a bare word like \"Signature\"\n    as proof of an autograph; names such as Signature Style and Silver Script are\n    product/parallel names and caused false positives in the old filter.\n    """\n    combined = " ".join(\n        str(item.get(key) or "")\n        for key in ("titel", "title", "raw_text", "full_description", "description")\n    )\n    return bool(parse_card_features(combined).get("is_auto"))\n'''
+          if old not in text:
+              raise SystemExit('Old is_auto block not found')
+          text = text.replace(old, new, 1)
+
+          # Make the product open directly in the one view that matters: best finds now.
+          old_view = '''st.subheader("Vad vill du göra?")\n_main_view = st.radio(\n    "Huvudvy",\n    ["Vad ska jag köpa?", "Slutar snart", "Bevaka", "Research"],\n    horizontal=True,\n    label_visibility="collapsed",\n    help="Välj bara vad du vill göra. FlipFynd behåller hela analysmotorn i bakgrunden.",\n    key="main_novice_view",\n)\n'''
+          new_view = '''# FlipFynd har en huvuduppgift: visa de bästa fynden just nu.\n# Slutar snart/bevakning/research finns kvar som analysmotorer i bakgrunden,\n# men användaren ska inte behöva välja arbetsläge innan fyndjakten.\n_main_view = "Vad ska jag köpa?"\n'''
+          if old_view not in text:
+              raise SystemExit('Main view selector block not found')
+          text = text.replace(old_view, new_view, 1)
+
+          # Bump version if present.
+          text = re.sub(r'APP_VERSION = "v0\.12\.\d+"', 'APP_VERSION = "v0.12.81"', text, count=1)
+          app.write_text(text, encoding='utf-8')
+
+          parser = Path('src/card_parser.py')
+          p = parser.read_text(encoding='utf-8')
+          old_line = '    is_auto = bool(re.search(r"\\bauto\\b|\\bautograph\\b|\\bautograf\\b|\\bsigned\\b|\\bsignature\\b", norm))\n'
+          new_block = '''    # A bare "signature" is not proof of an autograph. Product/parallel names\n    # such as Signature Style or facsimile/printed signatures are common false positives.\n    # Strong autograph wording is required, while explicit negative wording wins.\n    auto_negative = bool(re.search(\n        r"\\b(?:signature\\s+style|facsimile|pre[- ]?printed|printed\\s+signature|tryckt\\s+autograf|ej\\s+autograf|not\\s+signed|unsigned)\\b",\n        norm,\n    ))\n    auto_positive = bool(re.search(\n        r"\\b(?:auto|autograph(?:ed)?|autograf|autograferad|signerad|hand[- ]?signed|on[- ]?card\\s+auto|sticker\\s+auto|signed\\s+by)\\b",\n        norm,\n    ))\n    is_auto = bool(auto_positive and not auto_negative)\n'''
+          if old_line not in p:
+              raise SystemExit('Old parser is_auto line not found')
+          p = p.replace(old_line, new_block, 1)
+          parser.write_text(p, encoding='utf-8')
+
+          test = Path('tests/test_autograph_filter.py')
+          test.write_text('''from src.card_parser import parse_card_features\n\n\ndef test_signature_style_is_not_auto():\n    assert parse_card_features("Wayne Rooney Topps Match Attax Legend Signature Style")["is_auto"] is False\n\n\ndef test_silver_script_is_not_auto():\n    assert parse_card_features("2021-22 MVP Silver Script Nicklas Backstrom")["is_auto"] is False\n\n\ndef test_explicit_autograph_is_auto():\n    assert parse_card_features("Topps Chrome Lionel Messi Autograph /99")["is_auto"] is True\n\n\ndef test_swedish_signed_is_auto():\n    assert parse_card_features("Connor McDavid signerad autograf")["is_auto"] is True\n\n\ndef test_explicit_negative_wins():\n    assert parse_card_features("Signature card - printed signature - not signed")["is_auto"] is False\n''', encoding='utf-8')
+          PY
+      - name: Run autograph regression tests
+        run: python -m pytest -q tests/test_autograph_filter.py
+      - name: Commit changes
+        shell: bash
+        run: |
+          git config user.name 'FlipFynd automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app.py src/card_parser.py tests/test_autograph_filter.py
+          git commit -m 'Show best finds only and fix autograph filtering'
+          git push origin HEAD:main
