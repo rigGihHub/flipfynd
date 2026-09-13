@@ -3,10 +3,18 @@
 Streamlit Cloud can briefly run a new app.py against an older imported module.
 This wrapper preserves the verified-economic-edge gate even when the deployed
 ``build_decision_tiers`` implementation does not yet accept that keyword.
+
+It also performs a small, fail-closed SportsCardsPro preflight for the strongest
+research-ready fallback candidates.  The guide is research triage only: it never
+creates SOLD evidence, market value, max price or a BUY decision.
 """
 from __future__ import annotations
 
+from functools import lru_cache
 import inspect
+import os
+
+from src.comp_research_workbench import fetch_sportscardspro_context
 
 
 def _n(value, default=0.0):
@@ -51,14 +59,144 @@ def _supports_verified_economic_edge(item):
     )
 
 
+def _research_identity(item):
+    fields = item.get("exact_identity_gate_research_identity_fields") or item.get("exact_identity_gate_identity_fields") or {}
+    return dict(fields) if isinstance(fields, dict) else {}
+
+
+def _research_ready(item):
+    return bool(
+        item.get("exact_identity_gate_supports_comp_research")
+        or item.get("exact_identity_gate_supports_exact_comp_search")
+        or item.get("exact_identity_gate_status") in {"SÖKBAR_TITEL", "SÖKBAR", "VERIFIERAD", "READY", "EXACT", "STRONG"}
+    )
+
+
+def _has_guide_context(item):
+    triage = item.get("guide_triage") or item.get("price_guide_triage")
+    if isinstance(triage, dict) and triage.get("status"):
+        return True
+    scp = item.get("sports_cards_pro") or item.get("sportscardspro_context")
+    return bool(isinstance(scp, dict) and scp.get("ok"))
+
+
+def _classify_guide_context(scp):
+    if not isinstance(scp, dict) or not scp.get("ok"):
+        return None
+    try:
+        raw = float(scp.get("ungraded_usd"))
+    except (TypeError, ValueError):
+        raw = None
+    if raw is None:
+        return {
+            "status": "NO_RAW_GUIDE",
+            "priority": 1,
+            "ungraded_usd": None,
+            "label": "Raw-guide saknas",
+        }
+    if raw <= 3.0:
+        return {
+            "status": "LOW_GUIDE_CONTEXT",
+            "priority": 3,
+            "ungraded_usd": raw,
+            "label": "Låg prisguidekontext",
+        }
+    if raw <= 10.0:
+        return {
+            "status": "MODEST_GUIDE_CONTEXT",
+            "priority": 2,
+            "ungraded_usd": raw,
+            "label": "Måttlig prisguidekontext",
+        }
+    return {
+        "status": "MEANINGFUL_GUIDE_CONTEXT",
+        "priority": 0,
+        "ungraded_usd": raw,
+        "label": "Högre prisguidekontext",
+    }
+
+
+def _identity_cache_key(identity):
+    return tuple(str(identity.get(key) or "").strip() for key in (
+        "player_name", "set_name", "season", "card_number", "parallel",
+        "serial_denominator", "grading_company", "grade",
+    ))
+
+
+@lru_cache(maxsize=512)
+def _cached_guide_lookup(token, identity_key):
+    keys = (
+        "player_name", "set_name", "season", "card_number", "parallel",
+        "serial_denominator", "grading_company", "grade",
+    )
+    identity = {key: value for key, value in zip(keys, identity_key) if value}
+    return fetch_sportscardspro_context(identity, token=token)
+
+
+def _auto_attach_guide_context(candidates, *, max_lookups=6):
+    """Attach guide triage to a few strongest fallback candidates.
+
+    The lookup is intentionally capped and cached because Streamlit reruns often.
+    Only candidates with a narrow four-anchor identity are queried.  Failures are
+    ignored so ranking remains available even if the external API is unavailable.
+    """
+    rows = [dict(item) if isinstance(item, dict) else item for item in (candidates or [])]
+    token = str(os.getenv("SPORTSCARDSPRO_TOKEN") or "").strip()
+    if not token or max_lookups <= 0:
+        return rows
+
+    eligible = []
+    for idx, item in enumerate(rows):
+        if not isinstance(item, dict):
+            continue
+        if _has_guide_context(item):
+            continue
+        if int(_n(item.get("sold_comparable_count"), 0)) >= 2:
+            continue
+        if not _research_ready(item):
+            continue
+        identity = _research_identity(item)
+        if not all(str(identity.get(key) or "").strip() for key in ("player_name", "set_name", "season", "card_number")):
+            continue
+        priority = (
+            _n(item.get("deal_score"), 0)
+            + min(25.0, _n(item.get("collector_worth_score"), 0) * 0.20)
+            + min(20.0, _n(item.get("card_hierarchy_score"), 0) * 0.15)
+        )
+        eligible.append((priority, idx, identity))
+
+    eligible.sort(reverse=True, key=lambda row: row[0])
+    for _priority, idx, identity in eligible[: max(0, int(max_lookups))]:
+        try:
+            scp = _cached_guide_lookup(token, _identity_cache_key(identity))
+        except Exception:
+            continue
+        triage = _classify_guide_context(scp)
+        if not triage:
+            continue
+        rows[idx]["sports_cards_pro"] = scp
+        rows[idx]["guide_triage"] = triage
+        rows[idx]["price_guide_auto_prefetched"] = True
+
+    return rows
+
+
 def build_decision_tiers_compat(builder, candidates, *, total_limit=3, require_verified_economic_edge=False):
     """Call current builder, or safely adapt an older signature.
 
-    The fallback deliberately pre-filters source candidates rather than merely
-    hiding rows after ranking. That keeps the hard gate intact under a stale
-    module and avoids promoting a non-edge card into Top 3.
+    Before the current fallback ranking is built, a capped price-guide preflight
+    enriches the strongest research-ready candidates when an official API token
+    is configured. This means a ~$1.50 base/insert can be demoted automatically
+    before the user presses the manual comp-research button.
+
+    The legacy fallback deliberately pre-filters source candidates rather than
+    merely hiding rows after ranking. That keeps the hard gate intact under a
+    stale module and avoids promoting a non-edge card into Top 3.
     """
     rows = list(candidates or [])
+    if require_verified_economic_edge:
+        rows = _auto_attach_guide_context(rows, max_lookups=max(6, int(total_limit or 3) * 2))
+
     try:
         params = inspect.signature(builder).parameters
     except (TypeError, ValueError):
