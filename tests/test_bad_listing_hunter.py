@@ -53,3 +53,15 @@ def test_queue_only_contains_candidates():
     ])
     assert [r["title"] for r in q["rows"]]==["Svag annons"]
     assert q["creates_new_decision"] is False
+
+
+def test_queue_preserves_link_field_for_manual_review():
+    q=build_bad_listing_queue([
+        {
+            "titel":"Svag annons",
+            "link":"https://www.tradera.com/item/123/456",
+            "listing_quality_score":40,
+            "listing_quality_warnings":["kortnummer saknas","set/program saknas eller är otydligt"],
+        },
+    ])
+    assert q["rows"][0]["url"] == "https://www.tradera.com/item/123/456"
