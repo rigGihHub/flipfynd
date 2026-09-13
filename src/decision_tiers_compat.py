@@ -192,6 +192,78 @@ def _auto_attach_guide_context(candidates, *, max_lookups=6):
     return rows
 
 
+def _special_signal(source):
+    return bool(
+        source.get("is_information_edge_candidate")
+        or source.get("is_market_edge_candidate")
+        or source.get("is_hidden_find_candidate")
+        or source.get("misclassified_card_candidate")
+        or source.get("mispriced_rookie_candidate")
+        or source.get("is_case_hit")
+        or source.get("is_short_print")
+        or source.get("is_ssp")
+        or source.get("is_1of1")
+        or source.get("is_auto")
+        or source.get("is_patch")
+        or source.get("is_jersey")
+    )
+
+
+def _postprocess_fallback_result(result, total_limit):
+    """Do not call ordinary low-potential cards 'best alternatives'."""
+    if not isinstance(result, dict) or not result.get("fallback_investigate_mode"):
+        return result
+    out = dict(result)
+    rows = list(out.get("rows") or [])
+    if not rows:
+        return out
+
+    kept = []
+    suppressed = []
+    for row in rows:
+        source = row.get("_source_item") or {}
+        sold = int(_n(row.get("sold_comps"), 0))
+        potential = _n(row.get("potential"), 0)
+        merit = _n(row.get("structural_merit"), 0)
+        investigate = _n(row.get("investigate_score"), 0)
+        guide_status = str(row.get("guide_status") or "")
+        weak_ordinary = (
+            sold == 0
+            and not _special_signal(source)
+            and potential < 30
+            and merit < 60
+            and investigate < 50
+        )
+        low_guide_noise = (
+            guide_status == "LOW_GUIDE_CONTEXT"
+            and sold == 0
+            and merit < 60
+            and not _special_signal(source)
+        )
+        if weak_ordinary or low_guide_noise:
+            suppressed.append(row)
+        else:
+            kept.append(row)
+
+    kept.sort(
+        key=lambda r: (
+            _n(r.get("investigate_score"), 0),
+            _n(r.get("structural_merit"), 0),
+            _n(r.get("potential"), 0),
+            bool(r.get("research_ready")),
+            _n(r.get("certainty"), 0),
+        ),
+        reverse=True,
+    )
+    out["rows"] = kept[: max(0, int(total_limit or 0))]
+    out["suppressed_weak_ordinary_count"] = len(suppressed)
+    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in suppressed[:10]]
+    if suppressed:
+        note = str(out.get("note") or "").strip()
+        out["note"] = (note + " Ordinära lågpotentialkort utan tydlig kortspecifik edge döljs från 'Bästa alternativen'.").strip()
+    return out
+
+
 def build_decision_tiers_compat(builder, candidates, *, total_limit=3, require_verified_economic_edge=False):
     """Call current builder, or safely adapt an older signature."""
     rows = list(candidates or [])
@@ -204,11 +276,12 @@ def build_decision_tiers_compat(builder, candidates, *, total_limit=3, require_v
         params = {}
 
     if "require_verified_economic_edge" in params:
-        return builder(
+        result = builder(
             rows,
             total_limit=total_limit,
             require_verified_economic_edge=require_verified_economic_edge,
         )
+        return _postprocess_fallback_result(result, total_limit)
 
     gated = rows
     rejected_count = 0
@@ -225,4 +298,4 @@ def build_decision_tiers_compat(builder, candidates, *, total_limit=3, require_v
     note = str(result.get("note") or "").strip()
     compat_note = "Verified economic-edge gate applied through deploy compatibility wrapper."
     result["note"] = f"{note} {compat_note}".strip()
-    return result
+    return _postprocess_fallback_result(result, total_limit)
