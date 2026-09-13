@@ -1983,32 +1983,17 @@ with st.form("analysis_form"):
             help="Annonser vars pris + frakt överstiger budgeten sorteras bort.",
         )
 
-    p3, p4 = st.columns(2)
+    # En enda standardmotor: användaren ska inte behöva välja analysstrategi.
+    # premium_flip är den bredaste fyndmotorn och kombineras längre ned med
+    # efterfrågan, risk, samlarmerit, comps och verifierad ekonomisk edge.
+    strategy = "premium_flip"
 
-    with p3:
-        strategy_label = st.selectbox(
-            "Strategi",
-            [
-                "Sälj snabbt",
-                "Tjäna mest",
-                "Bäst kort",
-            ],
-            help="Sälj snabbt prioriterar kort som verkar lättare att sälja. Tjäna mest prioriterar realistisk vinst. Bäst kort prioriterar kortets och spelarens kvalitet.",
-        )
-
-    with p4:
-        search = st.text_input(
-            "Sök spelare, set eller kort",
-            value="",
-            placeholder="T.ex. Bedard, Young Guns, Messi…",
-        )
-
-    strategy_map = {
-        "Sälj snabbt": "quick_flip",
-        "Tjäna mest": "premium_flip",
-        "Bäst kort": "kort",
-    }
-    strategy = strategy_map[strategy_label]
+    search = st.text_input(
+        "Sök spelare, set eller kort",
+        value="",
+        placeholder="T.ex. Bedard, Young Guns, Messi…",
+        help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",
+    )
 
     with st.expander("Avancerade filter"):
         a1, a2 = st.columns(2)
