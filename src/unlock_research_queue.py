@@ -80,219 +80,102 @@ def _guide_context(item):
 
 
 def _structural_merit(item):
-    """Return research merit from card-specific value drivers, never a price."""
     score = 0.0
     reasons = []
-
     serial = _n(item.get("serial_number") or item.get("serial_denominator"), 0)
     if item.get("is_1of1"):
-        score += 32
-        reasons.append("1/1")
+        score += 32; reasons.append("1/1")
     elif serial:
-        if serial <= 25:
-            score += 24
-        elif serial <= 99:
-            score += 18
-        elif serial <= 199:
-            score += 11
-        else:
-            score += 5
+        score += 24 if serial <= 25 else 18 if serial <= 99 else 11 if serial <= 199 else 5
         reasons.append("numrerat")
-
     if item.get("is_auto") or item.get("autograph"):
-        score += 22
-        reasons.append("autograf")
+        score += 22; reasons.append("autograf")
     if item.get("is_patch") or item.get("is_jersey") or item.get("is_game_worn"):
-        score += 14
-        reasons.append("patch/relic")
-    if item.get("is_rookie") and (
-        item.get("rookie_importance_matched")
-        or _n(item.get("rookie_importance_score"), 0) >= 60
-        or str(item.get("rookie_tier") or "").casefold() in {"iconic", "strong"}
-    ):
-        score += 15
-        reasons.append("relevant rookie")
-
-    valuable_structure = _n(item.get("valuable_structure_score"), 0)
-    hierarchy = _n(item.get("card_hierarchy_score") or item.get("hierarchy_score"), 0)
-    collector = _n(item.get("collector_worth_score"), 0)
-    score += min(16, valuable_structure * 0.16)
-    score += min(14, hierarchy * 0.14)
-    score += min(10, max(0, collector - 45) * 0.20)
-
+        score += 14; reasons.append("patch/relic")
+    if item.get("is_rookie") and (item.get("rookie_importance_matched") or _n(item.get("rookie_importance_score"), 0) >= 60 or str(item.get("rookie_tier") or "").casefold() in {"iconic", "strong"}):
+        score += 15; reasons.append("relevant rookie")
+    score += min(16, _n(item.get("valuable_structure_score"), 0) * 0.16)
+    score += min(14, _n(item.get("card_hierarchy_score") or item.get("hierarchy_score"), 0) * 0.14)
+    score += min(10, max(0, _n(item.get("collector_worth_score"), 0) - 45) * 0.20)
     if item.get("is_case_hit") or item.get("case_hit"):
-        score += 18
-        reasons.append("case hit")
+        score += 18; reasons.append("case hit")
     if item.get("is_short_print") or item.get("is_ssp") or item.get("short_print"):
-        score += 16
-        reasons.append("SP/SSP")
+        score += 16; reasons.append("SP/SSP")
     if item.get("is_hidden_find_candidate") or item.get("misclassified_card_candidate") or item.get("mispriced_rookie_candidate"):
-        score += 10
-        reasons.append("discovery-signal")
+        score += 10; reasons.append("discovery-signal")
     if item.get("is_market_edge_candidate") or item.get("is_information_edge_candidate"):
-        score += 8
-        reasons.append("informationsövertag")
+        score += 8; reasons.append("informationsövertag")
     if item.get("oddity_story_candidate") or item.get("visual_oddity_candidate"):
-        score += 10
-        reasons.append("oddity/story")
-
+        score += 10; reasons.append("oddity/story")
     if item.get("parallel") or item.get("is_parallel"):
-        score += 4
-        reasons.append("parallel")
-
+        score += 4; reasons.append("parallel")
     verdict = str(item.get("collector_worth_verdict") or item.get("collector_profile_verdict") or "").upper()
     traps = " ".join(str(x) for x in (item.get("collector_worth_hobby_traps") or item.get("hobby_traps") or []))
-    standard_star = verdict == "SPELARDRIVET_STANDARDKORT" or "standardkort" in traps.casefold()
-    if standard_star:
-        score -= 22
-        reasons.append("stjärnspelare men standardkort")
-
+    if verdict == "SPELARDRIVET_STANDARDKORT" or "standardkort" in traps.casefold():
+        score -= 22; reasons.append("stjärnspelare men standardkort")
     return max(0.0, min(100.0, score)), list(dict.fromkeys(reasons))[:6]
 
 
 def _unlock_score(item):
-    sold = int(_n(item.get("sold_comparable_count"), 0))
-    identity = _identity_ready(item)
-    research_identity = _research_identity_ready(item)
-    market = _market_value_ready(item)
-    max_price = _max_price_ready(item)
-    merit, _ = _structural_merit(item)
-    guide = _guide_context(item)
-
-    if identity and sold == 1:
-        score = 100.0
-    elif identity and sold == 0:
-        score = 70.0
-    elif research_identity and sold == 0:
-        score = 64.0
-    elif sold >= 2 and not (market and max_price):
-        score = 74.0
-    elif not identity:
-        score = 38.0
-    else:
-        score = 52.0
-
+    sold = int(_n(item.get("sold_comparable_count"), 0)); identity = _identity_ready(item); research_identity = _research_identity_ready(item)
+    market = _market_value_ready(item); max_price = _max_price_ready(item); merit, _ = _structural_merit(item); guide = _guide_context(item)
+    if identity and sold == 1: score = 100.0
+    elif identity and sold == 0: score = 70.0
+    elif research_identity and sold == 0: score = 64.0
+    elif sold >= 2 and not (market and max_price): score = 74.0
+    elif not identity: score = 38.0
+    else: score = 52.0
     score += min(18.0, merit * 0.30)
-    if guide["status"] == "LOW_GUIDE_CONTEXT" and sold < 2:
-        score -= 34.0
-    elif guide["status"] == "MODEST_GUIDE_CONTEXT" and sold < 2:
-        score -= 10.0
-    if market:
-        score += 4
-    if max_price:
-        score += 4
+    if guide["status"] == "LOW_GUIDE_CONTEXT" and sold < 2: score -= 34.0
+    elif guide["status"] == "MODEST_GUIDE_CONTEXT" and sold < 2: score -= 10.0
+    if market: score += 4
+    if max_price: score += 4
     score += min(4.0, max(0.0, _n(item.get("deal_score"))) * 0.04)
     return score
 
 
 def _status(item):
-    sold = int(_n(item.get("sold_comparable_count"), 0))
-    identity = _identity_ready(item)
-    research_identity = _research_identity_ready(item)
-    market = _market_value_ready(item)
-    max_price = _max_price_ready(item)
-    merit, _ = _structural_merit(item)
-    guide = _guide_context(item)
-    if identity and sold == 1:
-        return "ONE_SALE_AWAY", "1 extra verifierad exact SOLD kan räcka för att nå comp-tröskeln."
+    sold = int(_n(item.get("sold_comparable_count"), 0)); identity = _identity_ready(item); research_identity = _research_identity_ready(item)
+    market = _market_value_ready(item); max_price = _max_price_ready(item); merit, _ = _structural_merit(item); guide = _guide_context(item)
+    if identity and sold == 1: return "ONE_SALE_AWAY", "1 extra verifierad exact SOLD kan räcka för att nå comp-tröskeln."
     if identity and sold == 0 and guide["status"] == "LOW_GUIDE_CONTEXT":
-        raw = guide.get("ungraded_usd")
-        suffix = f" (~${raw:.2f} raw)" if raw is not None else ""
+        raw = guide.get("ungraded_usd"); suffix = f" (~${raw:.2f} raw)" if raw is not None else ""
         return "EXACT_READY_LOW_GUIDE", f"Exakt identitet finns, men prisguidekontexten är låg{suffix}. Researcha starkare kandidater först."
-    if identity and sold == 0 and merit < 40:
-        return "EXACT_READY_LOW_MERIT", "Exakt identitet finns, men kortet saknar hittills starka kortspecifika värdedrivare. Researcha först starkare kandidater."
-    if identity and sold == 0:
-        return "EXACT_READY_NO_SALES", "Exakt identitet är redo; nästa steg är att hitta första verifierade exact SOLD."
-    if research_identity and sold == 0:
-        return "RESEARCH_READY_NO_SALES", "Titeln är strukturerad nog för smal comp-research; verifiera identiteten innan en sale får räknas som exact."
-    if sold >= 2 and not market:
-        return "VALUATION_NEXT", "SOLD-underlag finns, men säker värdering är ännu inte upplåst."
-    if sold >= 2 and market and not max_price:
-        return "MAX_PRICE_NEXT", "Värdering finns; nästa steg är evidensbaserat maxpris."
-    if not identity:
-        return "IDENTITY_FIRST", "Verifiera exakt kortidentitet innan comp-research."
+    if identity and sold == 0 and merit < 40: return "EXACT_READY_LOW_MERIT", "Exakt identitet finns, men kortet saknar hittills starka kortspecifika värdedrivare. Researcha först starkare kandidater."
+    if identity and sold == 0: return "EXACT_READY_NO_SALES", "Exakt identitet är redo; nästa steg är att hitta första verifierade exact SOLD."
+    if research_identity and sold == 0: return "RESEARCH_READY_NO_SALES", "Titeln är strukturerad nog för smal comp-research; verifiera identiteten innan en sale får räknas som exact."
+    if sold >= 2 and not market: return "VALUATION_NEXT", "SOLD-underlag finns, men säker värdering är ännu inte upplåst."
+    if sold >= 2 and market and not max_price: return "MAX_PRICE_NEXT", "Värdering finns; nästa steg är evidensbaserat maxpris."
+    if not identity: return "IDENTITY_FIRST", "Verifiera exakt kortidentitet innan comp-research."
     return "REVIEW", "Granska nästa saknade evidenssteg."
 
 
 def build_unlock_research_queue(items, limit=10):
     rows = []
     for item in items or []:
-        if not isinstance(item, dict):
-            continue
+        if not isinstance(item, dict): continue
         title = _txt(item.get("titel") or item.get("title"))
-        if not title:
-            continue
-        sold = int(_n(item.get("sold_comparable_count"), 0))
-        status, action = _status(item)
-        merit, merit_reasons = _structural_merit(item)
-        guide = _guide_context(item)
+        if not title: continue
+        sold = int(_n(item.get("sold_comparable_count"), 0)); status, action = _status(item); merit, merit_reasons = _structural_merit(item); guide = _guide_context(item); unlock = _unlock_score(item)
         rows.append({
-            "title": title,
-            "url": item.get("lank") or item.get("url"),
-            "player_key": _player_key(item),
-            "status": status,
-            "action": action,
-            "unlock_score": _unlock_score(item),
-            "research_merit_score": round(merit),
-            "research_merit_reasons": merit_reasons,
-            "guide_status": guide["status"],
-            "guide_ungraded_usd": guide["ungraded_usd"],
-            "sold_comps": sold,
-            "identity_ready": _identity_ready(item),
-            "research_identity_ready": _research_identity_ready(item),
-            "market_value_ready": _market_value_ready(item),
-            "max_price_ready": _max_price_ready(item),
-            "potential": max(0.0, min(100.0, _n(item.get("deal_score")))),
-            "source_item": item,
+            "title": title, "url": item.get("lank") or item.get("url"), "player_key": _player_key(item), "status": status, "action": action,
+            "unlock_score": unlock, "research_value_score": unlock, "research_merit_score": round(merit), "research_merit_reasons": merit_reasons,
+            "guide_status": guide["status"], "guide_ungraded_usd": guide["ungraded_usd"], "sold_comps": sold,
+            "identity_ready": _identity_ready(item), "research_identity_ready": _research_identity_ready(item), "market_value_ready": _market_value_ready(item),
+            "max_price_ready": _max_price_ready(item), "potential": max(0.0, min(100.0, _n(item.get("deal_score")))), "source_item": item,
         })
-
-    status_order = {
-        "ONE_SALE_AWAY": 0,
-        "VALUATION_NEXT": 1,
-        "MAX_PRICE_NEXT": 2,
-        "EXACT_READY_NO_SALES": 3,
-        "RESEARCH_READY_NO_SALES": 4,
-        "EXACT_READY_LOW_MERIT": 5,
-        "EXACT_READY_LOW_GUIDE": 6,
-        "IDENTITY_FIRST": 7,
-        "REVIEW": 8,
-    }
-    rows.sort(
-        key=lambda r: (
-            status_order.get(r["status"], 9),
-            -r["unlock_score"],
-            -r["research_merit_score"],
-            -r["potential"],
-            r["title"],
-        )
-    )
-
+    status_order = {"ONE_SALE_AWAY":0,"VALUATION_NEXT":1,"MAX_PRICE_NEXT":2,"EXACT_READY_NO_SALES":3,"RESEARCH_READY_NO_SALES":4,"EXACT_READY_LOW_MERIT":5,"EXACT_READY_LOW_GUIDE":6,"IDENTITY_FIRST":7,"REVIEW":8}
+    rows.sort(key=lambda r:(status_order.get(r["status"],9),-r["unlock_score"],-r["research_merit_score"],-r["potential"],r["title"]))
     selected, used_players = [], set()
     for row in rows:
-        pk = row.get("player_key")
-        if pk and pk in used_players:
-            continue
+        pk=row.get("player_key")
+        if pk and pk in used_players: continue
         selected.append(row)
-        if pk:
-            used_players.add(pk)
-        if len(selected) >= max(0, int(limit)):
-            break
+        if pk: used_players.add(pk)
+        if len(selected)>=max(0,int(limit)): break
     for row in rows:
-        if len(selected) >= max(0, int(limit)):
-            break
-        if row not in selected:
-            selected.append(row)
-
-    counts = {}
-    for row in rows:
-        counts[row["status"]] = counts.get(row["status"], 0) + 1
-    return {
-        "rows": selected,
-        "counts": counts,
-        "total": len(rows),
-        "near_unlock_count": counts.get("ONE_SALE_AWAY", 0),
-        "exact_ready_no_sales_count": counts.get("EXACT_READY_NO_SALES", 0),
-        "low_merit_exact_count": counts.get("EXACT_READY_LOW_MERIT", 0),
-        "low_guide_exact_count": counts.get("EXACT_READY_LOW_GUIDE", 0),
-        "note": "Researchkön prioriterar evidenshävstång, kortspecifik samlarmerit och eventuell prisguide-triage. Exact ID ensam räcker inte för topplacering och guidevärden skapar aldrig KÖP.",
-    }
+        if len(selected)>=max(0,int(limit)): break
+        if row not in selected: selected.append(row)
+    counts={}
+    for row in rows: counts[row["status"]]=counts.get(row["status"],0)+1
+    return {"rows":selected,"counts":counts,"total":len(rows),"near_unlock_count":counts.get("ONE_SALE_AWAY",0),"exact_ready_no_sales_count":counts.get("EXACT_READY_NO_SALES",0),"low_merit_exact_count":counts.get("EXACT_READY_LOW_MERIT",0),"low_guide_exact_count":counts.get("EXACT_READY_LOW_GUIDE",0),"note":"Researchkön prioriterar evidenshävstång, kortspecifik samlarmerit och eventuell prisguide-triage. Exact ID ensam räcker inte för topplacering och guidevärden skapar aldrig KÖP."}
