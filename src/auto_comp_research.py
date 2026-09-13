@@ -69,7 +69,7 @@ def _guide_triage(scp: dict | None) -> dict:
     """Classify price-guide context for research effort only.
 
     This deliberately does not convert USD to SEK, estimate market value, create
-    profit, or count as SOLD evidence.  It only answers whether a raw guide value
+    profit, or count as SOLD evidence. It only answers whether a raw guide value
     is so small that scarce research time is probably better spent elsewhere.
     """
     if not isinstance(scp, dict) or not scp.get("ok"):
@@ -152,7 +152,7 @@ def research_one(item: dict, sold_records: Iterable[dict] | None = None, *, scp_
     elif guide_triage["status"] == "LOW_GUIDE_CONTEXT":
         status = "LOW_GUIDE_CONTEXT"
         next_action = (
-            f"Låg prisguidekontext (${guide_triage['ungraded_usd']:.2f} raw). "
+            f"Guide ~${guide_triage['ungraded_usd']:.2f} raw → låg researchprioritet. "
             "Lägg SOLD-research på starkare kandidater först. Guidevärdet är inte en verifierad försäljning eller värdering."
         )
     elif missing_sales == 1:
@@ -201,33 +201,38 @@ def _batch_sort_key(row: dict) -> tuple:
 
 
 def run_auto_comp_research(items: Iterable[dict] | None, sold_records: Iterable[dict] | None = None, *, limit: int = 5, scp_token: str | None = None) -> dict:
-    """Research up to ``limit`` prioritized items in one click.
+    """Research candidates but expose only the three best next actions.
 
-    The function intentionally returns a research pack rather than mutating the
-    sold library. External sales must still be explicitly verified/imported.
+    We may inspect more than three candidates to avoid a weak first-input ordering,
+    but mobile UI should not drown the user in ten near-identical cards. External
+    sales must still be explicitly verified/imported.
     """
-    selected = [x for x in (items or []) if isinstance(x, dict)][: max(0, int(limit))]
-    rows = [research_one(item, sold_records=sold_records or [], scp_token=scp_token) for item in selected]
-    rows.sort(key=_batch_sort_key)
-    ready = sum(1 for row in rows if row["identity_ready"])
-    research_ready = sum(1 for row in rows if row.get("research_identity_ready"))
-    threshold = sum(1 for row in rows if row["exact_sold_count"] >= 2)
-    one_away = sum(1 for row in rows if row["missing_exact_sales"] == 1 and row["identity_ready"])
-    low_guide = sum(1 for row in rows if (row.get("guide_triage") or {}).get("status") == "LOW_GUIDE_CONTEXT")
+    requested_limit = max(0, int(limit))
+    selected = [x for x in (items or []) if isinstance(x, dict)][:requested_limit]
+    researched_rows = [research_one(item, sold_records=sold_records or [], scp_token=scp_token) for item in selected]
+    researched_rows.sort(key=_batch_sort_key)
+    display_rows = researched_rows[: min(3, len(researched_rows))]
+
+    ready = sum(1 for row in researched_rows if row["identity_ready"])
+    research_ready = sum(1 for row in researched_rows if row.get("research_identity_ready"))
+    threshold = sum(1 for row in researched_rows if row["exact_sold_count"] >= 2)
+    one_away = sum(1 for row in researched_rows if row["missing_exact_sales"] == 1 and row["identity_ready"])
+    low_guide = sum(1 for row in researched_rows if (row.get("guide_triage") or {}).get("status") == "LOW_GUIDE_CONTEXT")
     return {
-        "rows": rows,
-        "processed_count": len(rows),
+        "rows": display_rows,
+        "processed_count": len(researched_rows),
+        "displayed_count": len(display_rows),
+        "hidden_after_triage_count": max(0, len(researched_rows) - len(display_rows)),
         "identity_ready_count": ready,
         "research_identity_ready_count": research_ready,
         "threshold_met_count": threshold,
         "one_sale_away_count": one_away,
         "low_guide_context_count": low_guide,
         "note": (
-            "Automatisk comp-jakt skannar lokalt verifierad SOLD-historik, bygger exakta researchlänkar och kan hämta "
-            "SportsCardsPro-guide via officiellt API. Låg guidekontext används bara för att nedprioritera researcharbete; "
-            "den blir aldrig SOLD, marknadsvärde, maxpris eller KÖP. Query ladder provar även säkra alternativa sökfraser när "
-            "marknadsplatser namnger samma kort olika. Candidate matcher rankar möjliga träffar med hårda konflikter för spelare, "
-            "kortnummer, säsong, parallel och premiumegenskaper. Verification queue väljer sedan vilka starka träffar som är mest "
-            "värda att kontrollera först och försöker sprida arbetet över oberoende källor."
+            "FlipFynd visar bara de tre bästa researchåtgärderna på mobilen. Automatisk comp-jakt skannar lokalt verifierad "
+            "SOLD-historik, bygger exakta researchlänkar och kan hämta SportsCardsPro-guide via officiellt API. Låg guidekontext "
+            "används bara för att nedprioritera researcharbete; den blir aldrig SOLD, marknadsvärde, maxpris eller KÖP. Query ladder "
+            "provar även säkra alternativa sökfraser när marknadsplatser namnger samma kort olika. Candidate matcher rankar möjliga "
+            "träffar med hårda konflikter för spelare, kortnummer, säsong, parallel och premiumegenskaper."
         ),
     }
