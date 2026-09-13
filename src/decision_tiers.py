@@ -260,6 +260,26 @@ def _select_diverse(rows,total_limit):
     return selected
 
 
+def _is_low_value_noise(row):
+    """Return True for guide-confirmed cheap cards with weak card-specific merit.
+
+    This is presentation triage only. A row is suppressible only when it has no
+    exact SOLD evidence and there are enough better candidates to fill Top 3.
+    """
+    if row.get("guide_status") != "LOW_GUIDE_CONTEXT":
+        return False
+    if int(row.get("sold_comps") or 0) > 0:
+        return False
+    if _n(row.get("structural_merit"),0) >= 55:
+        return False
+    source=row.get("_source_item") or {}
+    if source.get("is_information_edge_candidate") or source.get("is_market_edge_candidate"):
+        return False
+    if source.get("is_hidden_find_candidate") or source.get("misclassified_card_candidate") or source.get("mispriced_rookie_candidate"):
+        return False
+    return True
+
+
 def build_decision_tiers(candidates, total_limit=3, require_verified_economic_edge=False):
     all_rows=[_base_row(i) for i in (candidates or [])]
     for r in all_rows:
@@ -267,6 +287,7 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
         r["tier"]=("VERIFIED" if is_buy and r["certainty"]>=60 and r["sold_comps"]>=2 and r["identity_ok"] and r["market_value"] is not None else "PROMISING" if r["potential"]>=55 else "REMAINDER")
 
     fallback_investigate_mode=False
+    suppressed_low_value=[]
     if require_verified_economic_edge:
         rows=[r for r in all_rows if r["economic_edge_ok"]]
         if not rows:
@@ -276,6 +297,11 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
                 r["tier"]="PROMISING"
                 r["decision"]="UNDERSÖK"
                 r["certainty_limits"]=list(dict.fromkeys((r.get("certainty_limits") or [])+(r.get("economic_edge_blockers") or [])))
+            better=[r for r in rows if not _is_low_value_noise(r)]
+            low_value=[r for r in rows if _is_low_value_noise(r)]
+            if len(better) >= max(1,int(total_limit or 0)):
+                rows=better
+                suppressed_low_value=low_value
     else:
         rows=list(all_rows)
 
@@ -291,5 +317,7 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
         for reason in r.get("economic_edge_blockers") or []: blocker_counts[reason]=blocker_counts.get(reason,0)+1
     return {"rows":selected,"verified_count":sum(1 for r in all_rows if r["tier"]=="VERIFIED"),"promising_count":sum(1 for r in all_rows if r["tier"]=="PROMISING"),"creates_new_decision":False,
         "fallback_investigate_mode":fallback_investigate_mode,"duplicate_player_count":max(0,len(selected)-len({r.get("player_key") for r in selected if r.get("player_key")})),
+        "suppressed_low_value_count":len(suppressed_low_value),
+        "suppressed_low_value_titles":[r.get("title") for r in suppressed_low_value[:10]],
         "rejected_count":len(rejected),"rejection_reasons":blocker_counts,
-        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater, prioriterade efter researchnytta, kortspecifik merit och eventuell låg prisguidekontext. Guidevärden skapar aldrig marknadsvärde, SOLD-evidens, maxpris eller KÖP."}
+        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater. Guidebekräftade lågpriskort med svag kortspecifik merit döljs från Top 3 när det finns tillräckligt många bättre alternativ. Guidevärden skapar aldrig marknadsvärde, SOLD-evidens, maxpris eller KÖP."}
