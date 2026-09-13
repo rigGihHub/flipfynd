@@ -31,12 +31,13 @@ def evidence_coverage(items):
     items = list(items or [])
     total = len(items)
     if not total:
-        return {"total": 0, "with_sold": 0, "with_2_sold": 0, "identity_ready": 0, "market_value_ready": 0, "max_price_ready": 0}
-    out = {"total": total, "with_sold": 0, "with_2_sold": 0, "identity_ready": 0, "market_value_ready": 0, "max_price_ready": 0}
+        return {"total": 0, "with_sold": 0, "with_2_sold": 0, "research_identity_ready": 0, "identity_ready": 0, "market_value_ready": 0, "max_price_ready": 0}
+    out = {"total": total, "with_sold": 0, "with_2_sold": 0, "research_identity_ready": 0, "identity_ready": 0, "market_value_ready": 0, "max_price_ready": 0}
     for item in items:
         sold = int(_n(item.get("sold_comparable_count"), 0))
         out["with_sold"] += sold >= 1
         out["with_2_sold"] += sold >= 2
+        out["research_identity_ready"] += bool(item.get("exact_identity_gate_supports_comp_research") or item.get("exact_identity_gate_supports_exact_comp_search") or item.get("exact_identity_gate_status") == "SÖKBAR_TITEL")
         out["identity_ready"] += bool(item.get("exact_identity_gate_supports_exact_comp_search") or item.get("exact_identity_gate_status") in {"READY", "EXACT", "STRONG"})
         out["market_value_ready"] += bool(item.get("valuation_display_safe") is True and any(item.get(k) is not None for k in ("market_value_estimate", "expected_resale", "estimated_market_value", "marknadsvarde")))
         out["max_price_ready"] += _n(item.get("dynamic_max_total_price") or item.get("max_total_price"), 0) > 0
@@ -110,3 +111,36 @@ def build_research_shortlist(items, limit=5):
         if row not in selected:
             selected.append(row)
     return selected
+
+
+def research_identity_failure_diagnostics(items):
+    """Explain why analyzed listings are not research-searchable.
+
+    Counts missing identity anchors from the Exact Identity Gate. The output is
+    diagnostic only; it never upgrades identity, valuation or a buy decision.
+    """
+    counts = {"spelare": 0, "set/program": 0, "säsong/år": 0, "kortnummer": 0, "konflikt/lot": 0, "övrigt": 0}
+    locked = 0
+    for item in (items or []):
+        if item.get("exact_identity_gate_supports_comp_research") or item.get("exact_identity_gate_status") == "SÖKBAR_TITEL":
+            continue
+        locked += 1
+        missing = list(item.get("exact_identity_gate_research_missing_fields") or item.get("exact_identity_gate_missing_fields") or [])
+        touched = False
+        for field in missing:
+            key = str(field)
+            if key in counts:
+                counts[key] += 1
+                touched = True
+        blockers = " ".join(str(x).casefold() for x in (item.get("exact_identity_gate_blockers") or []))
+        if "motstridig" in blockers or "lot/multipack" in blockers:
+            counts["konflikt/lot"] += 1
+            touched = True
+        if not touched:
+            counts["övrigt"] += 1
+    return {
+        "locked": locked,
+        "counts": counts,
+        "top": sorted(((k,v) for k,v in counts.items() if v), key=lambda kv: kv[1], reverse=True),
+        "note": "Fälten kan överlappa: en annons kan sakna flera identitetsankare samtidigt.",
+    }

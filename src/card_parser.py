@@ -8,6 +8,10 @@ KNOWN_PLAYERS = [name.casefold() for name in get_all_player_names()]
 
 
 SET_PATTERNS = [
+    ("topps ucl super-stars", "Topps UCL Super-Stars"),
+    ("topps ucl super stars", "Topps UCL Super-Stars"),
+    ("ucl super-stars", "Topps UCL Super-Stars"),
+    ("ucl super stars", "Topps UCL Super-Stars"),
     ("upper deck collector's choice", "Upper Deck Collector's Choice"),
     ("upper deck collector s choice", "Upper Deck Collector's Choice"),
     ("upper deck collectors choice", "Upper Deck Collector's Choice"),
@@ -58,7 +62,17 @@ SET_PATTERNS = [
     ("metal universe", "Metal Universe"),
     ("skybox metal", "Metal Universe"),
     ("donruss", "Donruss"),
+    ("pinnacle", "Pinnacle"),
+    ("fleer ultra", "Fleer Ultra"),
+    ("fleer", "Fleer"),
+    ("skybox", "SkyBox"),
+    ("pacific", "Pacific"),
+    ("pro set", "Pro Set"),
+    ("stadium club", "Stadium Club"),
+    ("bowman", "Bowman"),
+    ("score", "Score"),
     ("upper deck", "Upper Deck"),
+    ("topps", "Topps"),
 ]
 
 
@@ -132,6 +146,25 @@ CARD_STOPWORDS = {
     "lot",
     "collection",
     "samling",
+    "topps",
+    "panini",
+    "pinnacle",
+    "fleer",
+    "skybox",
+    "pacific",
+    "pro",
+    "set",
+    "stadium",
+    "club",
+    "bowman",
+    "super",
+    "stars",
+    "ucl",
+    "uefa",
+    "nhl",
+    "silver",
+    "script",
+    "uncommon",
 }
 
 
@@ -238,7 +271,25 @@ def extract_serial_number(title: str) -> Optional[int]:
     if "1/1" in raw.lower() or "1 1" in norm:
         return 1
 
-    match = re.search(r"/(\d{1,4})\b", raw)
+    # A season such as 2022/23 or 22/23 must never be interpreted as a
+    # print-run denominator /23. Remove only validated consecutive-year season
+    # tokens before looking for serial numbering.
+    serial_text = re.sub(
+        r"\b(?:19|20)\d{2}\s*[-/]\s*(?:(?:19|20)?\d{2})\b",
+        " ",
+        raw,
+    )
+    if extract_set_name(raw):
+        def _strip_short_season(match):
+            a, b = int(match.group(1)), int(match.group(2))
+            return " " if (b - a) % 100 == 1 else match.group(0)
+        serial_text = re.sub(
+            r"(?<!\d)(\d{2})\s*[-/]\s*(\d{2})(?!\d)",
+            _strip_short_season,
+            serial_text,
+        )
+
+    match = re.search(r"/(\d{1,4})\b", serial_text)
     if match:
         try:
             return int(match.group(1))
@@ -397,6 +448,8 @@ def detect_parallel_info(norm: str) -> tuple[Optional[str], str, str]:
         (r"\bx[- ]?fractor\b", "X-Fractor", "strong", "high"),
         (r"\brefractor\b", "Refractor", "strong", "high"),
         (r"\brainbow\b", "Rainbow", "strong", "high"),
+        (r"\bsilver\s+script\b", "Silver Script", "standard", "high"),
+        (r"\bsuper\s+script\b", "Super Script", "strong", "high"),
     ]
     for pattern, name, tier, confidence in patterns:
         if re.search(pattern, text):

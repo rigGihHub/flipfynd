@@ -245,6 +245,9 @@ def build_card_explanation(item: dict) -> dict:
 
     # Best available card/hobby knowledge first.
     strengths.extend(item.get("collector_worth_strengths") or [])
+    for sig in item.get("nonstandard_value_signals") or []:
+        if isinstance(sig, dict) and sig.get("type"):
+            strengths.append(f"Ovanlig värdedrivare att researcha: {sig.get('type')}")
     strengths.extend(item.get("collector_worth_value_basis") or [])
     strengths.extend(item.get("card_hierarchy_reasons") or [])
     strengths.extend(item.get("player_card_hierarchy_reasons") or [])
@@ -311,6 +314,8 @@ def build_card_explanation(item: dict) -> dict:
 
     # Important caveats from the same intelligence stack.
     cautions.extend(item.get("collector_worth_cautions") or [])
+    if item.get("nonstandard_value_signals"):
+        cautions.append("Ovanlig historia/error/variant är bara en researchsignal tills exakt version och faktisk marknadspremie är verifierad")
     cautions.extend(item.get("collector_worth_hobby_traps") or [])
     cautions.extend(item.get("card_hierarchy_hobby_traps") or [])
     cautions.extend(item.get("player_card_hierarchy_cautions") or [])

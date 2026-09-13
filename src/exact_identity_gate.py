@@ -127,7 +127,8 @@ def build_exact_identity_gate(data: dict[str, Any] | None) -> dict[str, Any]:
     else:
         warnings.append("ingen tydlig källseparation finns för identitetsfälten")
 
-    critical_complete = bool(player and set_name and season and card_number and player_conf == "high")
+    structured_complete = bool(player and set_name and season and card_number)
+    critical_complete = bool(structured_complete and player_conf == "high")
     conflict_free = not blockers or all(
         b not in {
             "motstridig identitetsinformation finns mellan källor",
@@ -138,6 +139,83 @@ def build_exact_identity_gate(data: dict[str, Any] | None) -> dict[str, Any]:
     # More explicit and safer than the generic conflict_free expression above.
     conflict_free = not conflicts and not has_fusion_conflict and not d.get("is_lot")
 
+    # Research and valuation permissions are deliberately separate. A listing title
+    # may be structured enough to launch a narrow comp search even when the player
+    # is not yet corroborated by FlipFynd's curated player knowledge. Such a row must
+    # never become decision-grade valuation evidence until the strict exact gate passes.
+    # Research can be narrower than valuation. A fully structured identity remains
+    # the best case, but many marketplace titles omit exactly one field (most often
+    # checklist number or season) while still containing enough discriminators to
+    # launch a targeted *research* query. This never unlocks valuation by itself.
+    # A separate title-derived identity may recover research anchors without
+    # weakening the strict identity fields above. It is never used for
+    # supports_exact_comp_search or supports_dynamic_max_bid.
+    research_title = d.get("research_title_identity") or {}
+    research_fields = research_title.get("fields") if isinstance(research_title, dict) else {}
+    research_fields = research_fields if isinstance(research_fields, dict) else {}
+    research_player = player or _text(research_fields.get("player_name"))
+    research_set = set_name or _text(research_fields.get("set_name"))
+    research_season = season or _text(research_fields.get("season"))
+    research_card_number = card_number or _text(research_fields.get("card_number"))
+
+    research_missing = [
+        name for name, present in (
+            ("spelare", bool(research_player)),
+            ("set/program", bool(research_set)),
+            ("säsong/år", bool(research_season)),
+            ("kortnummer", bool(research_card_number)),
+        ) if not present
+    ]
+    extra_discriminator = bool(
+        parallel
+        or serial not in (None, "")
+        or grade
+        or grading_company
+        or (_text(d.get("rookie_variant")) not in {"", "Generic Rookie"})
+    )
+    recovered_complete_research = bool(
+        conflict_free
+        and research_player and research_set and research_season and research_card_number
+        and isinstance(research_title, dict)
+        and research_title.get("complete")
+    )
+    narrow_research = bool(
+        conflict_free
+        and research_player
+        and research_set
+        and len(research_missing) == 1
+        and (
+            # Missing season is acceptable for research when checklist number is known.
+            (not research_season and bool(research_card_number))
+            # Missing checklist number remains too broad unless another concrete variant discriminator exists.
+            or (not research_card_number and bool(research_season) and extra_discriminator)
+        )
+        and identity_score >= 30
+    )
+
+    # Bootstrap research is deliberately broader than exact-comp research. Marketplace titles
+    # frequently omit the product name while still giving player + season + checklist number,
+    # or omit the season while giving player + set + checklist number. Three independent anchors
+    # are enough to search for candidate identities, but never enough to value or count SOLD.
+    research_anchor_count = sum(bool(v) for v in (research_player, research_set, research_season, research_card_number))
+    bootstrap_research = bool(
+        conflict_free
+        and research_player
+        and research_anchor_count >= 3
+        # Bootstrap is specifically for a missing set/program when season + checklist number are present.
+        # Missing checklist number remains handled by the stricter NARROW rule above.
+        and (not research_set and bool(research_season) and bool(research_card_number))
+        and identity_score >= 24
+    )
+    supports_comp_research = bool(
+        conflict_free
+        and (
+            (structured_complete and identity_score >= 40)
+            or recovered_complete_research
+            or narrow_research
+            or bootstrap_research
+        )
+    )
     supports_exact = bool(critical_complete and conflict_free and identity_score >= 78)
     supports_dynamic = bool(supports_exact and identity_score >= 88 and source_count >= 2)
 
@@ -149,6 +227,10 @@ def build_exact_identity_gate(data: dict[str, Any] | None) -> dict[str, Any]:
         status = "SÖKBAR"
         label = "Exakt identitet – comp-sökning tillåten, maxbud låst"
         score = min(89, round(60 + (identity_score - 78) * 0.8 + min(source_count, 2) * 4))
+    elif supports_comp_research:
+        status = "SÖKBAR_TITEL"
+        label = "Strukturerad titel – comp-research tillåten, värdering låst"
+        score = min(77, round(max(35, identity_score * 0.75)))
     elif critical_complete and conflict_free:
         status = "GRANSKA"
         label = "Nästan komplett identitet – verifiera mer först"
@@ -199,6 +281,18 @@ def build_exact_identity_gate(data: dict[str, Any] | None) -> dict[str, Any]:
         "warnings": warnings,
         "strengths": strengths,
         "conflicts": conflicts,
+        "supports_comp_research": supports_comp_research,
+        "research_mode": ("STRICT" if structured_complete and supports_comp_research else "TITLE_RECOVERED" if recovered_complete_research else "NARROW" if narrow_research else "BOOTSTRAP" if bootstrap_research else "LOCKED"),
+        "research_missing_fields": research_missing,
+        "research_anchor_count": research_anchor_count,
+        "research_identity_fields": {
+            "player_name": research_player or None,
+            "set_name": research_set or None,
+            "season": research_season or None,
+            "card_number": research_card_number or None,
+            "parallel": parallel or research_fields.get("parallel") or None,
+        },
+        "research_recovered_fields": list(research_title.get("recovered_fields") or []) if isinstance(research_title, dict) else [],
         "supports_exact_comp_search": supports_exact,
         "supports_dynamic_max_bid": supports_dynamic,
         "identity_fields": identity_fields,

@@ -65,6 +65,8 @@ from src.market_overview import build_market_overview
 from src.market_coverage_autopilot import build_autopilot_plan, autopilot_progress_text
 from src.autopilot_compat import build_autopilot_plan_compat
 from src.visual_detective import analyze_listing_images
+from src.visual_oddity_detector import build_visual_oddity_signal
+from src.reference_image_verification import verify_against_reference_traits
 from src.visual_identity import build_visual_card_candidates
 from src.visual_checklist_match import match_visual_to_checklist_knowledge
 from src.visual_exact_identity import resolve_visual_exact_identity
@@ -87,8 +89,9 @@ from src.segment_discovery_coverage import add_segment_coverage_indices, segment
 from src.segment_yield_learning import build_segment_yield_report, best_observed_segments
 from src.decision_tiers import build_decision_tiers
 from src.decision_tiers_compat import build_decision_tiers_compat
-from src.research_shortlist import build_research_shortlist, evidence_coverage
+from src.research_shortlist import build_research_shortlist, evidence_coverage, research_identity_failure_diagnostics
 from src.unlock_research_queue import build_unlock_research_queue
+from src.auto_comp_research import run_auto_comp_research
 from src.market_gap_hunter import build_market_gap_queue
 from src.active_supply_intelligence import verify_active_supply, classify_verified_supply
 from src.exact_card_supply import build_exact_supply_query, count_analyzed_exact_matches, verify_exact_query_supply, exact_identity_key
@@ -102,6 +105,9 @@ from src.research_action_center import build_research_actions, build_low_click_a
 from src.automatic_research_flow import build_automatic_research_flow
 from src.mispricing_detector import build_mispricing_review_queue
 from src.bad_listing_hunter import build_bad_listing_queue
+from src.oddity_registry import registry_stats
+from src.oddity_registry_learning import build_registry_proposal_queue
+from src.oddity_story_hunter import build_oddity_story_queue
 from src.lot_treasure_hunter import build_lot_treasure_queue
 from src.search_expansion import build_search_expansion_plan, tradera_api_readiness
 from src.tradera_api_search import run_search_plan, save_expansion_items
@@ -244,7 +250,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.63"
+APP_VERSION = "v0.12.80"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2401,12 +2407,22 @@ if st.session_state.get("results") is not None:
                 if coverage.get("total"):
                     st.caption(
                         f"Evidenstäckning: {coverage['with_2_sold']}/{coverage['total']} har minst 2 exact SOLD · "
-                        f"{coverage['identity_ready']}/{coverage['total']} har exact-comp-redo identitet · "
+                        f"{coverage.get('research_identity_ready',0)}/{coverage['total']} har sökbar comp-identitet · "
+                        f"{coverage['identity_ready']}/{coverage['total']} har beslutsstark exact identity · "
                         f"{coverage['market_value_ready']}/{coverage['total']} har säkert marknadsvärde · "
                         f"{coverage['max_price_ready']}/{coverage['total']} har evidensbaserat maxpris."
                     )
                     if coverage['with_2_sold'] == 0:
-                        st.warning("**Flaskhalsen är comp-data, inte sökbredden.** FlipFynd har läst in annonserna men har ännu inte verifierade avslut för dem. Att läsa fler Tradera-sidor löser därför inte detta av sig självt.")
+                        if coverage.get('research_identity_ready', 0) < max(10, coverage['total'] * 0.10):
+                            st.warning("**Flaskhalsen är både identitet och comp-data.** För få annonser är ens strukturerade nog för smal comp-research, så fler SOLD-källor ensamma räcker inte ännu.")
+                            diag = research_identity_failure_diagnostics(st.session_state.get("results") or [])
+                            if diag.get("top"):
+                                st.markdown("**Var research-identiteten faller bort:**")
+                                st.caption(" · ".join(f"{name}: {count}" for name, count in diag["top"][:5]))
+                                st.caption(diag.get("note") or "")
+                            st.caption("Research-läget accepterar nu även en smal identitet när exakt ett fält saknas och övriga identitetsankare gör sökningen tillräckligt avgränsad. Detta låser aldrig upp värdering eller KÖP.")
+                        else:
+                            st.warning("**Flaskhalsen är främst comp-data, inte sökbredden.** FlipFynd har sökbara identiteter men saknar verifierade avslut för dem. Att läsa fler Tradera-sidor löser därför inte detta av sig självt.")
                 if decision_tiers.get("rejection_reasons"):
                     common=sorted(decision_tiers["rejection_reasons"].items(), key=lambda kv: kv[1], reverse=True)[:3]
                     st.caption("Vanligaste verifieringsluckorna: " + " · ".join(f"{reason} ({count})" for reason,count in common))
@@ -2419,9 +2435,97 @@ if st.session_state.get("results") is not None:
                         u2.metric("Exact ID men 0 sales", unlock_queue.get("exact_ready_no_sales_count", 0))
                         u3.metric("Researchkö", len(unlock_queue.get("rows") or []))
                         st.caption("I stället för att forska på hundratals kort samtidigt prioriterar FlipFynd de kort där minsta nästa evidenssteg sannolikt gör mest nytta.")
+
+                        if st.button("🚀 Kör automatisk comp-jakt på topp 5", key="auto_comp_hunt_top5", use_container_width=True):
+                            queue_items = [row.get("source_item") for row in (unlock_queue.get("rows") or [])[:5] if isinstance(row.get("source_item"), dict)]
+                            scp_token = None
+                            try:
+                                scp_token = os.getenv("SPORTSCARDSPRO_TOKEN") or st.secrets.get("SPORTSCARDSPRO_TOKEN")
+                            except Exception:
+                                scp_token = os.getenv("SPORTSCARDSPRO_TOKEN")
+                            st.session_state["auto_comp_research_pack"] = run_auto_comp_research(
+                                queue_items,
+                                _load_sold_comp_records(),
+                                limit=5,
+                                scp_token=str(scp_token or "").strip() or None,
+                            )
+
+                        auto_pack = st.session_state.get("auto_comp_research_pack")
+                        if isinstance(auto_pack, dict) and auto_pack.get("rows"):
+                            st.markdown("**Automatisk comp-jakt – researchpaket**")
+                            a1, a2, a3 = st.columns(3)
+                            a1.metric("Körda kandidater", auto_pack.get("processed_count", 0))
+                            a2.metric("1 sale från tröskeln", auto_pack.get("one_sale_away_count", 0))
+                            a3.metric("Har redan 2+ exact SOLD", auto_pack.get("threshold_met_count", 0))
+                            for aidx, ar in enumerate(auto_pack.get("rows") or [], start=1):
+                                with st.container(border=True):
+                                    st.markdown(f"**{aidx}. {ar['title']}**")
+                                    st.caption(f"Exact SOLD i biblioteket: {ar['exact_sold_count']} · saknas: {ar['missing_exact_sales']} · {ar['next_action']}")
+                                    if ar.get("query"):
+                                        st.code(ar["query"], language=None)
+                                    research_links = ar.get("research_links") or []
+                                    if research_links:
+                                        cols = st.columns(min(4, len(research_links)))
+                                        for col, link in zip(cols, research_links[:4]):
+                                            col.link_button(f"{link['label']} ↗", link['url'], use_container_width=True)
+                                    verification_queue = ar.get("verification_queue") or []
+                                    if verification_queue:
+                                        with st.expander("🎯 Verifiera dessa träffar först", expanded=True):
+                                            st.caption("Prioriteringskön väljer starka kandidatmatcher med högst informationsvärde först och försöker sprida verifieringen över oberoende källor. Den verifierar ingenting automatiskt.")
+                                            for vidx, vr in enumerate(verification_queue[:5], start=1):
+                                                sold_tag = " · uppges SOLD" if vr.get("sold_claim") else ""
+                                                st.markdown(f"**{vidx}. Prioritet {vr.get('verification_priority',0)}/99 · {vr.get('verification_source_group') or vr.get('source','okänd')}{sold_tag}**")
+                                                if vr.get("title"):
+                                                    st.write(vr["title"])
+                                                st.caption(vr.get("verification_reason") or "Verifiera exact identity och eventuell SOLD-status.")
+                                                if vr.get("url"):
+                                                    st.link_button("Öppna för verifiering ↗", vr["url"], key=f"verify_priority_{aidx}_{vidx}")
+                                            st.caption("En SOLD-markering i källmaterialet är bara en signal tills FlipFynd har verifierat att det är samma exakta kort och en faktisk genomförd försäljning.")
+                                    candidate_matches = ar.get("candidate_matches") or []
+                                    useful_matches = [m for m in candidate_matches if m.get("label") in {"STRONG_CANDIDATE", "REVIEW"}]
+                                    if useful_matches:
+                                        with st.expander("🧬 Matcha möjliga comp-träffar", expanded=False):
+                                            st.caption("Detta rankar bara kandidater. En hög matchpoäng är inte samma sak som verifierad exact identity eller verifierad SOLD.")
+                                            match_labels = {"STRONG_CANDIDATE":"🟢 STARK KANDIDAT", "REVIEW":"🟡 GRANSKA", "WEAK":"⚪ SVAG", "REJECT":"🔴 FEL MATCH"}
+                                            for midx, match in enumerate(useful_matches[:5], start=1):
+                                                st.markdown(f"**{match_labels.get(match['label'], match['label'])} · {match['candidate_confidence']}/99**")
+                                                if match.get("title"):
+                                                    st.write(match["title"])
+                                                bits=[]
+                                                if match.get("matches"):
+                                                    bits.append("match: " + ", ".join(match["matches"]))
+                                                if match.get("missing"):
+                                                    bits.append("saknas: " + ", ".join(match["missing"]))
+                                                if match.get("conflicts"):
+                                                    bits.append("konflikt: " + ", ".join(match["conflicts"]))
+                                                if bits:
+                                                    st.caption(" · ".join(bits))
+                                                if match.get("url"):
+                                                    st.link_button("Öppna kandidat ↗", match["url"], key=f"candidate_match_{aidx}_{midx}")
+                                            st.caption("Parallel, autograf, patch, serienummer eller grading som inte stämmer blockerar automatisk exact-match. Verifiera alltid träffen innan sale importeras.")
+                                    ladder = ar.get("query_ladder") or []
+                                    if len(ladder) > 1:
+                                        with st.expander("Sök bredare utan att sänka evidenskraven", expanded=False):
+                                            st.caption("FlipFynd provar flera sökfraser eftersom samma kort ofta namnges olika. Breda träffar är bara kandidater tills exakt identitet och SOLD-status verifierats.")
+                                            for qidx, rung in enumerate(ladder, start=1):
+                                                st.markdown(f"**{qidx}. {rung['label']}**")
+                                                st.code(rung['query'], language=None)
+                                                qcols = st.columns(2)
+                                                qcols[0].link_button("eBay Sold ↗", rung['ebay_sold_url'], key=f"ladder_ebay_{aidx}_{qidx}", use_container_width=True)
+                                                qcols[1].link_button("Tradera ↗", rung['tradera_url'], key=f"ladder_tradera_{aidx}_{qidx}", use_container_width=True)
+                                                st.caption(rung.get('note') or "")
+                                    scp = ar.get("sports_cards_pro")
+                                    if isinstance(scp, dict) and scp.get("ok"):
+                                        st.caption(
+                                            "SportsCardsPro guide/context: "
+                                            + (f"${scp['ungraded_usd']:.2f} raw" if scp.get("ungraded_usd") is not None else "raw-värde saknas")
+                                            + " — räknas inte som SOLD."
+                                        )
+                            st.caption(auto_pack.get("note") or "")
                         unlock_labels = {
                             "ONE_SALE_AWAY": "🟢 1 SALE FRÅN TRÖSKEL",
                             "EXACT_READY_NO_SALES": "🔵 EXACT ID – HITTA FÖRSTA SALE",
+                            "RESEARCH_READY_NO_SALES": "🟣 SÖKBAR TITEL – HITTA KANDIDAT-COMPS",
                             "VALUATION_NEXT": "🟡 SOLD FINNS – LÅS UPP VÄRDERING",
                             "MAX_PRICE_NEXT": "🟠 VÄRDERING FINNS – LÅS UPP MAXPRIS",
                             "IDENTITY_FIRST": "⚪ IDENTITET FÖRST",
@@ -2433,7 +2537,7 @@ if st.session_state.get("results") is not None:
                                 st.write(f"**{unlock_labels.get(uq['status'], uq['status'])}** · {uq['action']}")
                                 st.caption(
                                     f"Exact SOLD: {uq['sold_comps']} · "
-                                    f"identitet {'redo' if uq['identity_ready'] else 'saknas'} · "
+                                    f"identitet {'beslutsstark' if uq['identity_ready'] else ('sökbar' if uq.get('research_identity_ready') else 'saknas')} · "
                                     f"värdering {'redo' if uq['market_value_ready'] else 'saknas'} · "
                                     f"maxpris {'redo' if uq['max_price_ready'] else 'saknas'}"
                                 )
@@ -3025,6 +3129,56 @@ if st.session_state.get("results") is not None:
                         if lrow.get("url"):
                             st.markdown(f"[Öppna annonsen]({lrow['url']})")
                         st.divider()
+
+            oddity_story_queue = build_oddity_story_queue(st.session_state.get("results") or [], limit=6)
+            if oddity_story_queue.get("rows"):
+                with st.expander("🧠 Oddity & Story Hunter – märkliga kort som kan vara felbeskrivna", expanded=False):
+                    _od_stats = registry_stats()
+                    st.caption(f"Kunskapsbas: {_od_stats['seed_cards']} kuraterade seed-kort · {_od_stats['taxonomy_categories']} värdedrivarkategorier. Matchning är researchsignal, inte värdering.")
+                    st.caption(
+                        "Research-kandidater, inte KÖP. Här letar FlipFynd efter error-/story-/kultkort och andra "
+                        "värdedrivare som säljaren kan ha missat. Premie får först räknas när exakt variant och SOLD-data är verifierade."
+                    )
+                    for orow in oddity_story_queue["rows"]:
+                        sig = orow["signal"]
+                        st.write(f"**{orow['title']}** · {sig['label']} · prioritet {sig['priority_score']}/100")
+                        if sig.get("known_story_matches"):
+                            st.caption("Känd referens: " + " · ".join(sig["known_story_matches"]))
+                        if sig.get("flags"):
+                            st.caption("Spår: " + " · ".join(sig["flags"][:6]))
+                        if sig.get("reasons"):
+                            st.caption("Varför: " + " • ".join(sig["reasons"][:3]))
+                        if sig.get("verify_first"):
+                            st.caption("Verifiera först: " + " • ".join(sig["verify_first"][:5]))
+                        if orow.get("url"):
+                            st.markdown(f"[Öppna annonsen]({orow['url']})")
+                        st.divider()
+
+            registry_proposals = build_registry_proposal_queue(st.session_state.get("results") or [], limit=8)
+            if registry_proposals.get("rows"):
+                with st.expander("🧪 Förslag till Oddity-kunskapsbas – kräver granskning", expanded=False):
+                    st.caption(
+                        f"{registry_proposals.get('proposal_count', 0)} kandidatposter · "
+                        f"{registry_proposals.get('review_ready_count', 0)} redo för manuell källgranskning. "
+                        "FlipFynd lägger aldrig själv till poster i registret."
+                    )
+                    for prow in registry_proposals["rows"]:
+                        status_label = {
+                            "REVIEW_READY": "🟢 REDO FÖR GRANSKNING",
+                            "NEEDS_CORROBORATION": "🟡 BEHÖVER OBEROENDE BEVIS",
+                            "NEEDS_EVIDENCE": "⚪ BEHÖVER MER EVIDENS",
+                        }.get(prow["status"], prow["status"])
+                        st.write(f"**{prow['title']}** · {status_label} · prioritet {prow['priority_score']}/100")
+                        if prow.get("categories"):
+                            st.caption("Kategori: " + " · ".join(prow["categories"]))
+                        st.caption(f"Återkommande observationer: {prow['occurrences']}")
+                        if prow.get("evidence"):
+                            st.caption("Evidens: " + " • ".join(prow["evidence"][:6]))
+                        st.caption("Nästa steg: " + prow["action"])
+                        for uidx, url in enumerate(prow.get("urls") or [], start=1):
+                            st.markdown(f"[Öppna underlag {uidx}]({url})")
+                        st.divider()
+                    st.caption(registry_proposals.get("note") or "")
 
             bad_listing_queue = build_bad_listing_queue(st.session_state.get("results") or [], limit=5)
             if bad_listing_queue.get("rows"):
@@ -3768,6 +3922,47 @@ if st.session_state.get("results") is not None:
                                 st.caption("➕ " + discovery)
                             for conflict in visual_fusion.get("conflicts", [])[:3]:
                                 st.caption("⛔ " + conflict)
+
+                            visual_oddity = build_visual_oddity_signal(
+                                findings,
+                                title=candidate.get("titel", ""),
+                                sport=candidate.get("sport") or candidate.get("kategori") or "",
+                            )
+                            if visual_oddity.get("candidate") or visual_oddity.get("ordinary_damage_only"):
+                                st.markdown(f"**🧬 Visuell Oddity Detector:** {visual_oddity.get('status')} · säkerhet {visual_oddity.get('confidence', 0):.0f}/100")
+                                if visual_oddity.get("category_labels"):
+                                    st.caption("Möjliga mekanismer: " + " • ".join(visual_oddity.get("category_labels")[:5]))
+                                for reason in visual_oddity.get("reasons", [])[:4]:
+                                    st.caption("🔎 " + reason)
+                                if visual_oddity.get("known_registry_matches"):
+                                    st.caption("📚 Registermatch: " + " • ".join(visual_oddity.get("known_registry_matches")[:3]))
+                                if visual_oddity.get("verify_first"):
+                                    with st.expander("Vad måste verifieras innan detta kan påverka värdet?", expanded=False):
+                                        for step in visual_oddity.get("verify_first")[:6]:
+                                            st.write("• " + str(step))
+                                st.caption(visual_oddity.get("note", ""))
+
+                            reference_check = verify_against_reference_traits(
+                                findings,
+                                title=candidate.get("titel", ""),
+                                sport=candidate.get("sport") or candidate.get("kategori") or "",
+                            )
+                            if reference_check.get("matches"):
+                                st.markdown(
+                                    f"**🪞 Referensbild-kontroll:** {reference_check.get('status')} · "
+                                    f"match {reference_check.get('best_score', 0):.0f}/100"
+                                )
+                                for refmatch in reference_check.get("matches", [])[:2]:
+                                    st.caption(f"📚 {refmatch.get('title')} · {refmatch.get('status')}")
+                                    with st.expander("A/B/C-kännetecken mot dokumenterad variant", expanded=False):
+                                        for row in refmatch.get("checklist", []):
+                                            marker = "✅" if row.get("observed") is True else "▫️"
+                                            st.write(f"{marker} {row.get('label')}: {row.get('expected')}")
+                                        st.caption(refmatch.get("reference_image_note", ""))
+                                        st.write("**Nästa verifiering:**")
+                                        for step in refmatch.get("next_steps", [])[:6]:
+                                            st.write("• " + str(step))
+                                st.caption(reference_check.get("note", ""))
 
                             clues = findings.get("visual_clues", [])
                             if clues:

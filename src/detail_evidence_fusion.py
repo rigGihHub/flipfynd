@@ -60,7 +60,7 @@ def _visual_features(findings: dict | None) -> dict:
         "grading_company": findings.get("grading_company"),
         "grade": findings.get("grade"),
         "is_rookie": findings.get("rookie_marker_visible") == "yes",
-        "is_auto": findings.get("autograph_visible") == "yes",
+        "is_auto": findings.get("autograph_visible") == "yes" and findings.get("autograph_type") in {"on_card", "sticker"},
         "is_patch": findings.get("relic_or_patch_visible") == "yes",
     }
     den = findings.get("serial_denominator")

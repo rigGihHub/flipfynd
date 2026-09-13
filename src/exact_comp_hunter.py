@@ -235,14 +235,23 @@ def hunt_exact_comps(identity_candidate: dict, observed_records: Iterable[dict] 
     keeps image-only guesses out of the comp engine.
     """
     identity = dict(identity_candidate.get("identity_fields") or {})
-    if not identity_candidate.get("verified_identity"):
+    verified_identity = bool(identity_candidate.get("verified_identity"))
+    research_identity = bool(identity_candidate.get("research_identity") or verified_identity)
+    if not verified_identity:
         return {
-            "status": "Låst – identiteten är inte verifierad",
+            "status": ("Researchläge – strukturerad identitet, värdering låst" if research_identity else "Låst – identiteten är inte verifierad"),
             "unlocked": False,
+            "research_unlocked": research_identity,
             "query": build_exact_query(identity),
             "exact": [], "near": [], "weak": [], "rejected": [],
-            "search_targets": [],
-            "note": "Bildhypoteser får inte starta exact-comp-värdering utan oberoende identitetsstöd.",
+            "search_targets": build_search_targets(identity) if research_identity else [],
+            "exact_sold_count": 0,
+            "near_sold_count": 0,
+            "note": (
+                "Strukturerad titel får starta en smal researchsökning men får inte skapa exact SOLD, marknadsvärde eller KÖP förrän identiteten klarar den strikta grinden."
+                if research_identity else
+                "Bildhypoteser får inte starta exact-comp-värdering utan oberoende identitetsstöd."
+            ),
         }
     if not identity.get("player_name") or not identity.get("card_number"):
         return {

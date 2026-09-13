@@ -8,6 +8,7 @@ from src.card_knowledge_library import explain_library_match
 from src.variant_hierarchy import build_variant_hierarchy
 from src.collector_intelligence import build_collector_intelligence_matrix
 from src.collector_worth_profile import build_collector_worth_profile
+from src.nonstandard_value_drivers import build_nonstandard_value_profile
 from src.card_hierarchy_engine import build_card_hierarchy_engine
 from src.player_card_hierarchy import build_player_card_hierarchy
 from src.career_era_context import build_career_era_context
@@ -22,6 +23,7 @@ from src.mispriced_rookie_hunter import build_mispriced_rookie_signal
 from src.misclassified_card_hunter import build_misclassified_card_signal
 from src.detail_evidence_fusion import build_detail_evidence_fusion
 from src.exact_identity_gate import build_exact_identity_gate
+from src.research_title_identity import build_research_title_identity
 from src.valuation_evidence_gate import build_valuation_evidence_gate
 from src.chase_knowledge_graph import build_chase_knowledge_graph
 from src.visual_edge import build_visual_edge
@@ -217,24 +219,22 @@ def contains_auto(text):
 
 
 def extract_serial(title):
-    match = re.search(
-        r"(?<!\d)"
-        r"(\d{1,4})/"
-        r"(\d{1,4})"
-        r"(?!\d)",
-        title or "",
-    )
-
-    if not match:
-        return (
-            None,
-            None,
-        )
-
-    return (
-        int(match.group(1)),
-        int(match.group(2)),
-    )
+    raw = title or ""
+    known_set = bool(parse_card_features(raw).get("set_name"))
+    for match in re.finditer(
+        r"(?<!\d)(\d{1,4})/(\d{1,4})(?!\d)",
+        raw,
+    ):
+        left = int(match.group(1))
+        right = int(match.group(2))
+        # Card seasons frequently use slash notation (2022/23, 22/23).
+        # Never convert a validated consecutive-year season into a /23 print run.
+        if 1900 <= left <= 2099 and right <= 99 and right == (left + 1) % 100:
+            continue
+        if left <= 99 and right <= 99 and known_set and right == (left + 1) % 100:
+            continue
+        return left, right
+    return (None, None)
 
 
 def get_features(
@@ -2939,7 +2939,8 @@ def analyze_core(
     features["sport"] = sport
 
     detail_evidence_fusion = build_detail_evidence_fusion(item)
-    exact_identity_gate = build_exact_identity_gate({**features, **detail_evidence_fusion, "detail_evidence_fusion_conflicts": detail_evidence_fusion.get("conflicts", []), "detail_evidence_fusion_has_conflict": detail_evidence_fusion.get("has_conflict", False), "detail_evidence_fusion_source_count": detail_evidence_fusion.get("source_count", 0)})
+    research_title_identity = build_research_title_identity(title, features)
+    exact_identity_gate = build_exact_identity_gate({**features, **detail_evidence_fusion, "research_title_identity": research_title_identity, "detail_evidence_fusion_conflicts": detail_evidence_fusion.get("conflicts", []), "detail_evidence_fusion_has_conflict": detail_evidence_fusion.get("has_conflict", False), "detail_evidence_fusion_source_count": detail_evidence_fusion.get("source_count", 0)})
 
     analysis_total_cost, auction_buffer = compute_entry_cost(
         item,
@@ -3499,6 +3500,12 @@ def analyze_core(
         lifecycle=player_lifecycle,
     )
 
+    nonstandard_value = build_nonstandard_value_profile(
+        title=item.get("title") or "",
+        sport=sport,
+        player_name=profile.get("name") or "",
+        features=features,
+    )
     collector_worth = build_collector_worth_profile(
         player_name=profile.get("name"),
         player_market_score=profile.get("score", 0),
@@ -3732,6 +3739,12 @@ def analyze_core(
         "exact_identity_gate_status": exact_identity_gate.get("status"),
         "exact_identity_gate_label": exact_identity_gate.get("label"),
         "exact_identity_gate_score": exact_identity_gate.get("score", 0),
+        "exact_identity_gate_supports_comp_research": exact_identity_gate.get("supports_comp_research", False),
+        "exact_identity_gate_research_mode": exact_identity_gate.get("research_mode", "LOCKED"),
+        "exact_identity_gate_missing_fields": exact_identity_gate.get("missing_fields", []),
+        "exact_identity_gate_research_missing_fields": exact_identity_gate.get("research_missing_fields", []),
+        "exact_identity_gate_research_identity_fields": exact_identity_gate.get("research_identity_fields", {}),
+        "exact_identity_gate_research_recovered_fields": exact_identity_gate.get("research_recovered_fields", []),
         "exact_identity_gate_supports_exact_comp_search": exact_identity_gate.get("supports_exact_comp_search", False),
         "exact_identity_gate_supports_dynamic_max_bid": exact_identity_gate.get("supports_dynamic_max_bid", False),
         "exact_identity_gate_blockers": exact_identity_gate.get("blockers", []),
@@ -3827,6 +3840,11 @@ def analyze_core(
         "rookie_window_cautions": rookie_window_context.get("cautions", []),
         "official_rookie_year": rookie_window_context.get("official_rookie_year"),
         "official_rookie_year_verified": rookie_window_context.get("official_rookie_year_verified", False),
+        "nonstandard_value_signal_score": nonstandard_value.get("signal_score", 0),
+        "nonstandard_value_signals": nonstandard_value.get("signals", []),
+        "nonstandard_value_known_matches": nonstandard_value.get("known_story_matches", []),
+        "nonstandard_value_research_prompts": nonstandard_value.get("research_prompts", []),
+        "nonstandard_value_note": nonstandard_value.get("note"),
         "collector_worth_score": collector_worth.get("score", 0),
         "collector_worth_verdict": collector_worth.get("verdict"),
         "collector_worth_label": collector_worth.get("label"),

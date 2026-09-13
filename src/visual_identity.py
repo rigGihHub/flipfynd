@@ -58,7 +58,7 @@ def _visual_fields(findings: dict) -> dict[str, Any]:
         "serial": serial,
         "serial_denominator": serial_den if isinstance(serial_den, int) else None,
         "is_rookie": findings.get("rookie_marker_visible") == "yes",
-        "is_auto": findings.get("autograph_visible") == "yes",
+        "is_auto": findings.get("autograph_visible") == "yes" and findings.get("autograph_type") in {"on_card", "sticker"},
         "is_patch": findings.get("relic_or_patch_visible") == "yes",
         "grading_company": findings.get("grading_company"),
         "grade": findings.get("grade"),

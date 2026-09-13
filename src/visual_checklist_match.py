@@ -10,7 +10,7 @@ def _contains(text, phrase):
 def _tokens(f):
     parts=[f.get('set_or_product'),f.get('parallel_or_variant'),f.get('season_or_year'),f.get('card_number'),*(f.get('visual_clues') or [])]
     if f.get('rookie_marker_visible')=='yes': parts += ['rookie','young guns']
-    if f.get('autograph_visible')=='yes': parts += ['autograph','auto']
+    if f.get('autograph_visible')=='yes' and f.get('autograph_type') in {'on_card','sticker'}: parts += ['autograph','auto']
     if f.get('relic_or_patch_visible')=='yes': parts += ['patch','relic','memorabilia']
     return _norm(' '.join(str(x) for x in parts if x))
 def _load(path=None):

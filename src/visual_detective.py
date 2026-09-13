@@ -27,6 +27,11 @@ Arbeta som en erfaren samlarkortsgranskare:
    blänk, beskärning och om ett närfoto behövs.
 6. För skick: rapportera bara synliga observationer (t.ex. tydligt hörnslitage,
    kantvitning, kraftig off-centering, repa eller crease). Sätt aldrig en PSA/BGS-liknande grade.
+7. Leta dessutom försiktigt efter visuella oddity-signaler: saknad tryck/folie/text, möjlig reverse negative/fel bild,
+   censur/ändrad reklam eller text, ovanlig bakgrund/cameo och promo/sample/test/factory-markering.
+   Markera bara sådant som syns; avgör inte att det är en värdefull variant.
+8. Skilj dokumenterbar variant från vanligt skick/produktionsfel. Slumpmässig print line, dålig centrering,
+   repa, färgfläck eller annan skada är inte automatiskt en samlarvariant.
 
 Absoluta regler:
 - Gissa aldrig kortnummer, serienummer, parallel, rookie-status, autograf, patch/relic,
@@ -77,6 +82,14 @@ def response_schema() -> dict[str, Any]:
             "recommended_next_photo": nullable_string,
             "condition_clues": {"type": "array", "items": {"type": "string"}},
             "visual_clues": {"type": "array", "items": {"type": "string"}},
+            "possible_missing_print": {"type": "string", "enum": ["yes", "no", "unknown"]},
+            "possible_image_orientation_issue": {"type": "string", "enum": ["yes", "no", "unknown"]},
+            "possible_censorship_or_edit": {"type": "string", "enum": ["yes", "no", "unknown"]},
+            "possible_background_story": {"type": "string", "enum": ["yes", "no", "unknown"]},
+            "possible_factory_or_promo_marker": {"type": "string", "enum": ["yes", "no", "unknown"]},
+            "oddity_confidence": nullable_number,
+            "ordinary_damage_only": {"type": "boolean"},
+            "oddity_observations": {"type": "array", "items": {"type": "string"}},
             "uncertainties": {"type": "array", "items": {"type": "string"}},
         },
         "required": [
@@ -86,7 +99,10 @@ def response_schema() -> dict[str, Any]:
             "grading_company", "grade", "front_visible", "back_visible", "back_text_readable",
             "foil_or_holo_visible", "photo_quality", "identity_confidence", "variant_confidence",
             "condition_confidence", "overall_confidence", "needs_back_image", "needs_closeup",
-            "recommended_next_photo", "condition_clues", "visual_clues", "uncertainties",
+            "recommended_next_photo", "condition_clues", "visual_clues",
+            "possible_missing_print", "possible_image_orientation_issue", "possible_censorship_or_edit",
+            "possible_background_story", "possible_factory_or_promo_marker", "oddity_confidence",
+            "ordinary_damage_only", "oddity_observations", "uncertainties",
         ],
     }
 
