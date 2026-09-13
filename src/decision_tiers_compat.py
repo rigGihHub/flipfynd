@@ -5,7 +5,7 @@ This wrapper preserves the verified-economic-edge gate even when the deployed
 ``build_decision_tiers`` implementation does not yet accept that keyword.
 
 It also performs a small, fail-closed SportsCardsPro preflight for the strongest
-research-ready fallback candidates.  The guide is research triage only: it never
+research-ready fallback candidates. The guide is research triage only: it never
 creates SOLD evidence, market value, max price or a BUY decision.
 """
 from __future__ import annotations
@@ -123,6 +123,17 @@ def _identity_cache_key(identity):
     ))
 
 
+def _resolve_scp_token():
+    token = str(os.getenv("SPORTSCARDSPRO_TOKEN") or "").strip()
+    if token:
+        return token
+    try:
+        import streamlit as st
+        return str(st.secrets.get("SPORTSCARDSPRO_TOKEN") or "").strip()
+    except Exception:
+        return ""
+
+
 @lru_cache(maxsize=512)
 def _cached_guide_lookup(token, identity_key):
     keys = (
@@ -136,12 +147,12 @@ def _cached_guide_lookup(token, identity_key):
 def _auto_attach_guide_context(candidates, *, max_lookups=6):
     """Attach guide triage to a few strongest fallback candidates.
 
-    The lookup is intentionally capped and cached because Streamlit reruns often.
-    Only candidates with a narrow four-anchor identity are queried.  Failures are
-    ignored so ranking remains available even if the external API is unavailable.
+    Deliberately mutates candidate dictionaries in place so later views in the
+    same Streamlit rerun (notably the unlock/research queue) reuse exactly the
+    same triage instead of ranking stale copies. The lookup is capped and cached.
     """
-    rows = [dict(item) if isinstance(item, dict) else item for item in (candidates or [])]
-    token = str(os.getenv("SPORTSCARDSPRO_TOKEN") or "").strip()
+    rows = list(candidates or [])
+    token = _resolve_scp_token()
     if not token or max_lookups <= 0:
         return rows
 
@@ -182,17 +193,7 @@ def _auto_attach_guide_context(candidates, *, max_lookups=6):
 
 
 def build_decision_tiers_compat(builder, candidates, *, total_limit=3, require_verified_economic_edge=False):
-    """Call current builder, or safely adapt an older signature.
-
-    Before the current fallback ranking is built, a capped price-guide preflight
-    enriches the strongest research-ready candidates when an official API token
-    is configured. This means a ~$1.50 base/insert can be demoted automatically
-    before the user presses the manual comp-research button.
-
-    The legacy fallback deliberately pre-filters source candidates rather than
-    merely hiding rows after ranking. That keeps the hard gate intact under a
-    stale module and avoids promoting a non-edge card into Top 3.
-    """
+    """Call current builder, or safely adapt an older signature."""
     rows = list(candidates or [])
     if require_verified_economic_edge:
         rows = _auto_attach_guide_context(rows, max_lookups=max(6, int(total_limit or 3) * 2))
