@@ -1,8 +1,10 @@
-"""Prioritise candidates that are worth researching and close to evidence unlock.
+"""Prioritise candidates that are closest to crossing FlipFynd's evidence gate.
 
-This queue never creates a valuation or BUY signal. It ranks research effort using
-both evidence leverage and already-observed economic/card-quality signals. Exact
-identity alone must never make a low-value commodity card the top research target.
+This queue never creates a valuation or BUY signal. It only estimates research
+leverage from already-structured evidence. Exact identity is useful, but it must
+not dominate the queue by itself: a cheap/common star-player insert should not
+outrank a structurally stronger card merely because its identity is easier to
+parse.
 """
 from __future__ import annotations
 
@@ -16,10 +18,6 @@ def _n(value, default=0.0):
 
 def _txt(value):
     return " ".join(str(value or "").strip().split())
-
-
-def _clamp100(value):
-    return max(0.0, min(100.0, _n(value)))
 
 
 def _identity_ready(item):
@@ -60,37 +58,84 @@ def _player_key(item):
     return ""
 
 
-def _research_value_score(item):
-    """Estimate whether spending comp-research time on the card is worthwhile.
+def _structural_merit(item):
+    """Return research merit from card-specific value drivers, never a price.
 
-    This deliberately uses only pre-existing non-valuation signals. It is not a
-    market value estimate and cannot unlock BUY. The purpose is to stop easy-to-
-    identify but economically trivial cards from monopolising the research queue.
+    This deliberately rewards signals that can make *this exact card* special and
+    penalises the classic hobby trap where a superstar name sits on an otherwise
+    ordinary base/insert card. Missing fields simply contribute zero.
     """
-    deal = _clamp100(item.get("deal_score"))
-    collector = _clamp100(item.get("collector_worth_score"))
-    player = _clamp100(item.get("player_market_score"))
-    hierarchy = max(
-        _clamp100(item.get("card_hierarchy_score")),
-        _clamp100(item.get("valuable_card_score")),
-        _clamp100(item.get("nonstandard_value_score")),
-    )
+    score = 0.0
+    reasons = []
 
-    score = (
-        deal * 0.42
-        + collector * 0.28
-        + player * 0.12
-        + hierarchy * 0.10
-    )
+    # Strong card-specific value drivers.
+    serial = _n(item.get("serial_number") or item.get("serial_denominator"), 0)
+    if item.get("is_1of1"):
+        score += 32
+        reasons.append("1/1")
+    elif serial:
+        if serial <= 25:
+            score += 24
+        elif serial <= 99:
+            score += 18
+        elif serial <= 199:
+            score += 11
+        else:
+            score += 5
+        reasons.append("numrerat")
 
-    # Small research bonuses only. They can break ties, not turn a commodity
-    # card into a high-value target on their own.
-    if item.get("is_market_edge_candidate") or item.get("is_information_edge_candidate"):
-        score += 4
+    if item.get("is_auto") or item.get("autograph"):
+        score += 22
+        reasons.append("autograf")
+    if item.get("is_patch") or item.get("is_jersey") or item.get("is_game_worn"):
+        score += 14
+        reasons.append("patch/relic")
+    if item.get("is_rookie") and (
+        item.get("rookie_importance_matched")
+        or _n(item.get("rookie_importance_score"), 0) >= 60
+        or str(item.get("rookie_tier") or "").casefold() in {"iconic", "strong"}
+    ):
+        score += 15
+        reasons.append("relevant rookie")
+
+    # Documented hierarchy / scarcity / oddity signals.
+    valuable_structure = _n(item.get("valuable_structure_score"), 0)
+    hierarchy = _n(item.get("card_hierarchy_score") or item.get("hierarchy_score"), 0)
+    collector = _n(item.get("collector_worth_score"), 0)
+    score += min(16, valuable_structure * 0.16)
+    score += min(14, hierarchy * 0.14)
+    score += min(10, max(0, collector - 45) * 0.20)
+
+    if item.get("is_case_hit") or item.get("case_hit"):
+        score += 18
+        reasons.append("case hit")
+    if item.get("is_short_print") or item.get("is_ssp") or item.get("short_print"):
+        score += 16
+        reasons.append("SP/SSP")
     if item.get("is_hidden_find_candidate") or item.get("misclassified_card_candidate") or item.get("mispriced_rookie_candidate"):
-        score += 5
+        score += 10
+        reasons.append("discovery-signal")
+    if item.get("is_market_edge_candidate") or item.get("is_information_edge_candidate"):
+        score += 8
+        reasons.append("informationsövertag")
+    if item.get("oddity_story_candidate") or item.get("visual_oddity_candidate"):
+        score += 10
+        reasons.append("oddity/story")
 
-    return max(0.0, min(100.0, score))
+    # A named parallel alone is weak evidence. Give only a small bump unless it
+    # is supported by numbering/hierarchy above.
+    if item.get("parallel") or item.get("is_parallel"):
+        score += 4
+        reasons.append("parallel")
+
+    verdict = str(item.get("collector_worth_verdict") or item.get("collector_profile_verdict") or "").upper()
+    traps = " ".join(str(x) for x in (item.get("collector_worth_hobby_traps") or item.get("hobby_traps") or []))
+    standard_star = verdict == "SPELARDRIVET_STANDARDKORT" or "standardkort" in traps.casefold()
+    if standard_star:
+        score -= 22
+        reasons.append("stjärnspelare men standardkort")
+
+    return max(0.0, min(100.0, score)), list(dict.fromkeys(reasons))[:6]
 
 
 def _unlock_score(item):
@@ -99,29 +144,30 @@ def _unlock_score(item):
     research_identity = _research_identity_ready(item)
     market = _market_value_ready(item)
     max_price = _max_price_ready(item)
-    value_score = _research_value_score(item)
+    merit, _ = _structural_merit(item)
 
-    # Evidence leverage still matters, but it no longer dominates economic
-    # relevance. A low-value exact-ID card should not outrank a materially more
-    # promising card just because the former is easier to search.
+    # Research leverage still matters, but exact identity is no longer a free
+    # pass to the top of the queue. Card-specific merit can move a candidate up;
+    # a generic star-player card can move down.
     if identity and sold == 1:
-        score = 70.0
-    elif sold >= 2 and not (market and max_price):
-        score = 62.0
+        score = 100.0
     elif identity and sold == 0:
-        score = 42.0
+        score = 70.0
     elif research_identity and sold == 0:
-        score = 36.0
+        score = 64.0
+    elif sold >= 2 and not (market and max_price):
+        score = 74.0
     elif not identity:
-        score = 18.0
+        score = 38.0
     else:
-        score = 30.0
+        score = 52.0
 
-    score += value_score * 0.55
+    score += min(18.0, merit * 0.30)
     if market:
-        score += 3
+        score += 4
     if max_price:
-        score += 3
+        score += 4
+    score += min(4.0, max(0.0, _n(item.get("deal_score"))) * 0.04)
     return score
 
 
@@ -131,8 +177,11 @@ def _status(item):
     research_identity = _research_identity_ready(item)
     market = _market_value_ready(item)
     max_price = _max_price_ready(item)
+    merit, _ = _structural_merit(item)
     if identity and sold == 1:
         return "ONE_SALE_AWAY", "1 extra verifierad exact SOLD kan räcka för att nå comp-tröskeln."
+    if identity and sold == 0 and merit < 18:
+        return "EXACT_READY_LOW_MERIT", "Exakt identitet finns, men kortet saknar hittills starka kortspecifika värdedrivare. Researcha först starkare kandidater."
     if identity and sold == 0:
         return "EXACT_READY_NO_SALES", "Exakt identitet är redo; nästa steg är att hitta första verifierade exact SOLD."
     if research_identity and sold == 0:
@@ -156,6 +205,7 @@ def build_unlock_research_queue(items, limit=10):
             continue
         sold = int(_n(item.get("sold_comparable_count"), 0))
         status, action = _status(item)
+        merit, merit_reasons = _structural_merit(item)
         rows.append({
             "title": title,
             "url": item.get("lank") or item.get("url"),
@@ -163,13 +213,14 @@ def build_unlock_research_queue(items, limit=10):
             "status": status,
             "action": action,
             "unlock_score": _unlock_score(item),
-            "research_value_score": _research_value_score(item),
+            "research_merit_score": round(merit),
+            "research_merit_reasons": merit_reasons,
             "sold_comps": sold,
             "identity_ready": _identity_ready(item),
             "research_identity_ready": _research_identity_ready(item),
             "market_value_ready": _market_value_ready(item),
             "max_price_ready": _max_price_ready(item),
-            "potential": _clamp100(item.get("deal_score")),
+            "potential": max(0.0, min(100.0, _n(item.get("deal_score")))),
             "source_item": item,
         })
 
@@ -179,12 +230,19 @@ def build_unlock_research_queue(items, limit=10):
         "MAX_PRICE_NEXT": 2,
         "EXACT_READY_NO_SALES": 3,
         "RESEARCH_READY_NO_SALES": 4,
-        "IDENTITY_FIRST": 5,
-        "REVIEW": 6,
+        "EXACT_READY_LOW_MERIT": 5,
+        "IDENTITY_FIRST": 6,
+        "REVIEW": 7,
     }
-    # Primary sort is the blended research priority. Evidence stage is only a
-    # tie-breaker, preventing "exact ID" from being mistaken for "valuable".
-    rows.sort(key=lambda r: (-r["unlock_score"], status_order.get(r["status"], 9), -r["research_value_score"], r["title"]))
+    rows.sort(
+        key=lambda r: (
+            status_order.get(r["status"], 9),
+            -r["unlock_score"],
+            -r["research_merit_score"],
+            -r["potential"],
+            r["title"],
+        )
+    )
 
     selected, used_players = [], set()
     for row in rows:
@@ -211,5 +269,6 @@ def build_unlock_research_queue(items, limit=10):
         "total": len(rows),
         "near_unlock_count": counts.get("ONE_SALE_AWAY", 0),
         "exact_ready_no_sales_count": counts.get("EXACT_READY_NO_SALES", 0),
-        "note": "Researchkön väger nu ihop evidenshävstång med ekonomisk relevans. Exakt identitet ensam får inte göra ett lågvärdeskort till högsta prioritet. Kön skapar aldrig KÖP eller marknadsvärde.",
+        "low_merit_exact_count": counts.get("EXACT_READY_LOW_MERIT", 0),
+        "note": "Researchkön prioriterar både evidenshävstång och kortspecifik samlarmerit. Exakt ID ensam räcker inte längre för topplacering och skapar aldrig KÖP.",
     }
