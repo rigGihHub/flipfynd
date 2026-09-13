@@ -1,8 +1,8 @@
-"""Prioritise candidates that are closest to crossing FlipFynd's evidence gate.
+"""Prioritise candidates that are worth researching and close to evidence unlock.
 
-This queue never creates a valuation or BUY signal.  It only estimates research
-leverage from already-structured evidence: exact identity readiness, exact SOLD
-count and whether downstream valuation/max-price fields are already available.
+This queue never creates a valuation or BUY signal. It ranks research effort using
+both evidence leverage and already-observed economic/card-quality signals. Exact
+identity alone must never make a low-value commodity card the top research target.
 """
 from __future__ import annotations
 
@@ -16,6 +16,10 @@ def _n(value, default=0.0):
 
 def _txt(value):
     return " ".join(str(value or "").strip().split())
+
+
+def _clamp100(value):
+    return max(0.0, min(100.0, _n(value)))
 
 
 def _identity_ready(item):
@@ -56,37 +60,68 @@ def _player_key(item):
     return ""
 
 
+def _research_value_score(item):
+    """Estimate whether spending comp-research time on the card is worthwhile.
+
+    This deliberately uses only pre-existing non-valuation signals. It is not a
+    market value estimate and cannot unlock BUY. The purpose is to stop easy-to-
+    identify but economically trivial cards from monopolising the research queue.
+    """
+    deal = _clamp100(item.get("deal_score"))
+    collector = _clamp100(item.get("collector_worth_score"))
+    player = _clamp100(item.get("player_market_score"))
+    hierarchy = max(
+        _clamp100(item.get("card_hierarchy_score")),
+        _clamp100(item.get("valuable_card_score")),
+        _clamp100(item.get("nonstandard_value_score")),
+    )
+
+    score = (
+        deal * 0.42
+        + collector * 0.28
+        + player * 0.12
+        + hierarchy * 0.10
+    )
+
+    # Small research bonuses only. They can break ties, not turn a commodity
+    # card into a high-value target on their own.
+    if item.get("is_market_edge_candidate") or item.get("is_information_edge_candidate"):
+        score += 4
+    if item.get("is_hidden_find_candidate") or item.get("misclassified_card_candidate") or item.get("mispriced_rookie_candidate"):
+        score += 5
+
+    return max(0.0, min(100.0, score))
+
+
 def _unlock_score(item):
     sold = int(_n(item.get("sold_comparable_count"), 0))
     identity = _identity_ready(item)
     research_identity = _research_identity_ready(item)
     market = _market_value_ready(item)
     max_price = _max_price_ready(item)
+    value_score = _research_value_score(item)
 
-    # Research leverage dominates.  Prestige may never compensate for missing
-    # evidence; deal score is only a tie-breaker among equally researchable rows.
+    # Evidence leverage still matters, but it no longer dominates economic
+    # relevance. A low-value exact-ID card should not outrank a materially more
+    # promising card just because the former is easier to search.
     if identity and sold == 1:
-        score = 100.0
-    elif identity and sold == 0:
-        score = 78.0
-    elif research_identity and sold == 0:
         score = 70.0
     elif sold >= 2 and not (market and max_price):
-        score = 72.0
+        score = 62.0
+    elif identity and sold == 0:
+        score = 42.0
+    elif research_identity and sold == 0:
+        score = 36.0
     elif not identity:
-        score = 40.0
+        score = 18.0
     else:
-        score = 55.0
+        score = 30.0
 
+    score += value_score * 0.55
     if market:
-        score += 4
-    if max_price:
-        score += 4
-    if item.get("is_market_edge_candidate") or item.get("is_information_edge_candidate"):
-        score += 4
-    if item.get("is_hidden_find_candidate") or item.get("misclassified_card_candidate") or item.get("mispriced_rookie_candidate"):
         score += 3
-    score += min(5.0, max(0.0, _n(item.get("deal_score"))) * 0.05)
+    if max_price:
+        score += 3
     return score
 
 
@@ -128,25 +163,28 @@ def build_unlock_research_queue(items, limit=10):
             "status": status,
             "action": action,
             "unlock_score": _unlock_score(item),
+            "research_value_score": _research_value_score(item),
             "sold_comps": sold,
             "identity_ready": _identity_ready(item),
             "research_identity_ready": _research_identity_ready(item),
             "market_value_ready": _market_value_ready(item),
             "max_price_ready": _max_price_ready(item),
-            "potential": max(0.0, min(100.0, _n(item.get("deal_score")))),
+            "potential": _clamp100(item.get("deal_score")),
             "source_item": item,
         })
 
     status_order = {
         "ONE_SALE_AWAY": 0,
-        "EXACT_READY_NO_SALES": 1,
-        "RESEARCH_READY_NO_SALES": 2,
-        "VALUATION_NEXT": 3,
-        "MAX_PRICE_NEXT": 4,
+        "VALUATION_NEXT": 1,
+        "MAX_PRICE_NEXT": 2,
+        "EXACT_READY_NO_SALES": 3,
+        "RESEARCH_READY_NO_SALES": 4,
         "IDENTITY_FIRST": 5,
         "REVIEW": 6,
     }
-    rows.sort(key=lambda r: (status_order.get(r["status"], 9), -r["unlock_score"], -r["potential"], r["title"]))
+    # Primary sort is the blended research priority. Evidence stage is only a
+    # tie-breaker, preventing "exact ID" from being mistaken for "valuable".
+    rows.sort(key=lambda r: (-r["unlock_score"], status_order.get(r["status"], 9), -r["research_value_score"], r["title"]))
 
     selected, used_players = [], set()
     for row in rows:
@@ -173,5 +211,5 @@ def build_unlock_research_queue(items, limit=10):
         "total": len(rows),
         "near_unlock_count": counts.get("ONE_SALE_AWAY", 0),
         "exact_ready_no_sales_count": counts.get("EXACT_READY_NO_SALES", 0),
-        "note": "Researchkön prioriterar kort där minsta möjliga nästa evidenssteg ger störst chans att låsa upp en riktig värdering. Den skapar aldrig KÖP.",
+        "note": "Researchkön väger nu ihop evidenshävstång med ekonomisk relevans. Exakt identitet ensam får inte göra ett lågvärdeskort till högsta prioritet. Kön skapar aldrig KÖP eller marknadsvärde.",
     }
