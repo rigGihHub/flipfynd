@@ -12,12 +12,19 @@ import csv
 import hashlib
 import io
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 
 SUPPORTED_SPORTS = {"hockey", "football"}
+
+_NEGATIVE_SALE_STATUSES = (
+    "unsold", "not sold", "osåld", "ej såld", "completed unsold",
+    "ended unsold", "not completed sale", "cancelled", "canceled",
+    "withdrawn", "expired", "active", "live", "open",
+)
 
 
 def _first(row: dict, *keys):
@@ -28,16 +35,31 @@ def _first(row: dict, *keys):
     return None
 
 
+def _status_text(value) -> str:
+    text = str(value or "").casefold().strip()
+    text = re.sub(r"[_-]+", " ", text)
+    return " ".join(text.split())
+
+
+def _contradicts_realised_sale(row: dict) -> bool:
+    sold_flag = _first(row, "sold", "is_sold", "was_sold", "completed_sale")
+    flag_text = _status_text(sold_flag)
+    if sold_flag is False or flag_text in {"false", "0", "no", "nej", "unsold", "osåld"}:
+        return True
+    for key in ("sale_status", "status", "listing_status", "state", "market_state"):
+        status = _status_text(row.get(key))
+        if status and any(marker in status for marker in _NEGATIVE_SALE_STATUSES):
+            return True
+    return False
+
+
 def _float(value):
     if value in (None, ""):
         return None
     if isinstance(value, (int, float)):
         return float(value)
-    text = str(value).strip().replace(" ", "").replace(",", ".")
-    # Keep parsing deliberately narrow; currency symbols/text should be fixed by
-    # the importer instead of guessed by FlipFynd.
     try:
-        return float(text)
+        return float(str(value).strip().replace(" ", "").replace(",", "."))
     except ValueError:
         return None
 
@@ -100,6 +122,9 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
     if not isinstance(row, dict):
         raise ValueError("raden är inte ett objekt")
 
+    if _contradicts_realised_sale(row):
+        raise ValueError("raden anger uttryckligen osåld/aktiv/avbruten status och får inte bli SOLD-comp")
+
     title = str(_first(row, "titel", "title", "name") or "").strip()
     if len(title) < 4:
         raise ValueError("titel saknas eller är för kort")
@@ -138,10 +163,6 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
     if sold_total and sold_total > 0:
         record["sold_total_price"] = round(float(sold_total), 2)
     if shipping is not None:
-        # Shipping is only safe to carry through unchanged for SEK rows. For a
-        # foreign-currency row with explicit total SEK, sold_total_price is the
-        # authoritative all-in amount and the original shipping is retained as
-        # source metadata instead of being mixed into SEK maths.
         if original_currency in {"SEK", "KR", "SEK KR"}:
             record["frakt"] = round(float(shipping), 2)
         else:
@@ -159,9 +180,6 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
         record["source_currency"] = original_currency
         record["currency_conversion_source"] = conversion_source
 
-    # Preserve explicit structured identity metadata supplied by the source or
-    # reviewer. Free-text title parsing is intentionally NOT used to populate
-    # these fields: a verified sale is not automatically an exact comp.
     identity_aliases = {
         "player_name": ("player_name", "player"),
         "set_name": ("set_name", "set", "product"),
