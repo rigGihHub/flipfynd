@@ -1,9 +1,9 @@
 """Fast, conservative triage for live same-seller inventory.
 
 This layer is intentionally a routing aid, not a purchase engine. It runs the
-existing fast analyser on a capped number of seller listings and ranks which
-ones deserve a full analysis next. It never upgrades an unverified listing to a
-BUY merely because shipping may be shared.
+existing fast analyser and exposes the same ordinary ranking fields used by the
+main FlipFynd flow so Seller Top 5 can preselect candidates without inventing a
+parallel ranking model.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import Callable, Iterable
 
 from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
 from src.seller_collector_signals import collector_signals
+from src.seller_card_domain import seller_item_domain_check
 
 
 def _text(item: dict) -> str:
@@ -60,11 +61,7 @@ def _num(value, default=0.0) -> float:
 
 
 def _quick_score(result: dict) -> float:
-    """Rank research priority, not economic value.
-
-    Exact identity and actual SOLD evidence dominate. Collector title signals
-    only help research ordering; they cannot create valuation or BUY evidence.
-    """
+    """Research-priority helper only; ordinary rank fields remain authoritative."""
     identity = _num(result.get("exact_identity_gate_score"))
     sold = int(_num(result.get("sold_comparable_count") or result.get("sold_comps")))
     valuation = _num(result.get("valuation_confidence_score"))
@@ -76,14 +73,14 @@ def _quick_score(result: dict) -> float:
     collector_score = _num(collector.get("score"))
 
     score = (
-        min(identity, 100) * 0.34
-        + min(valuation, 100) * 0.18
-        + min(rank, 100) * 0.18
-        + min(edge, 100) * 0.14
+        min(identity, 100) * 0.30
+        + min(valuation, 100) * 0.14
+        + min(rank, 100) * 0.28
+        + min(edge, 100) * 0.10
         + min(sold, 5) * 4.0
-        + (8.0 if verified else 0.0)
-        + (8.0 if decision.startswith("KÖP") else 0.0)
-        + min(collector_score, 40) * 0.35
+        + (6.0 if verified else 0.0)
+        + (6.0 if decision.startswith("KÖP") else 0.0)
+        + min(collector_score, 40) * 0.25
     )
     return round(max(0.0, min(100.0, score)), 1)
 
@@ -116,11 +113,15 @@ def quick_analyze_seller_inventory(
     limit: int = 20,
     shortlist: int = 5,
 ) -> dict:
-    """Fast-analyse a capped seller inventory and return a research shortlist."""
+    """Fast-analyse seller inventory and return ordinary-rank-aware triage rows."""
     anchor_key = _identity_key(anchor or {})
     unique = {}
+    domain_rejected = 0
     for item in items or []:
         if not isinstance(item, dict):
+            continue
+        if not seller_item_domain_check(item, sport=sport).get("allowed"):
+            domain_rejected += 1
             continue
         prepared_item = apply_seller_metadata(item)
         key = _identity_key(prepared_item)
@@ -165,6 +166,9 @@ def quick_analyze_seller_inventory(
             "sold_comps": int(_num(merged.get("sold_comparable_count") or merged.get("sold_comps"))),
             "valuation_confidence": _num(merged.get("valuation_confidence_score")),
             "market_edge": _num(merged.get("market_edge_score")),
+            "rank_score": _num(merged.get("rank_score")),
+            "player_market_score": _num(merged.get("player_market_score")),
+            "risk_adjusted_profit": _num(merged.get("risk_adjusted_profit")),
             "collector_signal_score": int(collector.get("score") or 0),
             "collector_signals": list(collector.get("signals") or []),
             "seller_alias": seller_alias(merged),
@@ -174,6 +178,9 @@ def quick_analyze_seller_inventory(
         })
 
     rows.sort(key=lambda row: (
+        -float(row.get("rank_score") or 0),
+        -float(row.get("player_market_score") or 0),
+        -float(row.get("risk_adjusted_profit") or 0),
         0 if str(row.get("decision") or "").upper().startswith("KÖP") else 1,
         0 if row.get("identity_ok") and row.get("sold_comps", 0) > 0 else 1,
         -float(row.get("quick_score") or 0),
@@ -185,7 +192,8 @@ def quick_analyze_seller_inventory(
         "status": "READY" if rows else "NO_RESULTS",
         "analysed_count": len(rows),
         "failed_count": failed,
+        "domain_rejected_count": domain_rejected,
         "rows": rows,
         "shortlist": shortlist_rows,
-        "note": "Snabbanalys prioriterar vad som bör fullanalyseras. Collector-signaler är researchprioritering, inte värdering eller KÖP-bevis.",
+        "note": "Snabbanalys återanvänder ordinarie rankfält för urval. Collector-signaler är endast sekundär researchprioritering.",
     }
