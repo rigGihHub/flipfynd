@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.86"
+APP_VERSION = "v0.12.87"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6590,7 +6590,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         if rejected_count:
             st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
-            st.caption("Samma rankingmotor som i ordinarie FlipFynd-sökningen.")
+            st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
         if not rows:
             st.info("Inga samlarkort kunde rankas hos säljaren just nu.")
         for idx, row in enumerate(rows[:5], start=1):

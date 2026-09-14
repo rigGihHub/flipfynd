@@ -12,6 +12,8 @@ from typing import Callable, Iterable
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
 from src.public_seller_inventory import fetch_public_seller_inventory_batch, parse_profile_url
 from src.seller_top5 import build_seller_top5
+from src.seller_collector_signals import collector_signals
+from src.seller_card_domain import seller_item_domain_check
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
@@ -207,23 +209,77 @@ def _partial_result_from_saved(
     resume_required: bool,
     total_listing_estimate: int | None = None,
 ):
-    if saved_items:
-        preview = _rank(
-            alias,
-            list(saved_items.values()),
-            analyze_fn=analyze_fn,
-            quick_limit=quick_limit,
-            full_limit=min(5, max(1, int(full_limit or 5))),
-            source="TRADERA_PUBLIC_PROFILE",
-            progress_callback=progress_callback,
-            ui=ui,
+    """Return a provisional Top 5 without invoking the expensive analyser.
+
+    Partial seller inventories are intentionally ranked with cheap title/domain
+    signals only. The full ordinary FlipFynd analysis still runs once the whole
+    seller inventory is loaded. This keeps each 5-page request short enough for
+    Streamlit while still showing the best five candidates found so far.
+    """
+    candidates = []
+    rejected = 0
+    for item in saved_items.values():
+        if not isinstance(item, dict):
+            continue
+        check = seller_item_domain_check(item, sport="all")
+        if not check.get("allowed"):
+            rejected += 1
+            continue
+        sig = collector_signals(item)
+        title = str(item.get("titel") or item.get("title") or "Kortannons").strip()
+        price = item.get("pris") if item.get("pris") is not None else item.get("price")
+        try:
+            price_num = float(price) if price is not None else None
+        except (TypeError, ValueError):
+            price_num = None
+        # Collector signals are the primary provisional sort. Small secondary
+        # bonuses surface recognisable card products/rookies/parallels while
+        # low price only breaks otherwise similar candidates.
+        lower = title.casefold()
+        product_bonus = sum(
+            token in lower
+            for token in (
+                "upper deck", "topps", "panini", "o-pee-chee", "opc",
+                "prizm", "chrome", "young guns", "rookie", "parallel",
+                "refractor", "dazzlers", "red edition", "patch", "auto",
+            )
         )
-        preview = dict(preview)
-    else:
-        preview = {"seller": alias, "rows": []}
-    preview.update({
+        score = min(100.0, float(sig.get("score") or 0) * 2.0 + product_bonus * 3.0)
+        candidates.append({
+            "title": title,
+            "price": price_num,
+            "url": item.get("lank") or item.get("url") or item.get("link"),
+            "decision": "UNDERSÖK",
+            "label": "PRELIMINÄR KANDIDAT",
+            "reason": "Preliminär ranking av inlästa annonser. Slutlig ranking görs när hela profilen är läst.",
+            "rank_score": score,
+            "player_market_score": 0,
+            "risk_adjusted_profit": 0,
+            "sold_comps": 0,
+            "market_edge": 0,
+            "valuation_confidence": 0,
+            "collector_signal_score": int(sig.get("score") or 0),
+            "collector_signals": list(sig.get("signals") or []),
+            "analysis_level": "provisional_title_triage",
+            "source_item": item,
+            "seller": alias,
+        })
+
+    candidates.sort(key=lambda row: (
+        -float(row.get("rank_score") or 0),
+        row.get("price") if row.get("price") is not None else 10**12,
+        str(row.get("title") or ""),
+    ))
+    rows = candidates[:5]
+    loaded = len(saved_items)
+    remaining = max(0, int(total_listing_estimate) - loaded) if total_listing_estimate else None
+    return {
+        "seller": alias,
+        "rows": rows,
         "status": "INVENTORY_PARTIAL",
-        "inventory_count": len(saved_items),
+        "inventory_count": loaded,
+        "card_inventory_count": len(candidates),
+        "domain_rejected_count": rejected,
         "inventory_source": "TRADERA_PUBLIC_PROFILE",
         "public_status": public_status,
         "public_error": public_error,
@@ -231,14 +287,16 @@ def _partial_result_from_saved(
         "public_next_page": next_page,
         "public_batch_pages": 0,
         "public_inventory_complete": False,
-        "provisional_top5": bool(saved_items),
+        "provisional_top5": bool(rows),
         "resume_required": bool(resume_required),
         "fallback_reason": fallback_reason,
         "api_status": api_status,
         "total_listing_estimate": total_listing_estimate,
-        "remaining_listing_estimate": max(0, int(total_listing_estimate) - len(saved_items)) if total_listing_estimate else None,
-    })
-    return preview
+        "remaining_listing_estimate": remaining,
+        "quick_analysed": 0,
+        "full_analysed": 0,
+        "ranking_source": "PROVISIONAL_TITLE_TRIAGE",
+    }
 
 
 def resolve_seller_top5(
