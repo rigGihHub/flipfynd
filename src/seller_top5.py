@@ -3,6 +3,9 @@
 Seller-specific logic is deliberately limited to inventory filtering and cheap
 triage. Final decisions and final ordering reuse the normal FlipFynd full
 analysis contract: rank_score, player_market_score, risk_adjusted_profit.
+
+Seller Top 5 is sport-agnostic at product level: supported hockey and football
+cards compete in one final ranking. The UI does not need to choose a sport.
 """
 from __future__ import annotations
 
@@ -11,6 +14,15 @@ from typing import Callable, Iterable
 from src.seller_card_domain import seller_item_domain_check
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
+
+
+def _emit(callback, **payload):
+    if not callable(callback):
+        return
+    try:
+        callback(dict(payload))
+    except Exception:
+        pass
 
 
 def _num(value, default=0.0):
@@ -26,6 +38,39 @@ def _identity_key(item: dict) -> str:
         if value not in (None, ""):
             return str(value).strip()
     return str(item.get("titel") or item.get("title") or "").strip().casefold()
+
+
+def _supported_sport(item: dict, fallback: str = "hockey") -> str:
+    """Infer hockey/football for the normal analyser without user input.
+
+    Strong textual/category evidence wins. Ambiguous legacy listings retain the
+    supplied fallback so existing behaviour stays deterministic.
+    """
+    text = " ".join(
+        str(item.get(key) or "")
+        for key in (
+            "titel", "title", "source_category", "category_name", "category",
+            "breadcrumb", "path", "raw_text", "full_description", "description",
+        )
+    ).casefold()
+    football_tokens = (
+        "fotboll", "football", "soccer", "premier league", "champions league",
+        "uefa", "fifa", "match attax", "adrenalyn", "la liga", "serie a",
+        "bundesliga", "world cup",
+    )
+    hockey_tokens = (
+        "hockey", "nhl", "upper deck", "o-pee-chee", "opc", "young guns",
+        "ice hockey", "shl",
+    )
+    football_hits = sum(token in text for token in football_tokens)
+    hockey_hits = sum(token in text for token in hockey_tokens)
+    if football_hits > hockey_hits:
+        return "football"
+    if hockey_hits > football_hits:
+        return "hockey"
+    if fallback in {"hockey", "football"}:
+        return fallback
+    return "hockey"
 
 
 def _ordinary_rank_key(row: dict):
@@ -56,7 +101,6 @@ def _quick_rank_key(row: dict):
 
 
 def _seller_presentation_label(row: dict) -> dict:
-    """Map ordinary decisions to Seller Top 5 presentation only."""
     out = dict(row)
     decision = str(out.get("decision") or "SKIP").upper()
     if decision.startswith("KÖP"):
@@ -68,7 +112,15 @@ def _seller_presentation_label(row: dict) -> dict:
     return out
 
 
-def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int) -> dict:
+def _quick_scan_inventory(
+    alias: str,
+    inventory: list[dict],
+    *,
+    analyze_fn: Callable,
+    sport: str,
+    quick_limit: int,
+    progress_callback=None,
+) -> dict:
     anchor = {"saljare": alias, "tradera_item_id": "__seller_top5_anchor__"}
     batch_size = max(20, min(int(quick_limit or 60), 100))
     unique: dict[str, dict] = {}
@@ -78,32 +130,63 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
             unique[key] = row
     unique_inventory = list(unique.values())
 
+    # Mixed-sport product mode: route each listing to the normal sport-specific
+    # analyser, then merge the results into one seller ranking.
+    groups = {"hockey": [], "football": []}
+    for row in unique_inventory:
+        inferred = _supported_sport(row, fallback=sport)
+        groups[inferred].append(row)
+
     all_rows: dict[str, dict] = {}
     failed = 0
     batches = 0
     domain_rejected = 0
-    for start in range(0, len(unique_inventory), batch_size):
-        batch = unique_inventory[start:start + batch_size]
-        if not batch:
-            continue
-        batches += 1
-        quick = quick_analyze_seller_inventory(
-            anchor, batch, analyze_fn=analyze_fn, sport=sport,
-            strategy_mode="quick_flip", limit=len(batch), shortlist=min(5, len(batch)),
-        )
-        failed += int(quick.get("failed_count") or 0)
-        domain_rejected += int(quick.get("domain_rejected_count") or 0)
-        for row in quick.get("rows") or []:
-            source = row.get("source_item") or {}
-            key = _identity_key(source) or _identity_key(row)
-            if not key:
+    analysed_so_far = 0
+    total = len(unique_inventory)
+    _emit(progress_callback, phase="quick_start", done=0, total=total, percent=28)
+
+    for group_sport in ("hockey", "football"):
+        group = groups[group_sport]
+        for start in range(0, len(group), batch_size):
+            batch = group[start:start + batch_size]
+            if not batch:
                 continue
-            previous = all_rows.get(key)
-            if previous is None or _quick_rank_key(row) < _quick_rank_key(previous):
-                all_rows[key] = row
+            batches += 1
+            quick = quick_analyze_seller_inventory(
+                anchor,
+                batch,
+                analyze_fn=analyze_fn,
+                sport=group_sport,
+                strategy_mode="quick_flip",
+                limit=len(batch),
+                shortlist=min(5, len(batch)),
+            )
+            failed += int(quick.get("failed_count") or 0)
+            domain_rejected += int(quick.get("domain_rejected_count") or 0)
+            analysed_so_far += len(batch)
+            for row in quick.get("rows") or []:
+                source = row.get("source_item") or {}
+                row = dict(row)
+                row["sport"] = group_sport
+                key = _identity_key(source) or _identity_key(row)
+                if not key:
+                    continue
+                previous = all_rows.get(key)
+                if previous is None or _quick_rank_key(row) < _quick_rank_key(previous):
+                    all_rows[key] = row
+            pct = 28 + int(37 * min(1.0, analysed_so_far / max(1, total)))
+            _emit(
+                progress_callback,
+                phase="quick_progress",
+                done=min(analysed_so_far, total),
+                total=total,
+                percent=pct,
+                sport=group_sport,
+            )
 
     rows = list(all_rows.values())
     rows.sort(key=_quick_rank_key)
+    _emit(progress_callback, phase="quick_complete", done=total, total=total, percent=65)
     return {
         "rows": rows,
         "analysed_count": len(rows),
@@ -112,6 +195,7 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
         "domain_rejected_count": domain_rejected,
         "inventory_unique_count": len(unique_inventory),
         "coverage_complete": len(rows) + failed + domain_rejected >= len(unique_inventory),
+        "sport_counts": {key: len(value) for key, value in groups.items()},
     }
 
 
@@ -134,13 +218,22 @@ def _fallback_row(qrow: dict, alias: str) -> dict:
         "rank_score": qrow.get("rank_score", 0),
         "player_market_score": qrow.get("player_market_score", 0),
         "risk_adjusted_profit": qrow.get("risk_adjusted_profit", 0),
+        "sport": qrow.get("sport"),
         "seller": alias, "source_item": qrow.get("source_item") or {},
         "analysis_level": "quick_fallback",
     }
 
 
-def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyze_fn: Callable,
-                      sport: str = "hockey", quick_limit: int = 60, full_limit: int = 10) -> dict:
+def build_seller_top5(
+    seller_alias: str,
+    items: Iterable[dict] | None,
+    *,
+    analyze_fn: Callable,
+    sport: str = "all",
+    quick_limit: int = 60,
+    full_limit: int = 10,
+    progress_callback=None,
+) -> dict:
     alias = str(seller_alias or "").strip()
     raw_inventory = [dict(x) for x in (items or []) if isinstance(x, dict)]
     if not alias:
@@ -148,47 +241,69 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     if not raw_inventory:
         return {"status": "NO_ITEMS", "rows": [], "seller": alias, "inventory_count": 0}
 
+    _emit(progress_callback, phase="filter_start", done=0, total=len(raw_inventory), percent=20)
     rejected = []
     inventory = []
-    for item in raw_inventory:
-        check = seller_item_domain_check(item, sport=sport)
+    for idx, item in enumerate(raw_inventory, start=1):
+        check = seller_item_domain_check(item, sport="all")
         if check.get("allowed"):
             inventory.append(item)
         else:
             rejected.append({"title": check.get("title"), "reason": check.get("reason")})
+        if idx == len(raw_inventory) or idx % 100 == 0:
+            pct = 20 + int(8 * idx / max(1, len(raw_inventory)))
+            _emit(progress_callback, phase="filter_progress", done=idx, total=len(raw_inventory), percent=pct)
 
     if not inventory:
+        _emit(progress_callback, phase="complete", done=0, total=0, percent=100)
         return {
             "status": "NO_CARD_ITEMS", "rows": [], "seller": alias,
             "inventory_count": len(raw_inventory), "card_inventory_count": 0,
             "domain_rejected_count": len(rejected),
         }
 
-    quick = _quick_scan_inventory(alias, inventory, analyze_fn=analyze_fn, sport=sport, quick_limit=quick_limit)
+    # "all" is the product default. A legacy explicit sport parameter remains a
+    # deterministic fallback only for titles whose sport cannot be inferred.
+    fallback_sport = sport if sport in {"hockey", "football"} else "hockey"
+    quick = _quick_scan_inventory(
+        alias,
+        inventory,
+        analyze_fn=analyze_fn,
+        sport=fallback_sport,
+        quick_limit=quick_limit,
+        progress_callback=progress_callback,
+    )
 
     candidate_limit = min(max(int(full_limit or 20), 20), 40)
     candidates = list(quick.get("rows") or [])[:candidate_limit]
     full_rows = []
     failed = 0
-    for qrow in candidates:
+    _emit(progress_callback, phase="full_start", done=0, total=len(candidates), percent=66)
+    for idx, qrow in enumerate(candidates, start=1):
         source_item = qrow.get("source_item") or {}
-        # Defense in depth: never full-analyse a non-card candidate even if stale
-        # or malformed cached data slipped into the quick layer.
-        if not seller_item_domain_check(source_item, sport=sport).get("allowed"):
+        if not seller_item_domain_check(source_item, sport="all").get("allowed"):
             continue
+        item_sport = qrow.get("sport") or _supported_sport(source_item, fallback=fallback_sport)
         try:
             row = full_analyze_live_seller_item(
-                source_item, analyze_fn=analyze_fn, all_items=inventory,
-                sport=sport, strategy_mode="quick_flip",
+                source_item,
+                analyze_fn=analyze_fn,
+                all_items=inventory,
+                sport=item_sport,
+                strategy_mode="quick_flip",
             )
         except Exception:
             failed += 1
-            continue
-        row = dict(row)
-        row["quick_score"] = qrow.get("quick_score")
-        row["seller"] = alias
-        row["analysis_level"] = "full"
-        full_rows.append(_seller_presentation_label(row))
+            row = None
+        if row is not None:
+            row = dict(row)
+            row["quick_score"] = qrow.get("quick_score")
+            row["seller"] = alias
+            row["sport"] = item_sport
+            row["analysis_level"] = "full"
+            full_rows.append(_seller_presentation_label(row))
+        pct = 66 + int(28 * idx / max(1, len(candidates)))
+        _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=pct)
 
     full_rows.sort(key=_ordinary_rank_key, reverse=True)
     selected = list(full_rows[:5])
@@ -198,7 +313,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         if len(selected) >= 5:
             break
         source = qrow.get("source_item") or {}
-        if not seller_item_domain_check(source, sport=sport).get("allowed"):
+        if not seller_item_domain_check(source, sport="all").get("allowed"):
             continue
         key = _identity_key(source or qrow)
         if key in selected_keys:
@@ -206,6 +321,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         selected.append(_fallback_row(qrow, alias))
         selected_keys.add(key)
 
+    _emit(progress_callback, phase="ranking", done=len(selected), total=5, percent=97)
     common_meta = {
         "seller": alias,
         "inventory_count": len(raw_inventory),
@@ -218,10 +334,13 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "coverage_complete": bool(quick.get("coverage_complete")),
         "full_candidate_limit": candidate_limit,
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v2-ordinary-rank-preselection",
+        "seller_analysis_contract": "v3-cross-sport-one-click-progress",
+        "sport_counts": quick.get("sport_counts") or {},
     }
-    return {
+    result = {
         "status": "READY" if selected else "NO_CARD_CANDIDATES",
         "rows": selected, "full_analysed": len(full_rows), "failed_full": failed,
         **common_meta,
     }
+    _emit(progress_callback, phase="complete", done=5 if selected else 0, total=5, percent=100)
+    return result
