@@ -117,7 +117,7 @@ from src.tradera_seller_inventory import discover_active_seller_inventory
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
-from src.seller_top5 import build_seller_top5
+from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.seller_top5_controller import resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
 from src.search_yield_learning import build_yield_report, route_budget_guidance
@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.97"
+APP_VERSION = "v0.12.98"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6593,11 +6593,21 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
     if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE" and (seller_top5_result.get("rows") or []):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
-        if _seller_result_status == "INVENTORY_PARTIAL":
-            st.markdown(f"### 🏆 Bästa fynd just nu · {seller_name}")
+        _ranked_rows = seller_top5_result.get("rows") or []
+        _find_rows = [row for row in _ranked_rows if seller_result_tier(row) == "FIND"]
+        _research_rows = [row for row in _ranked_rows if seller_result_tier(row) == "RESEARCH"]
+        _seller_display_rows = (_find_rows + _research_rows)[:5]
+        if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
+            st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
             st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
+        elif _find_rows:
+            st.markdown(f"### 🏆 Verifierade fynd · {seller_name}")
+        elif _research_rows:
+            st.markdown(f"### 🔎 Kandidater värda fortsatt kontroll · {seller_name}")
+            st.caption("Inga verifierade fynd ännu. Dessa kort har kortspecifika signaler men är inte köpklara.")
         else:
-            st.markdown(f"### 🏆 Slutlig Top 5 · {seller_name}")
+            st.markdown(f"### Inga starka fynd hittade ännu · {seller_name}")
+            st.caption("FlipFynd visar inte vanliga bas- och standardkort som utfyllnad.")
         st.caption(
             f"{inv_count} annonser hittade · "
             f"{int(seller_top5_result.get('full_analysed') or 0)} djupanalyserade"
@@ -6619,7 +6629,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                 st.caption(f"Källa: redan inläst FlipFynd-data · API-fallback efter {api_status}.")
             else:
                 st.caption("Källa: redan inläst FlipFynd-data.")
-        rows = seller_top5_result.get("rows") or []
+        rows = _seller_display_rows
         rejected_count = int(seller_top5_result.get("domain_rejected_count") or 0)
         card_count = int(seller_top5_result.get("card_inventory_count") or 0)
         if rejected_count:

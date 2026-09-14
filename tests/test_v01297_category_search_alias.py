@@ -8,4 +8,4 @@ def test_category_words_are_not_used_as_literal_listing_keywords():
     assert '"football cards"' in app
     assert '"hockeykort"' in app
     assert "search=effective_search" in app
-    assert "APP_VERSION = \"v0.12.97\"" in app
+    assert "normalize_sport_category_search(search, sport)" in app

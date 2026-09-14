@@ -11,6 +11,20 @@ import re
 _FALSE_AUTO = re.compile(r"\b(signature\s*style|silver\s*script|facsimile|facsimile\s*signature|printed\s*signature|pre[- ]?printed\s*signature)\b", re.I)
 
 
+def _has_serial_numbering(text: str) -> bool:
+    if "numbered" in text or "numrerad" in text:
+        return True
+    pattern = re.compile(r"(?<![#\d])(\d{1,4})\s*/\s*(5|10|15|20|25|49|50|75|99|100|199|299|499)\b")
+    for match in pattern.finditer(text):
+        numerator, denominator = int(match.group(1)), int(match.group(2))
+        # 2024/2025 and 24/25 are seasons, not print runs. A leading # also
+        # denotes a checklist card number and is excluded by the regex.
+        if denominator == numerator + 1 and (numerator >= 19 or numerator >= 1900):
+            continue
+        return True
+    return False
+
+
 def collector_signals(item: dict) -> dict:
     title = str(item.get("titel") or item.get("title") or "").strip()
     text = title.casefold()
@@ -21,10 +35,7 @@ def collector_signals(item: dict) -> dict:
             signals.append((name, weight))
 
     add("one_of_one", 24, bool(re.search(r"(?:\b1\s*/\s*1\b|\bone[- ]of[- ]one\b)", text)))
-    add("serial_numbered", 18, bool(re.search(
-        r"(?:\b\d{1,4}\s*)?/\s*(?:5|10|15|20|25|49|50|75|99|100|199|299|499)\b",
-        text,
-    )) or "numbered" in text or "numrerad" in text)
+    add("serial_numbered", 18, _has_serial_numbering(text))
 
     explicit_auto = bool(re.search(r"\b(?:autograph(?:ed)?|auto|on[- ]card\s+auto|hard[- ]signed)\b", text))
     add("autograph", 17, explicit_auto and not _FALSE_AUTO.search(text))

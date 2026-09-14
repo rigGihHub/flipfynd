@@ -26,6 +26,13 @@ def test_serial_patch_rookie_gets_strong_research_signal():
     assert "serial_numbered" in out["signals"]
 
 
+def test_match_attax_season_and_card_number_are_not_serial_numbering():
+    out = collector_signals({
+        "titel": "Bukayo Saka Match Attax 2024/2025 Arsenal 24/25 Topps #40"
+    })
+    assert "serial_numbered" not in out["signals"]
+
+
 def test_signature_style_and_silver_script_are_not_auto_signals():
     for title in ("Signature Style Connor McDavid", "Silver Script Sidney Crosby"):
         out = collector_signals({"titel": title})

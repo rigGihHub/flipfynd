@@ -182,6 +182,16 @@ def _seller_presentation_label(row: dict) -> dict:
     return out
 
 
+def seller_result_tier(row: dict) -> str:
+    """Separate actual finds from research candidates and weak filler."""
+    decision = str(row.get("decision") or "SKIP").upper()
+    if decision.startswith("KÖP"):
+        return "FIND"
+    if decision.startswith("UNDERSÖK") or _num(row.get("collector_signal_score")) >= 18:
+        return "RESEARCH"
+    return "WEAK"
+
+
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int, progress_callback=None) -> dict:
     anchor = {"saljare": alias, "tradera_item_id": "__seller_top5_anchor__"}
     batch_size = max(20, min(int(quick_limit or 60), 100))
