@@ -73,6 +73,7 @@ def full_analyze_live_seller_item(
     edge = _num(merged.get("market_edge_score"))
     rank_score = _num(merged.get("rank_score"))
     player_market_score = _num(merged.get("player_market_score"))
+    risk_adjusted_profit = _num(merged.get("risk_adjusted_profit"))
     ranking_confidence = _num(
         merged.get("ranking_confidence_score", merged.get("deal_confidence_score", 0))
     )
@@ -112,6 +113,7 @@ def full_analyze_live_seller_item(
         "market_edge": edge,
         "rank_score": rank_score,
         "player_market_score": player_market_score,
+        "risk_adjusted_profit": risk_adjusted_profit,
         "ranking_confidence": ranking_confidence,
         "seller_alias": seller_alias(merged),
         "seller_id": seller_id(merged),
