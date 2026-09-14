@@ -42,22 +42,28 @@ def _rank(alias, items, *, analyze_fn, sport, quick_limit, full_limit, source):
     return result
 
 
-def _fetch_public(public_fetcher, profile_url, *, public_pages, progress_callback=None):
+def _fetch_public(public_fetcher, profile_url, *, public_pages, progress_callback=None, seller_alias=None):
     kwargs = {
         "start_page": 1,
         "max_pages": max(1, int(public_pages or 1)),
     }
     if progress_callback is not None:
         kwargs["progress_callback"] = progress_callback
-    try:
-        return public_fetcher(str(profile_url).strip(), **kwargs)
-    except TypeError as exc:
-        # Keep controller tests/custom fetchers and mixed cloud deploys compatible
-        # while the new optional progress callback rolls out.
-        if "progress_callback" not in str(exc) or "progress_callback" not in kwargs:
-            raise
-        kwargs.pop("progress_callback", None)
-        return public_fetcher(str(profile_url).strip(), **kwargs)
+    if str(seller_alias or "").strip():
+        kwargs["fallback_alias"] = str(seller_alias).strip()
+
+    # Mixed Streamlit deploys/custom test fetchers may temporarily expose an
+    # older signature. Remove only the unsupported optional kwargs and retry.
+    for optional_key in ("fallback_alias", "progress_callback"):
+        try:
+            return public_fetcher(str(profile_url).strip(), **kwargs)
+        except TypeError as exc:
+            if optional_key not in str(exc) or optional_key not in kwargs:
+                if optional_key == "progress_callback":
+                    raise
+                continue
+            kwargs.pop(optional_key, None)
+    return public_fetcher(str(profile_url).strip(), **kwargs)
 
 
 def resolve_seller_top5(
@@ -125,6 +131,7 @@ def resolve_seller_top5(
                 profile_url,
                 public_pages=public_pages,
                 progress_callback=progress_callback,
+                seller_alias=alias,
             )
         except Exception as exc:
             public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
