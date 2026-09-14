@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.99"
+APP_VERSION = "v0.13.0"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1018,6 +1018,36 @@ def _fast_signature(item, sport, strategy):
         "strategy": strategy,
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+
+
+def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode="quick_flip", sport="hockey"):
+    """Share both analysis caches with the incremental seller workflow."""
+    if mode == "fast":
+        return _cached_fast_analysis(
+            _fast_signature(item, sport, strategy_mode),
+            item,
+            sport,
+            strategy_mode,
+        )
+
+    inventory_size = len(all_items or [])
+    signature = build_analysis_signature(
+        item,
+        data_size=inventory_size,
+        mode=f"seller_{sport}_{strategy_mode}",
+    )
+    cached = get_cached_analysis(signature)
+    if cached:
+        return cached
+    result = analyze_item(
+        item,
+        all_items=all_items,
+        mode=mode,
+        strategy_mode=strategy_mode,
+        sport=sport,
+    )
+    set_cached_analysis(signature, result)
+    return result
 
 
 
@@ -6496,7 +6526,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     top5 = resolve_seller_top5(
                         alias,
                         local_market,
-                        analyze_fn=analyze_item,
+                        analyze_fn=_cached_seller_analysis,
                         sport=sport_key,
                         credentials=creds,
                         profile_url=seller_top5_profile_url_resolved,
@@ -6518,7 +6548,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     top5 = _seller_top5_controller.resolve_seller_top5(
                         alias,
                         local_market,
-                        analyze_fn=analyze_item,
+                        analyze_fn=_cached_seller_analysis,
                         sport="all",
                         credentials=creds,
                         profile_url=seller_top5_profile_url_resolved,
