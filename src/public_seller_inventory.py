@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 import requests
 
 _ITEM_HREF_RE = re.compile(r"/item/(?P<category>\d+)/(?P<id>\d+)(?:/[^\"'<>\s?]*)?", re.I)
-_PROFILE_RE = re.compile(r"/profile/items/(?P<seller_id>\d+)/(?P<alias>[^/?#]+)", re.I)
+_PROFILE_RE = re.compile(r"/profile/items/(?P<seller_id>\d+)(?:/(?P<alias>[^/?#]+))?/?(?:[?#]|$)", re.I)
 _PRICE_RE = re.compile(r"(?P<price>\d[\d\s.]*)\s*kr", re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 _SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", re.I | re.S)
@@ -25,7 +25,8 @@ def parse_profile_url(url: str | None) -> dict | None:
     match = _PROFILE_RE.search(text)
     if not match:
         return None
-    return {"seller_id": match.group("seller_id"), "alias": match.group("alias")}
+    alias = str(match.group("alias") or "").strip() or None
+    return {"seller_id": match.group("seller_id"), "alias": alias}
 
 
 def build_profile_page_url(profile_url: str, page_number: int) -> str:
@@ -161,7 +162,6 @@ def _emit_progress(callback, **payload):
     try:
         callback(dict(payload))
     except Exception:
-        # Progress reporting must never be able to break inventory discovery.
         pass
 
 
@@ -173,10 +173,14 @@ def fetch_public_seller_inventory_batch(
     timeout: int = 15,
     session=None,
     progress_callback=None,
+    fallback_alias: str | None = None,
 ) -> dict:
     parsed = parse_profile_url(profile_url)
     if not parsed:
         return {"ok": False, "status": "INVALID_PROFILE_URL", "items": [], "next_page": start_page}
+    effective_alias = str(parsed.get("alias") or fallback_alias or "").strip() or None
+    parsed = dict(parsed)
+    parsed["alias"] = effective_alias
     client = session or requests
     all_items: dict[str, dict] = {}
     page_reports = []
@@ -184,26 +188,10 @@ def fetch_public_seller_inventory_batch(
     previous_ids = None
     page = max(1, int(start_page or 1))
     max_pages = max(1, int(max_pages or 1))
-    _emit_progress(
-        progress_callback,
-        phase="starting",
-        page=page,
-        pages_read=0,
-        max_pages=max_pages,
-        found_count=0,
-        seller_alias=parsed["alias"],
-    )
+    _emit_progress(progress_callback, phase="starting", page=page, pages_read=0, max_pages=max_pages, found_count=0, seller_alias=effective_alias)
     for _ in range(max_pages):
         url = build_profile_page_url(profile_url, page)
-        _emit_progress(
-            progress_callback,
-            phase="fetching",
-            page=page,
-            pages_read=len(page_reports),
-            max_pages=max_pages,
-            found_count=len(all_items),
-            seller_alias=parsed["alias"],
-        )
+        _emit_progress(progress_callback, phase="fetching", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), seller_alias=effective_alias)
         try:
             response = client.get(url, headers={"User-Agent": "Mozilla/5.0 FlipFynd/1.0", "Accept": "text/html"}, timeout=timeout)
         except requests.RequestException as exc:
@@ -212,46 +200,19 @@ def fetch_public_seller_inventory_batch(
         if response.status_code != 200:
             _emit_progress(progress_callback, phase="error", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), status="HTTP_ERROR")
             return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
-        items = extract_public_profile_items(response.text, seller_alias=parsed["alias"], seller_id=parsed["seller_id"])
+        items = extract_public_profile_items(response.text, seller_alias=effective_alias, seller_id=parsed["seller_id"])
         ids = tuple(sorted(x["tradera_item_id"] for x in items if x.get("tradera_item_id")))
         page_reports.append({"page": page, "count": len(items), "url": url})
         if not items or ids == previous_ids:
             exhausted = True
-            _emit_progress(
-                progress_callback,
-                phase="exhausted",
-                page=page,
-                pages_read=len(page_reports),
-                max_pages=max_pages,
-                found_count=len(all_items),
-                page_count=len(items),
-                seller_alias=parsed["alias"],
-            )
+            _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
             break
         previous_ids = ids
         for item in items:
             all_items[item["tradera_item_id"]] = item
-        _emit_progress(
-            progress_callback,
-            phase="page_complete",
-            page=page,
-            pages_read=len(page_reports),
-            max_pages=max_pages,
-            found_count=len(all_items),
-            page_count=len(items),
-            seller_alias=parsed["alias"],
-        )
+        _emit_progress(progress_callback, phase="page_complete", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
         page += 1
-    _emit_progress(
-        progress_callback,
-        phase="complete",
-        page=page,
-        pages_read=len(page_reports),
-        max_pages=max_pages,
-        found_count=len(all_items),
-        exhausted=exhausted,
-        seller_alias=parsed["alias"],
-    )
+    _emit_progress(progress_callback, phase="complete", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), exhausted=exhausted, seller_alias=effective_alias)
     return {
         "ok": True,
         "status": "OK",
