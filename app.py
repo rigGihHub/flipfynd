@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.96"
+APP_VERSION = "v0.12.97"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -668,6 +668,16 @@ def item_matches_search(
             search,
         )
     )
+
+
+def normalize_sport_category_search(search, sport):
+    """Treat category words as 'all cards in selected sport', not keywords."""
+    normalized = normalize_text(search)
+    aliases = {
+        "football": {"fotbollskort", "fotbolls kort", "football cards", "soccer cards"},
+        "hockey": {"hockeykort", "hockey cards"},
+    }
+    return "" if normalized in aliases.get(str(sport or "").casefold(), set()) else search
 
 
 def infer_item_sport(item):
@@ -1996,6 +2006,12 @@ with st.form("analysis_form"):
         placeholder="T.ex. Bedard, Young Guns, Messi…",
         help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",
     )
+    effective_search = normalize_sport_category_search(search, sport)
+    if str(search or "").strip() and not str(effective_search or "").strip():
+        st.caption(
+            f"{sport_label} är redan valt ovan. FlipFynd söker därför i alla {sport_label.lower()}kort "
+            "i stället för att bara matcha annonser som råkar innehålla kategorinamnet."
+        )
 
     with st.expander("Avancerade filter"):
         a1, a2 = st.columns(2)
@@ -2066,7 +2082,7 @@ if run:
         results, debug = analyze_data(
             data=data,
             sport=sport,
-            search=search,
+            search=effective_search,
             max_price=max_price,
             sale_type=sale_type,
             full_limit=full_limit,
