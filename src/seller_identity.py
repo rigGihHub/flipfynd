@@ -90,6 +90,17 @@ def _tokens(item: dict | None):
     return ids, urls, title
 
 
+def _price_key(item: dict | None):
+    item = item or {}
+    try:
+        value = item.get("pris")
+        if value in (None, ""):
+            value = item.get("price")
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
 def _same_listing(left: dict, right: dict) -> bool:
     left_ids, left_urls, left_title = _tokens(left)
     right_ids, right_urls, right_title = _tokens(right)
@@ -97,12 +108,9 @@ def _same_listing(left: dict, right: dict) -> bool:
         return True
     if not left_title or left_title != right_title:
         return False
-    try:
-        p1 = float(left.get("pris") or left.get("price"))
-        p2 = float(right.get("pris") or right.get("price"))
-        return abs(p1 - p2) < 0.01
-    except (TypeError, ValueError):
-        return False
+    p1 = _price_key(left)
+    p2 = _price_key(right)
+    return p1 is not None and p2 is not None and abs(p1 - p2) < 0.01
 
 
 def apply_seller_metadata(item: dict | None, source: dict | None = None) -> dict:
@@ -128,21 +136,80 @@ def apply_seller_metadata(item: dict | None, source: dict | None = None) -> dict
     return out
 
 
-def backfill_seller_metadata(items) -> list[dict]:
-    """Retroactively copy seller metadata only between safely matched copies of a listing.
+def _seller_signature(item: dict) -> tuple[str, str, str]:
+    return (
+        (seller_alias(item) or "").casefold(),
+        seller_id(item) or "",
+        seller_url(item) or "",
+    )
 
-    Strong item-id or URL matches win. Title+price is only a fallback. Existing
-    non-empty values are never overwritten.
+
+def _add_unique(index: dict, key, donor: dict):
+    """Index a donor only while all donors for the key agree on seller identity."""
+    if key in (None, ""):
+        return
+    existing = index.get(key)
+    if existing is None and key not in index:
+        index[key] = donor
+        return
+    if existing is None:
+        return
+    if _seller_signature(existing) != _seller_signature(donor):
+        index[key] = None
+
+
+def backfill_seller_metadata(items) -> list[dict]:
+    """Retroactively copy seller metadata between safely matched listing copies.
+
+    This is intentionally indexed rather than pairwise. Strong item-id/URL keys
+    are preferred; title+price is only used when that fallback key maps to one
+    unambiguous seller identity. Existing non-empty values are never overwritten.
+    The indexed design keeps large seller inventories practical instead of O(n²).
     """
     rows = [apply_seller_metadata(x) for x in (items or []) if isinstance(x, dict)]
     donors = [row for row in rows if seller_alias(row) or seller_id(row) or seller_url(row)]
+
+    by_id = {}
+    by_url = {}
+    by_title_price = {}
+    for donor in donors:
+        ids, urls, title = _tokens(donor)
+        for value in ids:
+            _add_unique(by_id, value, donor)
+        for value in urls:
+            _add_unique(by_url, value, donor)
+        price = _price_key(donor)
+        if title and price is not None:
+            _add_unique(by_title_price, (title, price), donor)
+
     result = []
     for row in rows:
+        ids, urls, title = _tokens(row)
+        strong = []
+        for value in ids:
+            donor = by_id.get(value)
+            if donor is not None:
+                strong.append(donor)
+        for value in urls:
+            donor = by_url.get(value)
+            if donor is not None:
+                strong.append(donor)
+
         enriched = row
-        for donor in donors:
-            if donor is row or not _same_listing(row, donor):
-                continue
-            enriched = apply_seller_metadata(enriched, donor)
+        if strong:
+            # Multiple strong keys may point to the same seller; apply all
+            # agreeing metadata without overwriting fields already present.
+            signatures = {_seller_signature(donor) for donor in strong}
+            if len(signatures) == 1:
+                for donor in strong:
+                    if donor is not row:
+                        enriched = apply_seller_metadata(enriched, donor)
+        else:
+            price = _price_key(row)
+            donor = by_title_price.get((title, price)) if title and price is not None else None
+            if donor is not None and donor is not row:
+                enriched = apply_seller_metadata(enriched, donor)
+
         result.append(enriched)
     return result
 
