@@ -768,6 +768,17 @@ def save_items(
             indent=2,
         )
 
+    # Keep the active market across Streamlit Cloud deploys. Persistence is
+    # optional: a database outage must never make the crawler lose its local
+    # page-by-page progress.
+    database_url = os.getenv("FLIPFYND_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if database_url and path.resolve() == DATA_PATH.resolve():
+        try:
+            from src.persistent_store import save_namespace
+            save_namespace(database_url, "active_market", list(items or []))
+        except Exception as exc:
+            print(f"Varning: marknaden kunde inte sparas persistent: {exc}", flush=True)
+
 
 def merge_items(
     old_items,
@@ -1258,4 +1269,3 @@ def fetch_tradera_category(
         stop_reason=stop_reason,
     )
     return all_items, logs
-

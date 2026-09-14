@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.13.0"
+APP_VERSION = "v0.13.3"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -566,6 +566,17 @@ def get_data(data_version=None):
     # writes page-by-page, so a no-argument cache could otherwise keep showing
     # an old dataset until the subprocess finishes.
     base = load_data(str(DATA_PATH))
+    # Streamlit Cloud's local filesystem is replaced on every deployment.
+    # Restore the last successfully fetched market before showing an empty app.
+    if not base and DATABASE_URL:
+        try:
+            persisted = load_namespace(DATABASE_URL, "active_market", [])
+            if isinstance(persisted, list):
+                base = [row for row in persisted if isinstance(row, dict)]
+                if base:
+                    _clear_storage_error("active_market")
+        except Exception as exc:
+            _record_storage_error("active_market", exc)
     expansion = load_data(str(SEARCH_EXPANSION_DATA_PATH))
     merged = []
     seen = set()
@@ -832,6 +843,10 @@ def start_fetch(
             text=True,
             cwd=str(BASE_DIR),
             creationflags=creationflags,
+            env={
+                **os.environ,
+                **({"FLIPFYND_DATABASE_URL": DATABASE_URL} if DATABASE_URL else {}),
+            },
         )
     except Exception as exc:
         try:
