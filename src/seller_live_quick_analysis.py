@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Callable, Iterable
 
 from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
+from src.seller_collector_signals import collector_signals
 
 
 def _text(item: dict) -> str:
@@ -39,6 +40,7 @@ def _identity_key(item: dict) -> str:
 def _priority_seed(item: dict) -> tuple:
     """Cheap deterministic pre-sort before the expensive fast analyser runs."""
     title = _text(item).casefold()
+    collector = collector_signals(item)
     card_tokens = (
         "upper deck", "topps", "panini", "pinnacle", "opc", "o-pee-chee",
         "score", "donruss", "fleer", "select", "prizm", "chrome", "finest",
@@ -47,7 +49,7 @@ def _priority_seed(item: dict) -> tuple:
     )
     signal = sum(1 for token in card_tokens if token in title)
     price = _price(item)
-    return (-signal, price if price is not None else 10**12, title)
+    return (-int(collector.get("score") or 0), -signal, price if price is not None else 10**12, title)
 
 
 def _num(value, default=0.0) -> float:
@@ -60,8 +62,8 @@ def _num(value, default=0.0) -> float:
 def _quick_score(result: dict) -> float:
     """Rank research priority, not economic value.
 
-    Exact identity and actual SOLD evidence dominate. Star/player scores can
-    help break ties but cannot create a strong quick candidate by themselves.
+    Exact identity and actual SOLD evidence dominate. Collector title signals
+    only help research ordering; they cannot create valuation or BUY evidence.
     """
     identity = _num(result.get("exact_identity_gate_score"))
     sold = int(_num(result.get("sold_comparable_count") or result.get("sold_comps")))
@@ -70,6 +72,8 @@ def _quick_score(result: dict) -> float:
     edge = _num(result.get("market_edge_score"))
     decision = str(result.get("beslut") or result.get("decision") or "").upper()
     verified = bool(result.get("exact_identity_gate_supports_exact_comp_search"))
+    collector = collector_signals(result)
+    collector_score = _num(collector.get("score"))
 
     score = (
         min(identity, 100) * 0.34
@@ -79,6 +83,7 @@ def _quick_score(result: dict) -> float:
         + min(sold, 5) * 4.0
         + (8.0 if verified else 0.0)
         + (8.0 if decision.startswith("KÖP") else 0.0)
+        + min(collector_score, 40) * 0.35
     )
     return round(max(0.0, min(100.0, score)), 1)
 
@@ -87,11 +92,15 @@ def _label(result: dict, score: float) -> tuple[str, str]:
     sold = int(_num(result.get("sold_comparable_count") or result.get("sold_comps")))
     verified = bool(result.get("exact_identity_gate_supports_exact_comp_search"))
     decision = str(result.get("beslut") or result.get("decision") or "").upper()
+    collector = collector_signals(result)
+    names = collector.get("signals") or []
 
     if decision.startswith("KÖP") and verified and sold >= 1:
         return "STARK KANDIDAT", "Fastanalysen hittar både köpsignal, sökbar identitet och SOLD-underlag. Kör full analys innan köp."
     if verified and sold >= 1:
         return "ANALYSERA NÄSTA", "Exakt identitet och SOLD-underlag finns. Full analys kan avgöra om samfrakten skapar ett riktigt fynd."
+    if names and score >= 48:
+        return "VÄRD ATT GRANSKA", "Annonsen har kortspecifika värdedrivare som motiverar djupare kontroll, men marknadsbevis saknas ännu."
     if score >= 48:
         return "VÄRD ATT GRANSKA", "Strukturen ser intressant ut, men identitet eller marknadsbevis är ännu för tunt."
     return "LÅG PRIORITET", "Fastanalysen hittar ännu inte tillräckligt stöd för att prioritera kortet."
@@ -140,6 +149,7 @@ def quick_analyze_seller_inventory(
         if isinstance(result, dict):
             merged.update(result)
         merged = apply_seller_metadata(merged, prepared)
+        collector = collector_signals(merged)
         score = _quick_score(merged)
         label, reason = _label(merged, score)
         rows.append({
@@ -155,6 +165,8 @@ def quick_analyze_seller_inventory(
             "sold_comps": int(_num(merged.get("sold_comparable_count") or merged.get("sold_comps"))),
             "valuation_confidence": _num(merged.get("valuation_confidence_score")),
             "market_edge": _num(merged.get("market_edge_score")),
+            "collector_signal_score": int(collector.get("score") or 0),
+            "collector_signals": list(collector.get("signals") or []),
             "seller_alias": seller_alias(merged),
             "seller_id": seller_id(merged),
             "seller_url": seller_url(merged),
@@ -165,6 +177,7 @@ def quick_analyze_seller_inventory(
         0 if str(row.get("decision") or "").upper().startswith("KÖP") else 1,
         0 if row.get("identity_ok") and row.get("sold_comps", 0) > 0 else 1,
         -float(row.get("quick_score") or 0),
+        -int(row.get("collector_signal_score") or 0),
         row.get("price") if row.get("price") is not None else 10**12,
     ))
     shortlist_rows = rows[: max(1, min(int(shortlist), 5))]
@@ -174,5 +187,5 @@ def quick_analyze_seller_inventory(
         "failed_count": failed,
         "rows": rows,
         "shortlist": shortlist_rows,
-        "note": "Snabbanalys prioriterar vad som bör fullanalyseras. Den är inte en köporder och delad frakt får inte skapa ett fynd på egen hand.",
+        "note": "Snabbanalys prioriterar vad som bör fullanalyseras. Collector-signaler är researchprioritering, inte värdering eller KÖP-bevis.",
     }
