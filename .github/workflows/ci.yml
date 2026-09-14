@@ -24,27 +24,9 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      - name: Apply compatibility patch
-        run: python scripts/patch_public_import_progress_compat.py
-
-      - name: Apply clean Seller Top 5 UI patch
-        run: python scripts/patch_seller_top5_ui_clean.py
-
-      - name: Apply dynamic Seller Top 5 patch
-        run: python scripts/patch_seller_dynamic_top5.py
-
-      - name: Apply Seller Top 5 resume resilience
-        run: python scripts/patch_seller_resume_resilience.py
-
-      - name: Apply Seller Top 5 incomplete-profile continue patch
-        run: python scripts/patch_seller_continue_incomplete.py
-
-      - name: Apply Seller Top 5 interrupted-profile resume guard
-        run: python scripts/patch_seller_profile_resume_guard.py
-
-      - name: Apply Seller Top 5 mobile UX cleanup
-        run: python scripts/patch_seller_top5_mobile_ux.py
-
+      # The old Seller Top 5 patch chain is intentionally gone. Those patches
+      # are already integrated in main and were mutating current code back into
+      # obsolete intermediate states. Keep only the current one-time migration.
       - name: Apply Seller Top 5 v0.12.85 continuation fix
         run: python scripts/patch_seller_top5_v01285.py
 
