@@ -7,9 +7,9 @@ def _fake_analyze(item, mode="fast", strategy_mode=None, sport=None, all_items=N
         "titel": title,
         "lank": item.get("lank"),
         "pris": item.get("pris", 0),
-        "exact_identity_gate_supports_exact_comp_search": True,
-        "exact_identity_gate_score": 90,
-        "valuation_confidence_score": 60,
+        "exact_identity_gate_supports_exact_comp_search": item.get("identity_ok", True),
+        "exact_identity_gate_score": 90 if item.get("identity_ok", True) else 20,
+        "valuation_confidence_score": item.get("valuation", 60),
         "market_edge_score": item.get("edge", 0),
         "sold_comparable_count": item.get("sold", 0),
         "rank_score": item.get("rank", 50),
@@ -20,7 +20,7 @@ def _fake_analyze(item, mode="fast", strategy_mode=None, sport=None, all_items=N
 
 def test_returns_at_most_five_rows():
     items = [
-        {"titel": f"Card {i}", "lank": f"u{i}", "pris": 10 + i, "edge": 20 + i, "sold": i % 3, "decision": "UNDERSÖK"}
+        {"titel": f"Card {i}", "lank": f"u{i}", "pris": 10 + i, "edge": 60 + i, "sold": i % 3, "decision": "UNDERSÖK"}
         for i in range(12)
     ]
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=12, full_limit=10)
@@ -36,6 +36,26 @@ def test_skip_rows_do_not_pad_top5():
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=12, full_limit=10)
     assert out["status"] == "NO_STRONG_CANDIDATES"
     assert out["rows"] == []
+
+
+def test_ordinary_zero_comp_undersok_is_not_presented_as_find():
+    items = [{
+        "titel": "1986-87 Kraft Dan Daoust", "lank": "dan", "pris": 87,
+        "edge": 20, "sold": 0, "valuation": 25, "decision": "UNDERSÖK",
+    }]
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
+    assert out["status"] == "NO_STRONG_CANDIDATES"
+    assert out["rows"] == []
+
+
+def test_zero_comp_research_candidate_needs_strong_signal():
+    items = [{
+        "titel": "Rare numbered parallel /25", "lank": "rare", "pris": 150,
+        "edge": 72, "sold": 0, "valuation": 60, "rank": 90, "decision": "UNDERSÖK",
+    }]
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
+    assert out["status"] == "READY"
+    assert out["rows"][0]["title"] == "Rare numbered parallel /25"
 
 
 def test_verified_buy_ranks_before_unverified_skip():
