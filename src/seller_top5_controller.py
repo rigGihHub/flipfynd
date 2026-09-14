@@ -265,6 +265,7 @@ def resolve_seller_top5(
     full_limit: int = 10,
     public_pages: int = 120,
     progress_callback=None,
+    database_url=None,
 ) -> dict:
     alias = str(seller or "").strip()
     profile_text = str(profile_url or "").strip()
@@ -312,7 +313,7 @@ def resolve_seller_top5(
         parsed_profile = parse_profile_url(profile_text) or {}
         seller_id = str(parsed_profile.get("seller_id") or "").strip() or None
         key = _checkpoint_key(alias, profile_text)
-        checkpoint = load_checkpoint(key, session=session)
+        checkpoint = load_checkpoint(key, session=session, database_url=database_url)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}, "total_listing_estimate": None}
 
@@ -326,7 +327,7 @@ def resolve_seller_top5(
                 "total_listing_estimate": None,
             }
             stored_items = {}
-            save_checkpoint(key, checkpoint, session=session)
+            save_checkpoint(key, checkpoint, session=session, database_url=database_url)
 
         start_page = max(1, int(checkpoint.get("next_page") or 1))
         batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
@@ -403,6 +404,7 @@ def resolve_seller_top5(
                     "total_listing_estimate": total_listing_estimate,
                 },
                 session=session,
+                database_url=database_url,
             )
             if exhausted:
                 break
@@ -434,6 +436,7 @@ def resolve_seller_top5(
                 key,
                 {"next_page": current_page, "pages_read": total_pages_read, "items": stored_items, "total_listing_estimate": total_listing_estimate},
                 session=session,
+                database_url=database_url,
             )
             return _partial_result_from_saved(
                 alias,
@@ -453,7 +456,7 @@ def resolve_seller_top5(
                 total_listing_estimate=total_listing_estimate,
             )
 
-        clear_checkpoint(key, session=session)
+        clear_checkpoint(key, session=session, database_url=database_url)
         result = _rank(
             alias,
             list(stored_items.values()),

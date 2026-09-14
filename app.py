@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.13.4"
+APP_VERSION = "v0.13.5"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6547,13 +6547,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         profile_url=seller_top5_profile_url_resolved,
                         progress_callback=_seller_search_progress,
                         quick_limit=60,
-                        full_limit=30,
+                        full_limit=8,
+                        database_url=DATABASE_URL,
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
                     # controller module in memory. Refresh that module automatically and
                     # continue the same user action instead of asking for another click.
-                    if "profile_url" not in str(exc) and "progress_callback" not in str(exc):
+                    if not any(name in str(exc) for name in ("profile_url", "progress_callback", "database_url")):
                         raise
                     seller_progress_bar.progress(2, text="2% · Synkar analysmotorn automatiskt…")
                     seller_progress_line.info("Ny kod upptäcktes · laddar om Seller Top 5-motorn utan att avbryta sökningen")
@@ -6569,7 +6570,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         profile_url=seller_top5_profile_url_resolved,
                         progress_callback=_seller_search_progress,
                         quick_limit=60,
-                        full_limit=30,
+                        full_limit=8,
+                        database_url=DATABASE_URL,
                     )
                 if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
                     top5 = dict(top5)

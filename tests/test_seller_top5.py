@@ -120,7 +120,7 @@ def test_large_inventory_scans_beyond_first_batch():
     assert out["quick_batches"] >= 4
     assert out["quick_analysed"] == 130
     assert out["coverage_complete"] is True
-    assert out["full_candidate_limit"] >= 20
+    assert 5 <= out["full_candidate_limit"] <= 15
 
 
 def test_duplicate_inventory_rows_are_only_quick_scanned_once():

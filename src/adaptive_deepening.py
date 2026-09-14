@@ -20,8 +20,13 @@ def dynamic_deep_analysis_cap(candidates, base_limit=12, floor=48, max_cap=96):
     return min(total, max(int(base_limit or 1), min(int(max_cap or target), target)))
 
 
-def select_dynamic_seller_deep_rows(rows, base_limit=30, max_cap=120):
-    """Keep the baseline leaders and every credible late value signal within a CPU cap."""
+def select_dynamic_seller_deep_rows(rows, base_limit=8, max_cap=15):
+    """Build a small adaptive pool for a final Top 5.
+
+    The quick pass still scans the complete seller inventory. Full analysis is
+    reserved for the leading rows plus a bounded number of later rows carrying
+    evidence that can realistically overturn the current Top 5.
+    """
     rows = list(rows or [])
     baseline = rows[:max(1, int(base_limit or 1))]
     selected = list(baseline)

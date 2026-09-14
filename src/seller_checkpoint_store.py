@@ -18,11 +18,29 @@ def _path(key: str) -> Path:
     return _ROOT / f'{digest}.json'
 
 
-def load_checkpoint(key: str, *, session=None) -> dict | None:
+def _namespace(key: str) -> str:
+    digest = hashlib.sha256(str(key or '').encode('utf-8')).hexdigest()
+    return f'seller_checkpoint::{digest}'
+
+
+def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None:
     if session is not None:
         try:
             value = session.get(key)
             if isinstance(value, dict):
+                return dict(value)
+        except Exception:
+            pass
+    if database_url:
+        try:
+            from src.persistent_store import load_namespace
+            value = load_namespace(database_url, _namespace(key), None)
+            if isinstance(value, dict):
+                if session is not None:
+                    try:
+                        session[key] = value
+                    except Exception:
+                        pass
                 return dict(value)
         except Exception:
             pass
@@ -42,7 +60,7 @@ def load_checkpoint(key: str, *, session=None) -> dict | None:
     return None
 
 
-def save_checkpoint(key: str, value: dict, *, session=None) -> None:
+def save_checkpoint(key: str, value: dict, *, session=None, database_url=None) -> None:
     payload = dict(value or {})
     if session is not None:
         try:
@@ -57,9 +75,15 @@ def save_checkpoint(key: str, value: dict, *, session=None) -> None:
         tmp.replace(path)
     except Exception:
         pass
+    if database_url:
+        try:
+            from src.persistent_store import save_namespace
+            save_namespace(database_url, _namespace(key), payload)
+        except Exception:
+            pass
 
 
-def clear_checkpoint(key: str, *, session=None) -> None:
+def clear_checkpoint(key: str, *, session=None, database_url=None) -> None:
     if session is not None:
         try:
             if key in session:
@@ -70,3 +94,9 @@ def clear_checkpoint(key: str, *, session=None) -> None:
         _path(key).unlink(missing_ok=True)
     except Exception:
         pass
+    if database_url:
+        try:
+            from src.persistent_store import save_namespace
+            save_namespace(database_url, _namespace(key), None)
+        except Exception:
+            pass
