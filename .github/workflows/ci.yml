@@ -24,11 +24,11 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      # The old Seller Top 5 patch chain is intentionally gone. Those patches
-      # are already integrated in main and were mutating current code back into
-      # obsolete intermediate states. Keep only the current one-time migration.
       - name: Apply Seller Top 5 v0.12.85 continuation fix
         run: python scripts/patch_seller_top5_v01285.py
+
+      - name: Apply Seller Top 5 v0.12.86 UX fix
+        run: python scripts/patch_seller_top5_v01286.py
 
       - name: Install dependencies
         run: |
@@ -52,5 +52,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '4189824+github-actions[bot]@users.noreply.github.com'
           git add app.py src/seller_top5_controller.py src/public_seller_inventory.py
-          git commit -m 'Fix Seller Top 5 continuation and first-batch ranking'
+          git commit -m 'Simplify Seller Top 5 progress and infer seller identity'
           git push origin HEAD:main
