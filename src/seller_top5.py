@@ -53,6 +53,24 @@ def _quick_rank_key(row: dict):
     )
 
 
+def _seller_presentation_label(row: dict) -> dict:
+    """Map ordinary decisions to Seller Top 5 presentation only.
+
+    The underlying full-analysis decision is preserved verbatim. A SKIP row may
+    still be one of the seller's five highest-ranked cards, but must never look
+    like a positive find signal in the seller view.
+    """
+    out = dict(row)
+    decision = str(out.get("decision") or "SKIP").upper()
+    if decision.startswith("KÖP"):
+        out["label"] = "KÖP-KANDIDAT"
+    elif decision.startswith("UNDERSÖK"):
+        out["label"] = "VÄRT ATT UNDERSÖKA"
+    else:
+        out["label"] = "BÄST AV RESTEN"
+    return out
+
+
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int) -> dict:
     anchor = {"saljare": alias, "tradera_item_id": "__seller_top5_anchor__"}
     batch_size = max(20, min(int(quick_limit or 60), 100))
@@ -174,7 +192,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         row["quick_score"] = qrow.get("quick_score")
         row["seller"] = alias
         row["analysis_level"] = "full"
-        full_rows.append(row)
+        full_rows.append(_seller_presentation_label(row))
 
     # Exact same final ranking fields as the ordinary FlipFynd result list.
     full_rows.sort(key=_ordinary_rank_key, reverse=True)
