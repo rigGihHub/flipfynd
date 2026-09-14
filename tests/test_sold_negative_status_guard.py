@@ -1,5 +1,8 @@
+import pytest
+
 from src.external_sold_sources import adapt_external_rows
 from src.sold_comp_collector import collect_sold_comps, has_explicit_sold_evidence
+from src.sold_comp_import import import_sold_comp_rows, normalize_sold_comp
 
 
 def test_collector_rejects_unsold_even_when_word_contains_sold():
@@ -52,3 +55,23 @@ def test_external_adapter_accepts_explicit_completed_sold_status():
     )
     assert out["adapted_count"] == 1
     assert out["rows"][0]["sale_status"] == "sold"
+
+
+def test_central_normalizer_rejects_unsold_despite_positive_sold_price():
+    with pytest.raises(ValueError, match="osåld/aktiv/avbruten"):
+        normalize_sold_comp({"title": "Card sale", "sold_price": 100, "status": "unsold"})
+
+
+def test_central_normalizer_rejects_active_listing_despite_sold_price_field():
+    out = import_sold_comp_rows([
+        {"title": "Card sale", "sold_price": 100, "market_state": "active"}
+    ])
+    assert out["valid_count"] == 0
+    assert out["added_count"] == 0
+    assert out["error_count"] == 1
+
+
+def test_central_normalizer_still_accepts_sold_price_when_no_contradiction_exists():
+    row = normalize_sold_comp({"title": "Card sale", "sold_price": 100})
+    assert row["market_state"] == "sold"
+    assert row["sold_price"] == 100
