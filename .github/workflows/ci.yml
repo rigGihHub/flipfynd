@@ -24,8 +24,11 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      - name: Apply public seller import compatibility patch
+      - name: Apply compatibility patch
         run: python scripts/patch_public_import_progress_compat.py
+
+      - name: Apply clean Seller Top 5 UI patch
+        run: python scripts/patch_seller_top5_ui_clean.py
 
       - name: Install dependencies
         run: |
@@ -39,7 +42,7 @@ jobs:
       - name: Run test suite
         run: pytest -q
 
-      - name: Commit verified compatibility fix
+      - name: Commit verified Seller Top 5 UI
         if: github.event_name == 'push'
         run: |
           if git diff --quiet -- app.py; then
@@ -47,7 +50,7 @@ jobs:
             exit 0
           fi
           git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.email '4189824+github-actions[bot]@users.noreply.github.com'
           git add app.py
-          git commit -m 'Handle stale public seller fetcher during progress import'
+          git commit -m 'Clean Seller Top 5 cards and hide diagnostics'
           git push origin HEAD:main
