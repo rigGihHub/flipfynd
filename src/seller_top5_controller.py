@@ -11,7 +11,7 @@ from typing import Callable, Iterable
 
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
-from src.seller_top5_fallback import build_local_seller_top5
+from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
 
@@ -30,9 +30,11 @@ def _credentials_pair(credentials):
 
 
 class _SellerProgress:
-    """Best-effort Streamlit progress UI; inert in tests/non-Streamlit callers."""
-    def __init__(self):
+    """Best-effort Streamlit progress UI; inert when an external callback owns UI."""
+    def __init__(self, enabled: bool = True):
         self.bar = None
+        if not enabled:
+            return
         try:
             import streamlit as st
             from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -91,7 +93,7 @@ def _emit(callback, ui, payload):
 
 
 def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress_callback=None, ui=None):
-    ui = ui or _SellerProgress()
+    ui = ui or _SellerProgress(enabled=progress_callback is None)
 
     def combined_progress(payload):
         _emit(progress_callback, ui, payload)
@@ -150,7 +152,9 @@ def resolve_seller_top5(
         return {"status": "NO_SELLER", "rows": [], "seller": None,
                 "inventory_count": 0, "inventory_source": "NONE", "fallback_reason": None}
 
-    ui = _SellerProgress()
+    # app.py owns the visible progress bar when it supplies a callback. Creating
+    # another Streamlit bar here would duplicate the progress UI on mobile.
+    ui = _SellerProgress(enabled=progress_callback is None)
 
     def combined_progress(payload):
         _emit(progress_callback, ui, payload)
@@ -202,19 +206,30 @@ def resolve_seller_top5(
             return result
         public_failure = public
 
-    # Preserve the seller-scoped local fallback contract and metadata. The local
-    # helper filters exact seller identity before invoking the same Top 5 engine.
-    combined_progress({"phase": "filter_start", "done": 0, "total": len(local_rows), "percent": 20})
-    result = build_local_seller_top5(
+    # Local fallback: resolve the seller inventory first, then run the normal
+    # cross-sport ranking only on those rows. Progress therefore reflects the
+    # seller's actual inventory rather than the entire local FlipFynd market.
+    seller_rows = local_inventory_for_seller(alias, local_rows)
+    combined_progress({
+        "phase": "filter_start",
+        "done": 0,
+        "total": len(seller_rows),
+        "found_count": len(seller_rows),
+        "percent": 20,
+    })
+    result = _rank(
         alias,
-        local_rows,
+        seller_rows,
         analyze_fn=analyze_fn,
-        sport="all",
         quick_limit=quick_limit,
         full_limit=full_limit,
+        source="LOCAL_MARKET",
+        progress_callback=progress_callback,
+        ui=ui,
     )
     result = dict(result)
-    combined_progress({"phase": "complete", "done": len(result.get("rows") or []), "total": 5, "percent": 100})
+    result["local_market_count"] = len(local_rows)
+    result["local_seller_match_count"] = len(seller_rows)
     if creds and api_failure:
         result["fallback_reason"] = "API_FAILED"
         result["api_status"] = api_failure.get("status") or "UNKNOWN_API_ERROR"
