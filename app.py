@@ -119,7 +119,6 @@ from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.seller_top5_controller import resolve_seller_top5
-from src.seller_background_jobs import submit_seller_job, seller_job_snapshot, discard_seller_job
 from src.seller_inventory_triage import build_seller_inventory_triage
 from src.search_yield_learning import build_yield_report, route_budget_guidance
 from src.near_buy_guidance import build_near_buy_guidance
@@ -267,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.13.2"
+APP_VERSION = "v0.13.0"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1048,25 +1047,6 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
         sport=sport,
     )
     set_cached_analysis(signature, result)
-    return result
-
-
-def _run_seller_search_background(alias, local_market, creds, profile_url, progress_callback):
-    result = resolve_seller_top5(
-        alias,
-        local_market,
-        analyze_fn=_cached_seller_analysis,
-        sport="all",
-        credentials=creds,
-        profile_url=profile_url,
-        progress_callback=progress_callback,
-        quick_limit=60,
-        full_limit=30,
-    )
-    if profile_url and result.get("inventory_source") == "LOCAL_MARKET":
-        result = dict(result)
-        result["status"] = "PROFILE_INCOMPLETE"
-        result["rows"] = []
     return result
 
 
@@ -6480,63 +6460,137 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
     _seller_previous_result = st.session_state.get("seller_top5_result") or {}
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
     _seller_button_label = "Fortsätt söka" if _seller_continue_inventory else "🔎 Hitta säljarens bästa kort"
-    _seller_job_id = st.session_state.get("seller_top5_job_id")
-    _seller_job = seller_job_snapshot(_seller_job_id)
-    _seller_running = _seller_job.get("status") in {"QUEUED", "RUNNING"}
-    if st.button(
-        "⏳ Säljarsökning pågår i bakgrunden" if _seller_running else _seller_button_label,
-        key="seller_top5_run",
-        use_container_width=True,
-        disabled=_seller_running,
-    ):
+    if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
             st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
         else:
             creds = _resolve_tradera_api_credentials()
+            sport_key = "all"
             local_market = get_data(get_data_version())
+            seller_status = st.status(f"🔎 Söker {alias}", expanded=False)
+            seller_progress_line = seller_status.empty()
+            seller_progress_bar = st.progress(0, text="Startar…")
 
-            def _background_task(progress):
-                return _run_seller_search_background(
-                    alias,
-                    local_market,
-                    creds,
-                    seller_top5_profile_url_resolved,
-                    progress,
-                )
+            def _seller_search_progress(info):
+                phase = str((info or {}).get("phase") or "")
+                page = int((info or {}).get("page") or 0)
+                found = int((info or {}).get("found_count") or 0)
+                pages_read = int((info or {}).get("pages_read") or 0)
+                max_pages = int((info or {}).get("max_pages") or 0)
+                progress_percent = (info or {}).get("percent")
+                if progress_percent is None:
+                    if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                        progress_percent = min(20, 2 + int(18 * pages_read / max(1, max_pages)))
+                    elif phase.startswith("filter"):
+                        progress_percent = 24
+                    elif phase.startswith("quick"):
+                        progress_percent = 45
+                    elif phase.startswith("full"):
+                        progress_percent = 75
+                    elif phase == "ranking":
+                        progress_percent = 97
+                    elif phase == "complete":
+                        progress_percent = 100
+                    else:
+                        progress_percent = 1
+                progress_percent = max(0, min(100, int(progress_percent)))
+                done = int((info or {}).get("done") or 0)
+                total = int((info or {}).get("total") or 0)
+                if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                    progress_text = f"{progress_percent}% · {found} annonser hittade"
+                elif phase.startswith("filter"):
+                    progress_text = f"{progress_percent}% · Filtrerar kort" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("quick"):
+                    progress_text = f"{progress_percent}% · Prioriterar" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("full"):
+                    progress_text = f"{progress_percent}% · Analyserar toppkandidater" + (f" · {done}/{total}" if total else "")
+                elif phase == "ranking":
+                    progress_text = f"{progress_percent}% · Rankar Top 5"
+                elif phase == "complete":
+                    progress_text = "100% · Klart"
+                else:
+                    progress_text = f"{progress_percent}% · Bearbetar…"
+                seller_progress_bar.progress(progress_percent, text=progress_text)
+                if phase == "fetching":
+                    seller_progress_line.caption(f"Sida {page} · {found} annonser")
+                elif phase == "page_complete":
+                    seller_progress_line.caption(f"Sida {page} klar · {found} annonser")
+                elif phase == "exhausted":
+                    seller_progress_line.caption(f"Alla sidor lästa · {found} annonser")
+                elif phase == "complete":
+                    seller_progress_line.caption(f"{found} annonser · rankar bästa korten")
 
-            st.session_state["seller_top5_job_id"] = submit_seller_job(_background_task)
-            st.rerun()
-
-    @st.fragment(run_every=1.0)
-    def _render_seller_background_status():
-        job_id = st.session_state.get("seller_top5_job_id")
-        snapshot = seller_job_snapshot(job_id)
-        status = snapshot.get("status")
-        if status in {"QUEUED", "RUNNING"}:
-            info = snapshot.get("progress") or {}
-            phase = str(info.get("phase") or "")
-            done = int(info.get("done") or 0)
-            total = int(info.get("total") or 0)
-            found = int(info.get("found_count") or 0)
-            percent = max(1, min(99, int(info.get("percent") or 1)))
-            label = "Hämtar annonser" if phase in {"starting", "fetching", "page_complete"} else "Analyserar kandidater"
-            st.progress(percent, text=f"{label} i bakgrunden · {done}/{total}" if total else f"{label} i bakgrunden · {found} hittade")
-            st.caption("Du kan använda den vanliga sökningen samtidigt.")
-        elif status == "COMPLETE":
-            result = snapshot.get("result") or {}
-            st.session_state["seller_top5_result"] = result
-            discard_seller_job(job_id)
-            st.session_state["seller_top5_job_id"] = None
-            st.rerun(scope="app")
-        elif status == "FAILED":
-            st.error("Säljarsökningen avbröts: " + str(snapshot.get("error") or "okänt fel"))
-            if st.button("Stäng felmeddelandet", key="seller_job_error_dismiss"):
-                discard_seller_job(job_id)
-                st.session_state["seller_top5_job_id"] = None
-                st.rerun(scope="app")
-
-    _render_seller_background_status()
+            try:
+                try:
+                    top5 = resolve_seller_top5(
+                        alias,
+                        local_market,
+                        analyze_fn=_cached_seller_analysis,
+                        sport=sport_key,
+                        credentials=creds,
+                        profile_url=seller_top5_profile_url_resolved,
+                        progress_callback=_seller_search_progress,
+                        quick_limit=60,
+                        full_limit=30,
+                    )
+                except TypeError as exc:
+                    # Streamlit may hot-reload app.py while keeping an older imported
+                    # controller module in memory. Refresh that module automatically and
+                    # continue the same user action instead of asking for another click.
+                    if "profile_url" not in str(exc) and "progress_callback" not in str(exc):
+                        raise
+                    seller_progress_bar.progress(2, text="2% · Synkar analysmotorn automatiskt…")
+                    seller_progress_line.info("Ny kod upptäcktes · laddar om Seller Top 5-motorn utan att avbryta sökningen")
+                    import importlib
+                    import src.seller_top5_controller as _seller_top5_controller
+                    _seller_top5_controller = importlib.reload(_seller_top5_controller)
+                    top5 = _seller_top5_controller.resolve_seller_top5(
+                        alias,
+                        local_market,
+                        analyze_fn=_cached_seller_analysis,
+                        sport="all",
+                        credentials=creds,
+                        profile_url=seller_top5_profile_url_resolved,
+                        progress_callback=_seller_search_progress,
+                        quick_limit=60,
+                        full_limit=30,
+                    )
+                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
+                    top5 = dict(top5)
+                    top5["status"] = "PROFILE_INCOMPLETE"
+                    top5["rows"] = []
+                st.session_state["seller_top5_result"] = top5
+                found_count = int(top5.get("inventory_count") or 0)
+                quick_count = int(top5.get("quick_analysed") or 0)
+                full_count = int(top5.get("full_analysed") or 0)
+                source = top5.get("inventory_source") or "okänd källa"
+                result_status = str(top5.get("status") or "")
+                if result_status == "INVENTORY_PARTIAL":
+                    pages_read = int(top5.get("public_pages_read") or 0)
+                    next_page = int(top5.get("public_next_page") or 1)
+                    seller_progress_bar.progress(100, text=f"{found_count} annonser inlästa · block klart")
+                    seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
+                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt till nästa sida", state="complete", expanded=False)
+                    st.rerun()  # refresh Seller Top 5 continuation UI
+                elif result_status == "PROFILE_INCOMPLETE":
+                    seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Läs nästa sida")
+                    seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
+                    st.rerun()  # refresh continuation button after incomplete profile
+                else:
+                    seller_status.write(
+                        f"{found_count} annonser hittade · {quick_count} snabbanalyserade · "
+                        f"{full_count} fullanalyserade · källa: {source}."
+                    )
+                    seller_progress_bar.progress(100, text="100% · Klart")
+                    seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
+            except Exception:
+                try:
+                    seller_progress_bar.progress(0, text="Sökningen avbröts")
+                except Exception:
+                    pass
+                seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
+                raise
 
 
 
