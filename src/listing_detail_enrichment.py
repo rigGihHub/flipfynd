@@ -21,6 +21,45 @@ def _norm(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def _canonical_seller(value):
+    """Return a conservative seller alias suitable for persistent listing data."""
+    seller = _norm(value)
+    if not (2 <= len(seller) <= 80):
+        return None
+    # Reject obvious chunks of surrounding item-page prose if a selector/text
+    # extraction was too broad. Tradera aliases do not need sentence punctuation.
+    if seller.count(" ") > 6 or any(token in seller.lower() for token in (
+        "köparskydd", "frakt", "omdöme", "betalning", "auktionen",
+    )):
+        return None
+    return seller
+
+
+def persist_seller_identity(item, seller_value=None):
+    """Preserve one verified seller alias under stable keys used across FlipFynd.
+
+    Existing seller identity always wins. A newly parsed detail-page seller is
+    copied to canonical aliases so later pruning, analysis and seller Top 5
+    fallback cannot lose it merely because a source used a different field name.
+    """
+    clone = dict(item or {})
+    existing = None
+    for key in ("saljare", "säljare", "seller_alias", "seller_name", "username", "seller", "seller_detail"):
+        value = clone.get(key)
+        if isinstance(value, dict):
+            value = value.get("alias") or value.get("Alias") or value.get("username") or value.get("Username")
+        candidate = _canonical_seller(value)
+        if candidate:
+            existing = candidate
+            break
+    seller = existing or _canonical_seller(seller_value)
+    if seller:
+        clone["saljare"] = seller
+        clone["seller_alias"] = seller
+        clone["seller_detail"] = clone.get("seller_detail") or seller
+    return clone
+
+
 def score_detail_priority(item):
     """Return a discovery-only priority for opening the item page.
 
@@ -46,7 +85,6 @@ def score_detail_priority(item):
             score += weights[label]
             reasons.append(label)
 
-    # Generic/short titles can hide relevant details in the full description.
     if title and len(title.split()) <= 5:
         score += 12
         reasons.append("kort/generisk titel")
@@ -70,7 +108,6 @@ def select_detail_candidates(items, known_links=None, limit=12):
         priority, reasons = score_detail_priority(item)
         is_new = link not in known_links
         already_rich = bool(item.get("detail_enriched_at") and item.get("full_description"))
-        # Prefer new listings, then old listings that still lack useful detail.
         freshness = 2 if is_new else (1 if not already_rich else 0)
         if freshness == 0:
             continue
@@ -91,9 +128,6 @@ def parse_detail_text(body_text):
     lower = text.lower()
     result = {}
 
-    # Prefer the shipping amount shown on the item detail page. This is more
-    # authoritative than the category-card text and avoids presenting the
-    # conservative 29 SEK fallback as if it were an observed shipping price.
     if "fri frakt" in lower:
         result["detail_shipping"] = 0
         result["detail_shipping_source"] = "Tradera-annons"
@@ -112,10 +146,7 @@ def parse_detail_text(body_text):
                 except ValueError:
                     pass
 
-    bid_patterns = [
-        r"(\d+)\s+bud\b",
-        r"bud\s*\(?\s*(\d+)\s*\)?",
-    ]
+    bid_patterns = [r"(\d+)\s+bud\b", r"bud\s*\(?\s*(\d+)\s*\)?"]
     for pattern in bid_patterns:
         match = re.search(pattern, lower, flags=re.IGNORECASE)
         if match:
@@ -134,15 +165,15 @@ def parse_detail_text(body_text):
                 result["exact_end_text"] = value[:100]
                 break
 
-    seller_patterns = [
-        r"(?:säljare|seller)\s*:?\s*([^|]{2,80}?)(?=\s{2,}|\bomdöme\b|\bfrakt\b|$)",
-    ]
+    seller_patterns = [r"(?:säljare|seller)\s*:?\s*([^|]{2,80}?)(?=\s{2,}|\bomdöme\b|\bfrakt\b|$)"]
     for pattern in seller_patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            seller = _norm(match.group(1))
-            if 2 <= len(seller) <= 80:
+            seller = _canonical_seller(match.group(1))
+            if seller:
                 result["seller_detail"] = seller
+                result["saljare"] = seller
+                result["seller_alias"] = seller
                 break
 
     return result
@@ -150,11 +181,7 @@ def parse_detail_text(body_text):
 
 def _json_ld_objects(html):
     objects = []
-    for raw in re.findall(
-        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
-        str(html or ""),
-        flags=re.IGNORECASE | re.DOTALL,
-    ):
+    for raw in re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', str(html or ""), flags=re.IGNORECASE | re.DOTALL):
         try:
             data = json.loads(raw.strip())
         except Exception:
@@ -216,7 +243,7 @@ def _collect_page_images(page):
 
 def enrich_listing_detail(page, item, timeout_ms=30000):
     link = item.get("lank")
-    enriched = dict(item)
+    enriched = persist_seller_identity(item)
     enriched["detail_enrichment_status"] = "failed"
     enriched["detail_source"] = "tradera_item_page"
     if not link:
@@ -236,7 +263,6 @@ def enrich_listing_detail(page, item, timeout_ms=30000):
         parsed = extract_jsonld_detail(html)
         parsed.update(parse_detail_text(body_text))
 
-        # Fallback description from metadata if JSON-LD did not contain one.
         if not parsed.get("full_description"):
             try:
                 meta = page.locator('meta[name="description"]')
@@ -253,6 +279,7 @@ def enrich_listing_detail(page, item, timeout_ms=30000):
             parsed["detail_image_urls"] = list(dict.fromkeys(existing + page_images))[:16]
 
         enriched.update({k: v for k, v in parsed.items() if v not in (None, "", [])})
+        enriched = persist_seller_identity(enriched, parsed.get("seller_detail"))
         if parsed.get("detail_shipping") is not None:
             enriched["frakt"] = parsed.get("detail_shipping")
             enriched["shipping_source"] = parsed.get("detail_shipping_source") or "Tradera-annons"
@@ -267,9 +294,9 @@ def enrich_listing_detail(page, item, timeout_ms=30000):
 def enrich_selected_listings(browser, items, known_links=None, limit=12, timeout_ms=30000, log=print):
     candidates = select_detail_candidates(items, known_links=known_links, limit=limit)
     if not candidates:
-        return items, {"attempted": 0, "enriched": 0, "failed": 0}
+        return [persist_seller_identity(item) for item in (items or [])], {"attempted": 0, "enriched": 0, "failed": 0}
 
-    by_link = {item.get("lank"): item for item in items if item.get("lank")}
+    by_link = {item.get("lank"): persist_seller_identity(item) for item in items if item.get("lank")}
     page = browser.new_page(viewport={"width": 1440, "height": 1800})
     enriched_count = 0
     failed_count = 0
@@ -286,9 +313,5 @@ def enrich_selected_listings(browser, items, known_links=None, limit=12, timeout
     finally:
         page.close()
 
-    rebuilt = [by_link.get(item.get("lank"), item) for item in items]
-    return rebuilt, {
-        "attempted": len(candidates),
-        "enriched": enriched_count,
-        "failed": failed_count,
-    }
+    rebuilt = [by_link.get(item.get("lank"), persist_seller_identity(item)) for item in items]
+    return rebuilt, {"attempted": len(candidates), "enriched": enriched_count, "failed": failed_count}
