@@ -31,8 +31,6 @@ def parse_profile_url(url: str | None) -> dict | None:
 def build_profile_page_url(profile_url: str, page_number: int) -> str:
     parsed = urlparse(str(profile_url or "").strip())
     query = parse_qs(parsed.query, keep_blank_values=True)
-    # Tradera profile pagination currently accepts the opaque paging token with
-    # the page number as its first component. Preserve any suffix when present.
     old = (query.get("paging") or [""])[0]
     suffix = ""
     if "." in old:
@@ -83,7 +81,6 @@ def _normalize_json_listing(row: dict, *, seller_alias=None, seller_id=None):
     title = _pick(row, "title", "Title", "shortDescription", "ShortDescription", "name", "Name")
     if item_id is None or not str(title or "").strip():
         return None
-    # Reject generic/non-listing objects that happen to contain an id+name.
     if not str(item_id).isdigit():
         return None
     category = _pick(row, "categoryId", "CategoryId", "category", "Category")
@@ -127,8 +124,6 @@ def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id
             if item:
                 dedup[item["tradera_item_id"]] = item
 
-    # Fallback for server-rendered profile cards. Capture the anchor text as
-    # title and an explicit nearby SEK price; price may remain None if absent.
     for match in _ITEM_HREF_RE.finditer(source):
         item_id = match.group("id")
         if item_id in dedup:
@@ -160,6 +155,16 @@ def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id
     return list(dedup.values())
 
 
+def _emit_progress(callback, **payload):
+    if not callable(callback):
+        return
+    try:
+        callback(dict(payload))
+    except Exception:
+        # Progress reporting must never be able to break inventory discovery.
+        pass
+
+
 def fetch_public_seller_inventory_batch(
     profile_url: str,
     *,
@@ -167,6 +172,7 @@ def fetch_public_seller_inventory_batch(
     max_pages: int = 12,
     timeout: int = 15,
     session=None,
+    progress_callback=None,
 ) -> dict:
     parsed = parse_profile_url(profile_url)
     if not parsed:
@@ -177,24 +183,75 @@ def fetch_public_seller_inventory_batch(
     exhausted = False
     previous_ids = None
     page = max(1, int(start_page or 1))
-    for _ in range(max(1, int(max_pages or 1))):
+    max_pages = max(1, int(max_pages or 1))
+    _emit_progress(
+        progress_callback,
+        phase="starting",
+        page=page,
+        pages_read=0,
+        max_pages=max_pages,
+        found_count=0,
+        seller_alias=parsed["alias"],
+    )
+    for _ in range(max_pages):
         url = build_profile_page_url(profile_url, page)
+        _emit_progress(
+            progress_callback,
+            phase="fetching",
+            page=page,
+            pages_read=len(page_reports),
+            max_pages=max_pages,
+            found_count=len(all_items),
+            seller_alias=parsed["alias"],
+        )
         try:
             response = client.get(url, headers={"User-Agent": "Mozilla/5.0 FlipFynd/1.0", "Accept": "text/html"}, timeout=timeout)
         except requests.RequestException as exc:
+            _emit_progress(progress_callback, phase="error", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), status="REQUEST_FAILED")
             return {"ok": False, "status": "REQUEST_FAILED", "error": str(exc), "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
         if response.status_code != 200:
+            _emit_progress(progress_callback, phase="error", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), status="HTTP_ERROR")
             return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
         items = extract_public_profile_items(response.text, seller_alias=parsed["alias"], seller_id=parsed["seller_id"])
         ids = tuple(sorted(x["tradera_item_id"] for x in items if x.get("tradera_item_id")))
         page_reports.append({"page": page, "count": len(items), "url": url})
         if not items or ids == previous_ids:
             exhausted = True
+            _emit_progress(
+                progress_callback,
+                phase="exhausted",
+                page=page,
+                pages_read=len(page_reports),
+                max_pages=max_pages,
+                found_count=len(all_items),
+                page_count=len(items),
+                seller_alias=parsed["alias"],
+            )
             break
         previous_ids = ids
         for item in items:
             all_items[item["tradera_item_id"]] = item
+        _emit_progress(
+            progress_callback,
+            phase="page_complete",
+            page=page,
+            pages_read=len(page_reports),
+            max_pages=max_pages,
+            found_count=len(all_items),
+            page_count=len(items),
+            seller_alias=parsed["alias"],
+        )
         page += 1
+    _emit_progress(
+        progress_callback,
+        phase="complete",
+        page=page,
+        pages_read=len(page_reports),
+        max_pages=max_pages,
+        found_count=len(all_items),
+        exhausted=exhausted,
+        seller_alias=parsed["alias"],
+    )
     return {
         "ok": True,
         "status": "OK",
