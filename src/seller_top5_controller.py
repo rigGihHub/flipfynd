@@ -42,6 +42,24 @@ def _rank(alias, items, *, analyze_fn, sport, quick_limit, full_limit, source):
     return result
 
 
+def _fetch_public(public_fetcher, profile_url, *, public_pages, progress_callback=None):
+    kwargs = {
+        "start_page": 1,
+        "max_pages": max(1, int(public_pages or 1)),
+    }
+    if progress_callback is not None:
+        kwargs["progress_callback"] = progress_callback
+    try:
+        return public_fetcher(str(profile_url).strip(), **kwargs)
+    except TypeError as exc:
+        # Keep controller tests/custom fetchers and mixed cloud deploys compatible
+        # while the new optional progress callback rolls out.
+        if "progress_callback" not in str(exc) or "progress_callback" not in kwargs:
+            raise
+        kwargs.pop("progress_callback", None)
+        return public_fetcher(str(profile_url).strip(), **kwargs)
+
+
 def resolve_seller_top5(
     seller: str,
     market_items: Iterable[dict] | None,
@@ -55,6 +73,7 @@ def resolve_seller_top5(
     quick_limit: int = 60,
     full_limit: int = 10,
     public_pages: int = 12,
+    progress_callback=None,
 ) -> dict:
     """Return Seller Top 5 using API -> public profile -> local fallback.
 
@@ -101,8 +120,11 @@ def resolve_seller_top5(
     public_failure = None
     if str(profile_url or "").strip():
         try:
-            public = public_fetcher(
-                str(profile_url).strip(), start_page=1, max_pages=max(1, int(public_pages or 1))
+            public = _fetch_public(
+                public_fetcher,
+                profile_url,
+                public_pages=public_pages,
+                progress_callback=progress_callback,
             )
         except Exception as exc:
             public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
