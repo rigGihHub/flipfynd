@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.13.5"
+APP_VERSION = "v0.13.6"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6549,6 +6549,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         quick_limit=60,
                         full_limit=8,
                         database_url=DATABASE_URL,
+                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
@@ -6572,6 +6573,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         quick_limit=60,
                         full_limit=8,
                         database_url=DATABASE_URL,
+                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
                     )
                 if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
                     top5 = dict(top5)
@@ -6645,7 +6647,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         _ranked_rows = seller_top5_result.get("rows") or []
         _find_rows = [row for row in _ranked_rows if seller_result_tier(row) == "FIND"]
         _research_rows = [row for row in _ranked_rows if seller_result_tier(row) == "RESEARCH"]
-        _seller_display_rows = (_find_rows + _research_rows)[:5]
+        _weak_rows = [row for row in _ranked_rows if seller_result_tier(row) == "WEAK"]
+        _seller_display_rows = (_find_rows + _research_rows + _weak_rows)[:5]
         if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
             st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
             st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
@@ -6687,6 +6690,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
         if not rows:
             st.info("Inga samlarkort kunde rankas hos säljaren just nu.")
+        elif len(rows) < 5:
+            st.caption(f"Topplistan innehåller {len(rows)} kort eftersom färre än fem giltiga, unika kortannonser kunde läsas.")
         for idx, row in enumerate(rows[:5], start=1):
             title = row.get("title") or "Kortannons"
             price = row.get("price")

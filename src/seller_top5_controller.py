@@ -17,7 +17,7 @@ from src.seller_card_domain import seller_item_domain_check
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
-PUBLIC_BATCH_PAGES = 1
+PUBLIC_BATCH_PAGES = 3
 _CHECKPOINT_SCHEMA = "v3"
 
 
@@ -247,6 +247,15 @@ def _partial_result_from_saved(
         "api_status": api_status,
         "total_listing_estimate": total_listing_estimate,
         "remaining_listing_estimate": remaining,
+        # Mirror the continuation state in the visible result. Streamlit keeps
+        # this object reliably between button clicks even when an auxiliary
+        # checkpoint backend is unavailable.
+        "public_checkpoint": {
+            "next_page": next_page,
+            "pages_read": pages_read,
+            "items": dict(saved_items),
+            "total_listing_estimate": total_listing_estimate,
+        },
     })
     return result
 
@@ -266,6 +275,7 @@ def resolve_seller_top5(
     public_pages: int = 120,
     progress_callback=None,
     database_url=None,
+    resume_checkpoint=None,
 ) -> dict:
     alias = str(seller or "").strip()
     profile_text = str(profile_url or "").strip()
@@ -313,7 +323,9 @@ def resolve_seller_top5(
         parsed_profile = parse_profile_url(profile_text) or {}
         seller_id = str(parsed_profile.get("seller_id") or "").strip() or None
         key = _checkpoint_key(alias, profile_text)
-        checkpoint = load_checkpoint(key, session=session, database_url=database_url)
+        checkpoint = dict(resume_checkpoint) if isinstance(resume_checkpoint, dict) else None
+        if not checkpoint:
+            checkpoint = load_checkpoint(key, session=session, database_url=database_url)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}, "total_listing_estimate": None}
 
@@ -391,6 +403,34 @@ def resolve_seller_top5(
             page_items = _sanitize_public_items(
                 page_result.get("items") or [], seller_alias=alias, seller_id=seller_id
             )
+            new_item_keys = set(page_items) - set(stored_items)
+            if current_page > 1 and page_items and not new_item_keys:
+                # A public Tradera response can silently drop its paging query
+                # and return page 1 again. Retry this page through the proxy;
+                # never report a repeated page as forward progress.
+                try:
+                    retry = fetch_proxy_seller_inventory_batch(
+                        profile_text,
+                        start_page=current_page,
+                        max_pages=1,
+                        progress_callback=combined_progress,
+                        fallback_alias=alias,
+                    )
+                except Exception as exc:
+                    retry = {"ok": False, "error": str(exc), "items": []}
+                retry_items = _sanitize_public_items(
+                    retry.get("items") or [], seller_alias=alias, seller_id=seller_id
+                ) if retry.get("ok") else {}
+                if set(retry_items) - set(stored_items):
+                    page_result = retry
+                    page_items = retry_items
+                    new_item_keys = set(page_items) - set(stored_items)
+                else:
+                    public_failure = {
+                        "status": "REPEATED_PAGE",
+                        "error": f"Tradera returnerade samma annonser igen för sida {current_page}.",
+                    }
+                    break
             stored_items.update(page_items)
             pages_this_run += int(page_result.get("pages_read") or 0)
             current_page = int(page_result.get("next_page") or (current_page + 1))

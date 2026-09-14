@@ -25,3 +25,9 @@ def test_cleared_database_checkpoint_is_not_restored(monkeypatch, tmp_path):
     store.save_checkpoint("seller", {"next_page": 9}, database_url="postgresql://test")
     store.clear_checkpoint("seller", database_url="postgresql://test")
     assert store.load_checkpoint("seller", database_url="postgresql://test") is None
+
+
+def test_app_passes_visible_result_checkpoint_back_to_controller():
+    app = __import__("pathlib").Path("app.py").read_text(encoding="utf-8")
+    assert app.count('resume_checkpoint=_seller_previous_result.get("public_checkpoint")') == 2
+    assert '_seller_display_rows = (_find_rows + _research_rows + _weak_rows)[:5]' in app
