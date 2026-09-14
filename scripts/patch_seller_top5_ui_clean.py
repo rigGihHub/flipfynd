@@ -35,6 +35,100 @@ text = text.replace(
     1,
 )
 
+# Visible determinate progress in app.py. Do not rely only on st.status/spinners.
+progress_anchor = '''            seller_status = st.status(f"🔎 Söker igenom {alias}…", expanded=True)
+            seller_progress_line = seller_status.empty()
+            seller_status.write("Startar säljarinventering och prioritering av kandidater.")
+'''
+progress_replacement = '''            seller_status = st.status(f"🔎 Söker igenom {alias}…", expanded=True)
+            seller_progress_line = seller_status.empty()
+            seller_progress_bar = st.progress(0, text="0% · Startar analysen…")
+            seller_status.write("Startar säljarinventering och prioritering av kandidater.")
+'''
+if progress_anchor in text:
+    text = text.replace(progress_anchor, progress_replacement, 1)
+
+callback_anchor = '''                pages_read = int((info or {}).get("pages_read") or 0)
+                max_pages = int((info or {}).get("max_pages") or 0)
+'''
+callback_replacement = '''                pages_read = int((info or {}).get("pages_read") or 0)
+                max_pages = int((info or {}).get("max_pages") or 0)
+                progress_percent = (info or {}).get("percent")
+                if progress_percent is None:
+                    if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                        progress_percent = min(20, 2 + int(18 * pages_read / max(1, max_pages)))
+                    elif phase.startswith("filter"):
+                        progress_percent = 24
+                    elif phase.startswith("quick"):
+                        progress_percent = 45
+                    elif phase.startswith("full"):
+                        progress_percent = 75
+                    elif phase == "ranking":
+                        progress_percent = 97
+                    elif phase == "complete":
+                        progress_percent = 100
+                    else:
+                        progress_percent = 1
+                progress_percent = max(0, min(100, int(progress_percent)))
+                done = int((info or {}).get("done") or 0)
+                total = int((info or {}).get("total") or 0)
+                if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                    progress_text = f"{progress_percent}% · Hämtar annonser · {found} hittade"
+                elif phase.startswith("filter"):
+                    progress_text = f"{progress_percent}% · Filtrerar samlarkort" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("quick"):
+                    progress_text = f"{progress_percent}% · Snabbanalyserar" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("full"):
+                    progress_text = f"{progress_percent}% · Fullanalyserar" + (f" · {done}/{total}" if total else "")
+                elif phase == "ranking":
+                    progress_text = f"{progress_percent}% · Rankar Top 5"
+                elif phase == "complete":
+                    progress_text = "100% · Klart"
+                else:
+                    progress_text = f"{progress_percent}% · Bearbetar…"
+                seller_progress_bar.progress(progress_percent, text=progress_text)
+'''
+if callback_anchor in text and 'progress_percent = (info or {}).get("percent")' not in text:
+    text = text.replace(callback_anchor, callback_replacement, 1)
+
+# A stale mixed Streamlit deploy must never enter a long opaque compatibility
+# run. Fail fast and ask for one rerun instead; otherwise users see a spinner
+# with no measurable progress and may wait indefinitely.
+compat_old = '''                    seller_status.write("Deployen synkas fortfarande – använder kompatibilitetsläge.")
+                    top5 = resolve_seller_top5(
+'''
+compat_new = '''                    seller_progress_bar.progress(0, text="Ny version synkas · försök igen om några sekunder")
+                    seller_status.update(label="⚠️ Ny version synkas – kör sökningen igen", state="error", expanded=True)
+                    st.warning("FlipFynd laddade blandade kodversioner och avbröt i stället för att fastna utan progress. Vänta några sekunder och tryck på knappen igen.")
+                    st.stop()
+                    top5 = resolve_seller_top5(
+'''
+if compat_old in text:
+    text = text.replace(compat_old, compat_new, 1)
+
+complete_anchor = '''                seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
+'''
+complete_replacement = '''                seller_progress_bar.progress(100, text="100% · Klart")
+                seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
+'''
+if complete_anchor in text and 'seller_progress_bar.progress(100, text="100% · Klart")' not in text:
+    text = text.replace(complete_anchor, complete_replacement, 1)
+
+error_anchor = '''            except Exception:
+                seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
+                raise
+'''
+error_replacement = '''            except Exception:
+                try:
+                    seller_progress_bar.progress(0, text="Sökningen avbröts")
+                except Exception:
+                    pass
+                seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
+                raise
+'''
+if error_anchor in text:
+    text = text.replace(error_anchor, error_replacement, 1)
+
 # Remove the now-redundant second import button, cursor handling and separate
 # "Bästa 20" triage UI. Keep the Top 5 result rendering immediately after it.
 redundant_controls = re.compile(
@@ -162,11 +256,9 @@ if old_current in text:
     text = text.replace(old_current, new, 1)
 elif old_legacy in text:
     text = text.replace(old_legacy, new, 1)
-# If the clean render is already present, keep it and still apply the one-click
-# control cleanup above instead of exiting early.
 
 if text == original:
     print('already patched')
 else:
     p.write_text(text, encoding='utf-8')
-    print('patched Seller Top 5 to one-click cross-sport UI')
+    print('patched Seller Top 5 one-click UI with determinate progress')
