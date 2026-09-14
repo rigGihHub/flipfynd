@@ -44,8 +44,9 @@ def full_analyze_live_seller_item(
 ) -> dict:
     """Run the normal full analyser for one live seller listing.
 
-    The returned status is a UI summary only. BUY is copied from the underlying
-    analyser; this function never manufactures or upgrades the decision.
+    The returned status is a UI summary only. BUY and all ranking fields are
+    copied from the underlying analyser; this function never manufactures or
+    upgrades the decision/rank.
     """
     prepared = apply_seller_metadata(item or {})
     if not prepared.get("source_category"):
@@ -70,6 +71,11 @@ def full_analyze_live_seller_item(
     identity_score = _num(merged.get("exact_identity_gate_score"))
     valuation = _num(merged.get("valuation_confidence_score"))
     edge = _num(merged.get("market_edge_score"))
+    rank_score = _num(merged.get("rank_score"))
+    player_market_score = _num(merged.get("player_market_score"))
+    ranking_confidence = _num(
+        merged.get("ranking_confidence_score", merged.get("deal_confidence_score", 0))
+    )
     max_price = merged.get("max_price")
     if max_price is None:
         max_price = merged.get("max_buy_price")
@@ -82,15 +88,12 @@ def full_analyze_live_seller_item(
     if decision_upper.startswith("KÖP"):
         label = "KÖP-KANDIDAT"
         reason = "Fullanalysen gav köpsignal. Kontrollera annonsen och samfrakten innan du agerar."
-    elif identity_ok and sold >= 2 and valuation >= 45:
-        label = "VERIFIERAD MEN INTE KÖP"
-        reason = "Identitet och marknadsunderlag är tillräckligt starka, men ekonomin klarar inte köpgränsen."
-    elif identity_ok and sold >= 1:
-        label = "BEVAKA / FORSKA VIDARE"
-        reason = "Kortet är sökbart och har viss SOLD-evidens, men beslutsunderlaget är ännu för tunt."
+    elif decision_upper.startswith("UNDERSÖK"):
+        label = "VÄRT ATT UNDERSÖKA"
+        reason = "Den ordinarie analysmotorn prioriterar kortet för vidare kontroll, men köpkraven är inte verifierade."
     else:
-        label = "OTILLRÄCKLIGT UNDERLAG"
-        reason = "Fullanalysen kan ännu inte verifiera tillräcklig identitet och marknadsevidens för köp."
+        label = "BÄST AV RESTEN"
+        reason = "Kortet rankas högt inom säljarens lager men den ordinarie analysmotorn ger ingen köp- eller undersöksignal."
 
     return {
         "ok": True,
@@ -107,6 +110,9 @@ def full_analyze_live_seller_item(
         "sold_comps": sold,
         "valuation_confidence": valuation,
         "market_edge": edge,
+        "rank_score": rank_score,
+        "player_market_score": player_market_score,
+        "ranking_confidence": ranking_confidence,
         "seller_alias": seller_alias(merged),
         "seller_id": seller_id(merged),
         "seller_url": seller_url(merged),
