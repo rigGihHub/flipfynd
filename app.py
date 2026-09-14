@@ -6395,6 +6395,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.query_params["seller_profile"] = str(seller_top5_profile_url)
     except Exception:
         pass
+    try:
+        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
+            st.query_params["seller"] = str(seller_top5_alias)
+        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
+            st.query_params["seller_profile"] = str(seller_top5_profile_url)
+    except Exception:
+        pass
     seller_top5_sport_label = "Alla"
     seller_top5_profile_url_resolved = str(seller_top5_profile_url or "").strip()
     _profile_alias = str(seller_top5_alias or "").strip()
@@ -6524,6 +6531,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     top5 = dict(top5)
                     top5["status"] = "PROFILE_INCOMPLETE"
                     top5["rows"] = []
+                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
+                    top5 = dict(top5)
+                    top5["status"] = "PROFILE_INCOMPLETE"
+                    top5["rows"] = []
                 st.session_state["seller_top5_result"] = top5
                 found_count = int(top5.get("inventory_count") or 0)
                 quick_count = int(top5.get("quick_analysed") or 0)
@@ -6587,6 +6598,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         elif inventory_source == "TRADERA_PUBLIC_PROFILE":
             pages_read = int(seller_top5_result.get("public_pages_read") or 0)
             st.caption(f"Källa: säljarens publika Tradera-profil · {pages_read} profilsidor lästa.")
+            if seller_top5_result.get("public_inventory_complete"):
+                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
             if seller_top5_result.get("public_inventory_complete"):
                 st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
             if seller_top5_result.get("public_inventory_complete"):
