@@ -6382,6 +6382,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             local_market = get_data(get_data_version())
             seller_status = st.status(f"🔎 Söker igenom {alias}…", expanded=True)
             seller_progress_line = seller_status.empty()
+            seller_progress_bar = st.progress(0, text="0% · Startar analysen…")
             seller_status.write("Startar säljarinventering och prioritering av kandidater.")
 
             def _seller_search_progress(info):
@@ -6390,6 +6391,40 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                 found = int((info or {}).get("found_count") or 0)
                 pages_read = int((info or {}).get("pages_read") or 0)
                 max_pages = int((info or {}).get("max_pages") or 0)
+                progress_percent = (info or {}).get("percent")
+                if progress_percent is None:
+                    if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                        progress_percent = min(20, 2 + int(18 * pages_read / max(1, max_pages)))
+                    elif phase.startswith("filter"):
+                        progress_percent = 24
+                    elif phase.startswith("quick"):
+                        progress_percent = 45
+                    elif phase.startswith("full"):
+                        progress_percent = 75
+                    elif phase == "ranking":
+                        progress_percent = 97
+                    elif phase == "complete":
+                        progress_percent = 100
+                    else:
+                        progress_percent = 1
+                progress_percent = max(0, min(100, int(progress_percent)))
+                done = int((info or {}).get("done") or 0)
+                total = int((info or {}).get("total") or 0)
+                if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                    progress_text = f"{progress_percent}% · Hämtar annonser · {found} hittade"
+                elif phase.startswith("filter"):
+                    progress_text = f"{progress_percent}% · Filtrerar samlarkort" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("quick"):
+                    progress_text = f"{progress_percent}% · Snabbanalyserar" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("full"):
+                    progress_text = f"{progress_percent}% · Fullanalyserar" + (f" · {done}/{total}" if total else "")
+                elif phase == "ranking":
+                    progress_text = f"{progress_percent}% · Rankar Top 5"
+                elif phase == "complete":
+                    progress_text = "100% · Klart"
+                else:
+                    progress_text = f"{progress_percent}% · Bearbetar…"
+                seller_progress_bar.progress(progress_percent, text=progress_text)
                 if phase == "fetching":
                     seller_progress_line.info(f"📄 Läser profilsida {page} · {found} unika annonser hittade hittills")
                 elif phase == "page_complete":
@@ -6418,7 +6453,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     # taking down the whole app. Only swallow the known signature mismatch.
                     if "profile_url" not in str(exc) and "progress_callback" not in str(exc):
                         raise
-                    seller_status.write("Deployen synkas fortfarande – använder kompatibilitetsläge.")
+                    seller_progress_bar.progress(0, text="Ny version synkas · försök igen om några sekunder")
+                    seller_status.update(label="⚠️ Ny version synkas – kör sökningen igen", state="error", expanded=True)
+                    st.warning("FlipFynd laddade blandade kodversioner och avbröt i stället för att fastna utan progress. Vänta några sekunder och tryck på knappen igen.")
+                    st.stop()
                     top5 = resolve_seller_top5(
                         alias,
                         local_market,
@@ -6437,8 +6475,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     f"{found_count} annonser hittade · {quick_count} snabbanalyserade · "
                     f"{full_count} fullanalyserade · källa: {source}."
                 )
+                seller_progress_bar.progress(100, text="100% · Klart")
                 seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
             except Exception:
+                try:
+                    seller_progress_bar.progress(0, text="Sökningen avbröts")
+                except Exception:
+                    pass
                 seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
                 raise
 
