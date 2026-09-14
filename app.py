@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.89"
+APP_VERSION = "v0.12.90"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6555,6 +6555,16 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.caption(f"Sökning pågår · {_inventory_line}.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
+    if seller_top5_result and not (seller_top5_result.get("rows") or []):
+        _public_status = str(seller_top5_result.get("public_status") or "")
+        _public_error = str(seller_top5_result.get("public_error") or "").strip()
+        if _public_status and _public_status != "OK":
+            st.error(f"Kunde inte läsa annonser från Tradera-profilen ({_public_status}).")
+            if _public_error:
+                st.caption(_public_error)
+            st.caption("Ingen Top 5 visas förrän minst en riktig annons har lästs in.")
+        elif _seller_result_status not in {"PROFILE_INCOMPLETE", "INVENTORY_PARTIAL"}:
+            st.warning("Sökningen gav ännu inga läsbara kortannonser. Försök igen; FlipFynd visar inte en tom körning som ett lyckat resultat.")
     if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE" and (seller_top5_result.get("rows") or []):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)

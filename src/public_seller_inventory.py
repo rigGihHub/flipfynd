@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 import requests
 
 _PROFILE_RE = re.compile(r"/profile/items/(?P<seller_id>\d+)(?:/(?P<alias>[^/?#]+))?/?(?:[?#]|$)", re.I)
+_ITEM_HREF_RE = re.compile(r"href=[\"\'](?P<href>[^\"\']*/item/(?P<category>\d+)/(?P<id>\d+)[^\"\']*)[\"\']", re.I)
 _ANCHOR_RE = re.compile(
     r"<a\b[^>]*\bhref=[\"'](?:https?://(?:www\.)?tradera\.com)?(?P<href>/item/(?P<category>\d+)/(?P<id>\d+)(?:/[^\"'<>\s?]*)?)[\"'][^>]*>(?P<body>.*?)</a>",
     re.I | re.S,
@@ -128,20 +129,54 @@ def _normalize_json_listing(row: dict, *, seller_alias=None, seller_id=None):
 
 
 def _extract_anchor_items(source: str, *, seller_alias=None, seller_id=None) -> dict[str, dict]:
+    """Extract visible Tradera listing links tolerantly.
+
+    Do not depend on one exact <a> serialization. Tradera has changed attribute
+    order/query strings several times, which previously made a perfectly valid
+    seller page look empty to FlipFynd.
+    """
     dedup: dict[str, dict] = {}
-    for match in _ANCHOR_RE.finditer(source):
+    for match in _ITEM_HREF_RE.finditer(source):
         item_id = match.group("id")
-        title = _text(match.group("body"))
+        href = _html.unescape(match.group("href") or "")
+        if href.startswith("http"):
+            absolute_href = href
+        else:
+            slash = href.find("/item/")
+            if slash < 0:
+                continue
+            absolute_href = "https://www.tradera.com" + href[slash:]
+
+        # Prefer visible anchor text. Limit the search window so embedded JSON
+        # cannot be mistaken for a gigantic title.
+        a_start = source.rfind("<a", max(0, match.start() - 1200), match.start() + 1)
+        if a_start < 0:
+            a_start = match.start()
+        open_end = source.find(">", match.end())
+        close_end = source.find("</a>", max(match.end(), open_end))
+        title = ""
+        if open_end >= 0 and close_end >= 0 and close_end - open_end < 2500:
+            title = _text(source[open_end + 1:close_end])
+
+        # If the anchor is image-only, the human-readable slug is still better
+        # than dropping the listing entirely. Embedded JSON remains a separate
+        # fallback below and can later replace this with a richer title.
+        if not title or len(title) > 350:
+            path = absolute_href.split("?", 1)[0].rstrip("/")
+            slug = path.rsplit("/", 1)[-1] if "/" in path else ""
+            if slug and not slug.isdigit():
+                title = _html.unescape(slug.replace("-", " ")).strip()
         if not title:
-            continue
-        nearby = source[max(0, match.start() - 400):min(len(source), match.end() + 700)]
-        price = _num(_text(nearby))
-        href = match.group("href")
+            title = f"Tradera-annons {item_id}"
+
+        nearby_start = max(0, a_start - 300)
+        nearby_end = min(len(source), (close_end + 700) if close_end >= 0 else match.end() + 1200)
+        price = _num(_text(source[nearby_start:nearby_end]))
         dedup[item_id] = {
             "titel": title,
             "pris": price,
             "frakt": None,
-            "lank": "https://www.tradera.com" + href,
+            "lank": absolute_href,
             "saljare": seller_alias,
             "seller_user_id": seller_id,
             "tradera_item_id": item_id,
@@ -213,7 +248,13 @@ def fetch_public_seller_inventory_batch(
         url = build_profile_page_url(profile_url, page)
         _emit_progress(progress_callback, phase="fetching", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), seller_alias=effective_alias)
         try:
-            response = client.get(url, headers={"User-Agent": "Mozilla/5.0 FlipFynd/1.0", "Accept": "text/html"}, timeout=timeout)
+            response = client.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+            }, timeout=timeout)
         except requests.RequestException as exc:
             return {"ok": False, "status": "REQUEST_FAILED", "error": str(exc), "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
         if response.status_code != 200:
@@ -239,9 +280,16 @@ def fetch_public_seller_inventory_batch(
         page_reports.append({"page": page, "count": len(items), "url": response_url})
 
         if not items:
-            exhausted = True
-            _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=0, seller_alias=effective_alias)
-            break
+            return {
+                "ok": False,
+                "status": "NO_LISTINGS_IN_HTML",
+                "error": "Tradera-sidan svarade men inga annonslänkar kunde läsas ur HTML-svaret.",
+                "items": list(all_items.values()),
+                "next_page": page,
+                "pages_read": len(page_reports),
+                "page_reports": page_reports,
+                "total_listing_estimate": total_listing_estimate,
+            }
         if previous_ids is not None and ids == previous_ids:
             exhausted = True
             _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
