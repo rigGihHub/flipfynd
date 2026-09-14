@@ -6369,6 +6369,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         horizontal=True,
         key="seller_top5_sport",
     )
+    seller_top5_profile_url_resolved = str(seller_top5_profile_url or "").strip()
+    _profile_alias = str(seller_top5_alias or "").strip()
+    if seller_top5_profile_url_resolved and _profile_alias:
+        _profile_base, _profile_sep, _profile_query = seller_top5_profile_url_resolved.partition("?")
+        _profile_clean = _profile_base.rstrip("/")
+        if "/profile/items/" in _profile_clean and _profile_clean.rsplit("/", 1)[-1].isdigit():
+            _profile_base = _profile_clean + "/" + _profile_alias.replace(" ", "%20")
+            seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
     if st.button("🔎 Hitta säljarens 5 bästa fynd", key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
         if not alias:
@@ -6404,7 +6412,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         analyze_fn=analyze_item,
                         sport=sport_key,
                         credentials=creds,
-                        profile_url=seller_top5_profile_url,
+                        profile_url=seller_top5_profile_url_resolved,
                         progress_callback=_seller_search_progress,
                         quick_limit=60,
                         full_limit=10,
@@ -6499,10 +6507,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                             "complete": True,
                             "seller": import_alias,
                         }
-                elif str(seller_top5_profile_url or "").strip():
+                elif seller_top5_profile_url_resolved:
                     try:
                         imported = fetch_public_seller_inventory_batch(
-                            str(seller_top5_profile_url).strip(),
+                            seller_top5_profile_url_resolved,
                             start_page=import_next_page,
                             max_pages=12,
                             progress_callback=_seller_import_progress,
@@ -6514,7 +6522,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                             import_status_box.write("Deployen synkas fortfarande – använder kompatibilitetsläge för säljaralias.")
                             try:
                                 imported = fetch_public_seller_inventory_batch(
-                                    str(seller_top5_profile_url).strip(),
+                                    seller_top5_profile_url_resolved,
                                     start_page=import_next_page,
                                     max_pages=12,
                                     progress_callback=_seller_import_progress,
@@ -6524,7 +6532,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                                     raise
                                 import_status_box.write("Fortsätter utan live-progress i detta block.")
                                 imported = fetch_public_seller_inventory_batch(
-                                    str(seller_top5_profile_url).strip(),
+                                    seller_top5_profile_url_resolved,
                                     start_page=import_next_page,
                                     max_pages=12,
                                 )
@@ -6532,7 +6540,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                             import_status_box.write("Deployen synkas fortfarande – fortsätter utan live-progress i detta block.")
                             try:
                                 imported = fetch_public_seller_inventory_batch(
-                                    str(seller_top5_profile_url).strip(),
+                                    seller_top5_profile_url_resolved,
                                     start_page=import_next_page,
                                     max_pages=12,
                                     fallback_alias=import_alias,
@@ -6541,7 +6549,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                                 if "fallback_alias" not in str(inner_exc):
                                     raise
                                 imported = fetch_public_seller_inventory_batch(
-                                    str(seller_top5_profile_url).strip(),
+                                    seller_top5_profile_url_resolved,
                                     start_page=import_next_page,
                                     max_pages=12,
                                 )
