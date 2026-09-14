@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# One-time deterministic patch for wiring Seller Top 5 into the live app.
 path = Path("app.py")
 text = path.read_text(encoding="utf-8")
 
