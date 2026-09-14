@@ -51,35 +51,8 @@ def _quick_rank_key(row: dict):
 
 
 def _display_worthy(row: dict) -> bool:
-    """Only expose candidates with real evidence, never merely a label.
-
-    KÖP is already gated by the full analyser. UNDERSÖK must still have a
-    verified/searchable identity plus either real SOLD evidence or a genuinely
-    strong research signal. This prevents ordinary base cards with 0 comps from
-    being presented as finds just because an upstream analyser said UNDERSÖK.
-    """
     decision = str(row.get("decision") or "").upper().strip()
-    if decision.startswith("KÖP"):
-        return True
-    if not decision.startswith("UNDERSÖK"):
-        return False
-    identity_ok = bool(row.get("identity_ok"))
-    sold = int(_num(row.get("sold_comps")))
-    edge = _num(row.get("market_edge"))
-    valuation = _num(row.get("valuation_confidence"))
-    quick = _num(row.get("quick_score"))
-    return identity_ok and (sold >= 1 or (edge >= 55 and valuation >= 45 and quick >= 48))
-
-
-def _quick_research_worthy(row: dict) -> bool:
-    if not str(row.get("decision") or "").upper().startswith("UNDERSÖK"):
-        return False
-    identity_ok = bool(row.get("identity_ok"))
-    sold = int(_num(row.get("sold_comps")))
-    edge = _num(row.get("market_edge"))
-    valuation = _num(row.get("valuation_confidence"))
-    quick = _num(row.get("quick_score"))
-    return identity_ok and (sold >= 1 or (edge >= 55 and valuation >= 45 and quick >= 48))
+    return decision.startswith("KÖP") or decision.startswith("UNDERSÖK")
 
 
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int) -> dict:
@@ -123,6 +96,24 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
         "batch_count": batches,
         "inventory_unique_count": len(unique_inventory),
         "coverage_complete": len(rows) + failed >= len(unique_inventory),
+    }
+
+
+def _fallback_row(qrow: dict, alias: str) -> dict:
+    decision = str(qrow.get("decision") or "").upper()
+    if decision.startswith("UNDERSÖK"):
+        label = "VÄRT ATT UNDERSÖKA"
+        reason = qrow.get("reason") or "Behöver verifieras innan köp."
+    else:
+        label = "BÄST AV RESTEN"
+        reason = "En av säljarens högst rankade kortkandidater, men FlipFynd har ännu inte tillräckligt underlag för köp eller en stark fyndsignal."
+    return {
+        "title": qrow.get("title"), "price": qrow.get("price"), "url": qrow.get("url"),
+        "decision": qrow.get("decision") or "SKIP", "label": label, "reason": reason,
+        "identity_ok": qrow.get("identity_ok"), "sold_comps": qrow.get("sold_comps", 0),
+        "valuation_confidence": qrow.get("valuation_confidence", 0),
+        "market_edge": qrow.get("market_edge", 0), "quick_score": qrow.get("quick_score", 0),
+        "seller": alias, "source_item": qrow.get("source_item") or {},
     }
 
 
@@ -172,6 +163,21 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         if _display_worthy(row):
             full_rows.append(row)
 
+    # Product contract: this view ranks the seller's five best *card candidates*.
+    # It does not claim all five are finds. Strong full-analysis rows come first;
+    # remaining slots are filled from quick triage and clearly labelled as weak.
+    full_rows.sort(key=_rank_key)
+    selected = list(full_rows[:5])
+    selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
+    for qrow in quick.get("rows") or []:
+        if len(selected) >= 5:
+            break
+        key = _identity_key(qrow.get("source_item") or qrow)
+        if key in selected_keys:
+            continue
+        selected.append(_fallback_row(qrow, alias))
+        selected_keys.add(key)
+
     common_meta = {
         "seller": alias,
         "inventory_count": len(raw_inventory),
@@ -183,30 +189,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "quick_batches": int(quick.get("batch_count") or 0),
         "coverage_complete": bool(quick.get("coverage_complete")),
     }
-
-    if not full_rows:
-        fallback = []
-        for qrow in quick.get("rows") or []:
-            if not _quick_research_worthy(qrow):
-                continue
-            fallback.append({
-                "title": qrow.get("title"), "price": qrow.get("price"), "url": qrow.get("url"),
-                "decision": "UNDERSÖK", "label": "VÄRT ATT UNDERSÖKA",
-                "reason": qrow.get("reason") or "Behöver verifieras innan köp.",
-                "identity_ok": qrow.get("identity_ok"), "sold_comps": qrow.get("sold_comps", 0),
-                "valuation_confidence": qrow.get("valuation_confidence", 0),
-                "market_edge": qrow.get("market_edge", 0), "quick_score": qrow.get("quick_score", 0),
-                "seller": alias, "source_item": qrow.get("source_item") or {},
-            })
-            if len(fallback) >= 5:
-                break
-        return {
-            "status": "QUICK_ONLY" if fallback else "NO_STRONG_CANDIDATES",
-            "rows": fallback, "full_analysed": 0, "failed_full": failed, **common_meta,
-        }
-
-    full_rows.sort(key=_rank_key)
     return {
-        "status": "READY", "rows": full_rows[:5], "full_analysed": len(full_rows),
-        "failed_full": failed, **common_meta,
+        "status": "READY" if selected else "NO_CARD_CANDIDATES",
+        "rows": selected, "full_analysed": len(full_rows), "failed_full": failed,
+        **common_meta,
     }
