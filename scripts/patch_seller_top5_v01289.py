@@ -1,25 +1,91 @@
 from pathlib import Path
 
-# FlipFynd v0.12.89 — keep Seller Top 5 at one page per click while preserving
-# the reusable profile fetcher's multi-page/test behaviour and lightweight JSON fallback.
+# FlipFynd v0.12.89 — final compatibility fix for the public seller fetcher.
+# Live Seller Top 5 still passes max_pages=1 from the controller, while the
+# reusable helper remains multi-page capable for tests and other callers.
 
-p = Path('src/public_seller_inventory.py')
-text = p.read_text(encoding='utf-8')
+module = r'''"""Read public Tradera seller profile inventory without API credentials.
 
-# Lightweight JSON fallback is only used when no visible listing anchors were found.
-if 'import json\n' not in text:
-    text = text.replace('import html as _html\n', 'import html as _html\nimport json\n', 1)
+Seller Top 5 calls this helper with max_pages=1 so each click stays bounded.
+The helper itself remains multi-page capable, detects repeated pages, and uses a
+small embedded-JSON fallback only when no visible listing anchors exist.
+"""
+from __future__ import annotations
 
-if '_SCRIPT_RE = re.compile' not in text:
-    text = text.replace(
-        '_TAG_RE = re.compile(r"<[^>]+>")\n',
-        '_TAG_RE = re.compile(r"<[^>]+>")\n_SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", re.I | re.S)\n',
-        1,
-    )
+import html as _html
+import json
+import re
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-helper_marker = '\n\ndef _extract_anchor_items('
-if 'def _normalize_json_listing(' not in text and helper_marker in text:
-    helpers = r'''
+import requests
+
+_PROFILE_RE = re.compile(r"/profile/items/(?P<seller_id>\d+)(?:/(?P<alias>[^/?#]+))?/?(?:[?#]|$)", re.I)
+_ANCHOR_RE = re.compile(
+    r"<a\b[^>]*\bhref=[\"'](?:https?://(?:www\.)?tradera\.com)?(?P<href>/item/(?P<category>\d+)/(?P<id>\d+)(?:/[^\"'<>\s?]*)?)[\"'][^>]*>(?P<body>.*?)</a>",
+    re.I | re.S,
+)
+_PRICE_RE = re.compile(r"(?P<price>\d[\d\s.]*)\s*kr", re.I)
+_TAG_RE = re.compile(r"<[^>]+>")
+_SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", re.I | re.S)
+_PAGING_HINT_RE = re.compile(r"paging=\d+\.a0\.s(?P<count>\d+)", re.I)
+_TOTAL_LISTINGS_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
+_PAGING_SUFFIX_CACHE: dict[str, str] = {}
+
+
+def parse_profile_url(url: str | None) -> dict | None:
+    text = str(url or "").strip()
+    match = _PROFILE_RE.search(text)
+    if not match:
+        return None
+    alias = str(match.group("alias") or "").strip() or None
+    return {"seller_id": match.group("seller_id"), "alias": alias}
+
+
+def build_profile_page_url(profile_url: str, page_number: int) -> str:
+    parsed = urlparse(str(profile_url or "").strip())
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    page_number = max(1, int(page_number))
+    old = (query.get("paging") or [""])[0]
+    if page_number == 1 and not old:
+        return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+    suffix = ""
+    if "." in old:
+        suffix = old[old.find("."):]
+    if not suffix:
+        profile = parse_profile_url(profile_url) or {}
+        seller_id = str(profile.get("seller_id") or "")
+        suffix = _PAGING_SUFFIX_CACHE.get(seller_id, ".a0.s48")
+    query["paging"] = [f"{page_number}{suffix}"]
+    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+
+def _remember_paging_suffix(profile_url: str, page_html: str) -> None:
+    profile = parse_profile_url(profile_url) or {}
+    seller_id = str(profile.get("seller_id") or "")
+    if not seller_id:
+        return
+    match = _PAGING_HINT_RE.search(_html.unescape(str(page_html or "")))
+    if match:
+        _PAGING_SUFFIX_CACHE[seller_id] = f".a0.s{match.group('count')}"
+
+
+def _text(value) -> str:
+    value = _TAG_RE.sub(" ", str(value or ""))
+    value = _html.unescape(value)
+    return " ".join(value.split()).strip()
+
+
+def _num(value):
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+    match = _PRICE_RE.search(str(value or ""))
+    if not match:
+        return None
+    try:
+        return float(match.group("price").replace(" ", "").replace(".", ""))
+    except ValueError:
+        return None
+
 
 def _pick(d, *keys):
     if not isinstance(d, dict):
@@ -43,7 +109,7 @@ def _walk_json(value):
 def _normalize_json_listing(row: dict, *, seller_alias=None, seller_id=None):
     item_id = _pick(row, "itemId", "ItemId", "id", "Id")
     title = _pick(row, "title", "Title", "shortDescription", "ShortDescription", "name", "Name")
-    if item_id is None or not str(title or "").strip() or not str(item_id).isdigit():
+    if item_id is None or not str(item_id).isdigit() or not str(title or "").strip():
         return None
     category = _pick(row, "categoryId", "CategoryId", "category", "Category")
     href = _pick(row, "itemLink", "ItemLink", "itemUrl", "ItemUrl", "url", "Url", "href")
@@ -65,34 +131,156 @@ def _normalize_json_listing(row: dict, *, seller_alias=None, seller_id=None):
         "source_type": "tradera_public_seller_profile",
         "seller_inventory_candidate": True,
     }
+
+
+def _extract_anchor_items(source: str, *, seller_alias=None, seller_id=None) -> dict[str, dict]:
+    dedup: dict[str, dict] = {}
+    for match in _ANCHOR_RE.finditer(source):
+        item_id = match.group("id")
+        title = _text(match.group("body"))
+        if not title:
+            continue
+        nearby = source[max(0, match.start() - 400):min(len(source), match.end() + 700)]
+        price = _num(_text(nearby))
+        href = match.group("href")
+        dedup[item_id] = {
+            "titel": title,
+            "pris": price,
+            "frakt": None,
+            "lank": "https://www.tradera.com" + href,
+            "saljare": seller_alias,
+            "seller_user_id": seller_id,
+            "tradera_item_id": item_id,
+            "source_type": "tradera_public_seller_profile",
+            "seller_inventory_candidate": True,
+        }
+    return dedup
+
+
+def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id=None) -> list[dict]:
+    source = str(page_html or "")
+    anchors = _extract_anchor_items(source, seller_alias=seller_alias, seller_id=seller_id)
+    if anchors:
+        return list(anchors.values())
+
+    dedup: dict[str, dict] = {}
+    for script_body in _SCRIPT_RE.findall(source):
+        body = _html.unescape(script_body.strip())
+        if not body or body[0] not in "[{":
+            continue
+        try:
+            payload = json.loads(body)
+        except Exception:
+            continue
+        for obj in _walk_json(payload):
+            item = _normalize_json_listing(obj, seller_alias=seller_alias, seller_id=seller_id)
+            if item:
+                dedup[item["tradera_item_id"]] = item
+    return list(dedup.values())
+
+
+def _emit_progress(callback, **payload):
+    if not callable(callback):
+        return
+    try:
+        callback(dict(payload))
+    except Exception:
+        pass
+
+
+def fetch_public_seller_inventory_batch(
+    profile_url: str,
+    *,
+    start_page: int = 1,
+    max_pages: int = 1,
+    timeout: int = 8,
+    session=None,
+    progress_callback=None,
+    fallback_alias: str | None = None,
+) -> dict:
+    parsed = parse_profile_url(profile_url)
+    if not parsed:
+        return {"ok": False, "status": "INVALID_PROFILE_URL", "items": [], "next_page": start_page}
+    effective_alias = str(parsed.get("alias") or fallback_alias or "").strip() or None
+    parsed = dict(parsed)
+    parsed["alias"] = effective_alias
+    client = session or requests
+    all_items: dict[str, dict] = {}
+    page_reports = []
+    exhausted = False
+    previous_ids = None
+    page = max(1, int(start_page or 1))
+    max_pages = max(1, int(max_pages or 1))
+    total_listing_estimate = None
+
+    _emit_progress(progress_callback, phase="starting", page=page, pages_read=0, max_pages=max_pages, found_count=0, seller_alias=effective_alias)
+
+    for _ in range(max_pages):
+        url = build_profile_page_url(profile_url, page)
+        _emit_progress(progress_callback, phase="fetching", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), seller_alias=effective_alias)
+        try:
+            response = client.get(url, headers={"User-Agent": "Mozilla/5.0 FlipFynd/1.0", "Accept": "text/html"}, timeout=timeout)
+        except requests.RequestException as exc:
+            return {"ok": False, "status": "REQUEST_FAILED", "error": str(exc), "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
+        if response.status_code != 200:
+            return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
+
+        response_url = str(getattr(response, "url", None) or url)
+        redirected_profile = parse_profile_url(response_url) or {}
+        redirected_alias = str(redirected_profile.get("alias") or "").strip() or None
+        if redirected_alias:
+            effective_alias = redirected_alias
+            parsed["alias"] = redirected_alias
+        _remember_paging_suffix(response_url, response.text)
+
+        total_match = _TOTAL_LISTINGS_RE.search(_text(response.text))
+        if total_match:
+            try:
+                total_listing_estimate = int(re.sub(r"[^0-9]", "", total_match.group("count")))
+            except (TypeError, ValueError):
+                pass
+
+        items = extract_public_profile_items(response.text, seller_alias=effective_alias, seller_id=parsed["seller_id"])
+        ids = tuple(sorted(x["tradera_item_id"] for x in items if x.get("tradera_item_id")))
+        page_reports.append({"page": page, "count": len(items), "url": response_url})
+
+        if not items:
+            exhausted = True
+            _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=0, seller_alias=effective_alias)
+            break
+        if previous_ids is not None and ids == previous_ids:
+            exhausted = True
+            _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
+            break
+
+        previous_ids = ids
+        for item in items:
+            all_items[item["tradera_item_id"]] = item
+        _emit_progress(progress_callback, phase="page_complete", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
+        page += 1
+
+    _emit_progress(progress_callback, phase="complete", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), exhausted=exhausted, seller_alias=effective_alias)
+    return {
+        "ok": True,
+        "status": "OK",
+        "seller": parsed,
+        "items": list(all_items.values()),
+        "parsed_count": len(all_items),
+        "pages_read": len(page_reports),
+        "page_reports": page_reports,
+        "next_page": page,
+        "exhausted": exhausted,
+        "inventory_source": "TRADERA_PUBLIC_PROFILE",
+        "total_listing_estimate": total_listing_estimate,
+    }
 '''
-    text = text.replace(helper_marker, helpers + helper_marker, 1)
 
-old_extract = '''def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id=None) -> list[dict]:\n    return list(_extract_anchor_items(str(page_html or ""), seller_alias=seller_alias, seller_id=seller_id).values())\n'''
-new_extract = '''def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id=None) -> list[dict]:\n    source = str(page_html or "")\n    anchors = _extract_anchor_items(source, seller_alias=seller_alias, seller_id=seller_id)\n    if anchors:\n        return list(anchors.values())\n\n    # Small compatibility fallback for pages/tests where listings only exist in\n    # embedded JSON. We only enter this path when there are no visible anchors,\n    # so normal Tradera profile pages avoid the expensive recursive JSON walk.\n    dedup: dict[str, dict] = {}\n    for script_body in _SCRIPT_RE.findall(source):\n        body = _html.unescape(script_body.strip())\n        if not body or body[0] not in "[{":\n            continue\n        try:\n            payload = json.loads(body)\n        except Exception:\n            continue\n        for obj in _walk_json(payload):\n            item = _normalize_json_listing(obj, seller_alias=seller_alias, seller_id=seller_id)\n            if item:\n                dedup[item["tradera_item_id"]] = item\n    return list(dedup.values())\n'''
-if old_extract in text:
-    text = text.replace(old_extract, new_extract, 1)
-
-# The reusable helper must honour max_pages; the controller already passes 1,
-# which keeps the live Seller Top 5 UX at exactly one page per click.
-text = text.replace(
-    '    # Hard safety rule: exactly one Tradera profile page per user action.\n    max_pages = 1\n',
-    '    max_pages = max(1, int(max_pages or 1))\n',
-    1,
-)
-text = text.replace('max_pages=1, found_count=0', 'max_pages=max_pages, found_count=0')
-text = text.replace('pages_read=0, max_pages=1, found_count=0', 'pages_read=0, max_pages=max_pages, found_count=0')
-text = text.replace('pages_read=1,\n            max_pages=1,', 'pages_read=len(page_reports),\n            max_pages=max_pages,')
-text = text.replace('pages_read=1, max_pages=1, found_count=len(all_items)', 'pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items)')
-text = text.replace('"pages_read": 1,', '"pages_read": len(page_reports),')
-
-p.write_text(text, encoding='utf-8')
+Path('src/public_seller_inventory.py').write_text(module, encoding='utf-8')
 
 p = Path('app.py')
 text = p.read_text(encoding='utf-8')
-text = text.replace('APP_VERSION = "v0.12.88"', 'APP_VERSION = "v0.12.89"')
-text = text.replace('APP_VERSION = "v0.12.87"', 'APP_VERSION = "v0.12.89"')
+for old in ('v0.12.88', 'v0.12.87', 'v0.12.86', 'v0.12.85'):
+    text = text.replace(f'APP_VERSION = "{old}"', 'APP_VERSION = "v0.12.89"')
 p.write_text(text, encoding='utf-8')
-
 Path('VERSION').write_text('0.12.89\n', encoding='utf-8')
-print('patched FlipFynd v0.12.89: one-page live flow + compatible fetch helper')
+print('patched FlipFynd v0.12.89: parser, JSON fallback and repeated-page stop fixed')
