@@ -163,9 +163,6 @@ def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id
     """
     source = str(page_html or "")
     dedup = _extract_anchor_items(source, seller_alias=seller_alias, seller_id=seller_id)
-
-    # Embedded JSON may contain cleaner titles/prices for the SAME visible cards.
-    # Never introduce a new item from JSON when visible seller cards were found.
     allow_new_json_items = not dedup
     for script_body in _SCRIPT_RE.findall(source):
         body = script_body.strip()
@@ -238,10 +235,11 @@ def fetch_public_seller_inventory_batch(
         if response.status_code != 200:
             _emit_progress(progress_callback, phase="error", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), status="HTTP_ERROR")
             return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
-        _remember_paging_suffix(str(response.url or profile_url), response.text)
+        response_url = str(getattr(response, "url", None) or url)
+        _remember_paging_suffix(response_url, response.text)
         items = extract_public_profile_items(response.text, seller_alias=effective_alias, seller_id=parsed["seller_id"])
         ids = tuple(sorted(x["tradera_item_id"] for x in items if x.get("tradera_item_id")))
-        page_reports.append({"page": page, "count": len(items), "url": str(response.url or url)})
+        page_reports.append({"page": page, "count": len(items), "url": response_url})
         if not items or ids == previous_ids:
             exhausted = True
             _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
