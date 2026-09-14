@@ -1,7 +1,48 @@
 from pathlib import Path
+import re
 
 p = Path('app.py')
 text = p.read_text(encoding='utf-8')
+original = text
+
+# One-click Seller Top 5 UX: sport choice and the separate import/triage controls
+# are obsolete. The controller now fetches the complete seller inventory,
+# analyses supported sports together and exposes real progress itself.
+text = text.replace(
+    '    st.caption("Skriv ett Tradera-säljarnamn. FlipFynd hämtar säljarens aktiva annonser och rankar de fem bästa möjligheterna med samma försiktiga analysregler som i huvudsökningen.")',
+    '    st.caption("Ange säljaren och tryck en gång. FlipFynd läser in säljarens annonser, filtrerar till samlarkort, analyserar hockey och fotboll tillsammans och rankar de fem bästa möjligheterna.")',
+    1,
+)
+
+radio_block = '''    seller_top5_sport_label = st.radio(
+        "Sport",
+        ["Hockey", "Fotboll"],
+        horizontal=True,
+        key="seller_top5_sport",
+    )
+'''
+if radio_block in text:
+    text = text.replace(radio_block, '    seller_top5_sport_label = "Alla"\n', 1)
+
+text = text.replace(
+    'if st.button("🔎 Hitta säljarens 5 bästa fynd", key="seller_top5_run", use_container_width=True):',
+    'if st.button("🔎 Läs in & ranka säljarens 5 bästa", key="seller_top5_run", use_container_width=True):',
+    1,
+)
+text = text.replace(
+    '            sport_key = "hockey" if seller_top5_sport_label == "Hockey" else "football"',
+    '            sport_key = "all"',
+    1,
+)
+
+# Remove the now-redundant second import button, cursor handling and separate
+# "Bästa 20" triage UI. Keep the Top 5 result rendering immediately after it.
+redundant_controls = re.compile(
+    r'\n    import_alias = str\(seller_top5_alias or ""\)\.strip\(\).*?'
+    r'(?=\n    seller_top5_result = st\.session_state\.get\("seller_top5_result"\))',
+    re.S,
+)
+text, _removed = redundant_controls.subn('\n', text, count=1)
 
 old_legacy = '''        rows = seller_top5_result.get("rows") or []
         if not rows:
@@ -75,6 +116,9 @@ new = '''        rows = seller_top5_result.get("rows") or []
             st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
             st.caption("Top 5 rankas med samma fullanalys och slutranking som den ordinarie FlipFynd-sökningen.")
+        sport_counts = seller_top5_result.get("sport_counts") or {}
+        if sport_counts:
+            st.caption(f"Analyserat tillsammans: {int(sport_counts.get('hockey') or 0)} hockey · {int(sport_counts.get('football') or 0)} fotboll.")
         if not rows:
             st.info("Inga samlarkort kunde rankas hos säljaren just nu.")
         for idx, row in enumerate(rows[:5], start=1):
@@ -99,6 +143,8 @@ new = '''        rows = seller_top5_result.get("rows") or []
             if reason:
                 st.caption(reason)
             with st.expander("Visa analysdetaljer", expanded=False):
+                if row.get("sport"):
+                    st.write(f"**Sport:** {'Hockey' if row.get('sport') == 'hockey' else 'Fotboll'}")
                 st.write(f"**Ordinarie rank:** {float(row.get('rank_score') or 0):.0f}")
                 st.write(f"**Spelarscore:** {float(row.get('player_market_score') or 0):.0f}/100")
                 st.write(f"**Riskjusterad vinst:** {float(row.get('risk_adjusted_profit') or 0):.0f} kr")
@@ -116,11 +162,11 @@ if old_current in text:
     text = text.replace(old_current, new, 1)
 elif old_legacy in text:
     text = text.replace(old_legacy, new, 1)
-elif 'Top 5 rankas med samma fullanalys och slutranking' in text:
-    print('already patched')
-    raise SystemExit(0)
-else:
-    raise SystemExit('seller top5 render block not found')
+# If the clean render is already present, keep it and still apply the one-click
+# control cleanup above instead of exiting early.
 
-p.write_text(text, encoding='utf-8')
-print('patched seller top5 UI to ordinary ranking contract')
+if text == original:
+    print('already patched')
+else:
+    p.write_text(text, encoding='utf-8')
+    print('patched Seller Top 5 to one-click cross-sport UI')
