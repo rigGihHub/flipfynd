@@ -214,6 +214,7 @@ def _partial_result_from_saved(
     api_status: str,
     fallback_reason: str,
     resume_required: bool,
+    total_listing_estimate: int | None = None,
 ):
     if saved_items:
         preview = _rank(
@@ -243,6 +244,8 @@ def _partial_result_from_saved(
         "resume_required": bool(resume_required),
         "fallback_reason": fallback_reason,
         "api_status": api_status,
+        "total_listing_estimate": total_listing_estimate,
+        "remaining_listing_estimate": max(0, int(total_listing_estimate) - len(saved_items)) if total_listing_estimate else None,
     })
     return preview
 
@@ -305,7 +308,7 @@ def resolve_seller_top5(
         key = _checkpoint_key(alias, profile_text)
         checkpoint = load_checkpoint(key, session=session)
         if not isinstance(checkpoint, dict):
-            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}
+            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}, "total_listing_estimate": None}
 
         raw_checkpoint_items = (checkpoint.get("items") or {}).values() if isinstance(checkpoint.get("items"), dict) else []
         stored_items = _sanitize_public_items(raw_checkpoint_items, seller_alias=alias, seller_id=seller_id)
@@ -314,6 +317,7 @@ def resolve_seller_top5(
                 "next_page": 1,
                 "pages_read": 0,
                 "items": {},
+                "total_listing_estimate": None,
             }
             stored_items = {}
             save_checkpoint(key, checkpoint, session=session)
@@ -324,6 +328,7 @@ def resolve_seller_top5(
         pages_this_run = 0
         exhausted = False
         public_failure = None
+        total_listing_estimate = checkpoint.get("total_listing_estimate")
 
         for _ in range(batch_pages):
             try:
@@ -342,6 +347,8 @@ def resolve_seller_top5(
                 public_failure = page_result
                 break
 
+            if page_result.get("total_listing_estimate"):
+                total_listing_estimate = int(page_result.get("total_listing_estimate"))
             page_items = _sanitize_public_items(
                 page_result.get("items") or [], seller_alias=alias, seller_id=seller_id
             )
@@ -355,6 +362,7 @@ def resolve_seller_top5(
                     "next_page": current_page,
                     "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run,
                     "items": stored_items,
+                    "total_listing_estimate": total_listing_estimate,
                 },
                 session=session,
             )
@@ -380,12 +388,13 @@ def resolve_seller_top5(
                 api_status=api_status,
                 fallback_reason="PUBLIC_PROFILE_INTERRUPTED",
                 resume_required=True,
+                total_listing_estimate=total_listing_estimate,
             )
 
         if not exhausted:
             save_checkpoint(
                 key,
-                {"next_page": current_page, "pages_read": total_pages_read, "items": stored_items},
+                {"next_page": current_page, "pages_read": total_pages_read, "items": stored_items, "total_listing_estimate": total_listing_estimate},
                 session=session,
             )
             return _partial_result_from_saved(
@@ -403,6 +412,7 @@ def resolve_seller_top5(
                 api_status=api_status,
                 fallback_reason="NO_API_CREDENTIALS" if not creds else "API_FAILED",
                 resume_required=False,
+                total_listing_estimate=total_listing_estimate,
             )
 
         clear_checkpoint(key, session=session)

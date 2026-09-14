@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.84"
+APP_VERSION = "v0.12.85"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6512,12 +6512,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                 if result_status == "INVENTORY_PARTIAL":
                     pages_read = int(top5.get("public_pages_read") or 0)
                     next_page = int(top5.get("public_next_page") or 1)
-                    seller_progress_bar.progress(20, text=f"20% · {found_count} annonser sparade")
+                    seller_progress_bar.progress(100, text=f"{found_count} annonser inlästa · block klart")
                     seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
                     seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt nästa 5 sidor", state="complete", expanded=False)
+                    st.rerun()  # refresh Seller Top 5 continuation UI
                 elif result_status == "PROFILE_INCOMPLETE":
                     seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Fortsätt läsa nästa 5 sidor")
                     seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
+                    st.rerun()  # refresh continuation button after incomplete profile
                 else:
                     seller_status.write(
                         f"{found_count} annonser hittade · {quick_count} snabbanalyserade · "
@@ -6541,12 +6543,18 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         _saved = int(seller_top5_result.get("inventory_count") or 0)
         _pages = int(seller_top5_result.get("public_pages_read") or 0)
         _next = int(seller_top5_result.get("public_next_page") or 1)
-        if seller_top5_result.get("resume_required"):
-            st.caption(f"Sökningen pausades · {_pages} sidor och {_saved} annonser sparade · fortsätter från sida {_next}.")
+        _total_est = seller_top5_result.get("total_listing_estimate")
+        _remaining_est = seller_top5_result.get("remaining_listing_estimate")
+        if _total_est:
+            _inventory_line = f"{_saved} inlästa · cirka {int(_remaining_est or 0)} kvar · {_pages} sidor lästa"
         else:
-            st.caption(f"Sökning pågår · {_pages} sidor · {_saved} annonser · nästa sida {_next}.")
+            _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
+        if seller_top5_result.get("resume_required"):
+            st.caption(f"Sökningen pausades · {_inventory_line}.")
+        else:
+            st.caption(f"Sökning pågår · {_inventory_line}.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
-        st.caption("Profilen är inte färdigläst ännu. Tryck på Fortsätt söka.")
+        st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
     if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE" and (seller_top5_result.get("rows") or []):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)

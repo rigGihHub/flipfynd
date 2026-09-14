@@ -19,6 +19,7 @@ _PRICE_RE = re.compile(r"(?P<price>\d[\d\s.]*)\s*kr", re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 _SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", re.I | re.S)
 _PAGING_HINT_RE = re.compile(r"paging=\d+\.a0\.s(?P<count>\d+)", re.I)
+_TOTAL_LISTINGS_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
 _PAGING_SUFFIX_CACHE: dict[str, str] = {}
 
 
@@ -34,15 +35,20 @@ def parse_profile_url(url: str | None) -> dict | None:
 def build_profile_page_url(profile_url: str, page_number: int) -> str:
     parsed = urlparse(str(profile_url or "").strip())
     query = parse_qs(parsed.query, keep_blank_values=True)
+    page_number = max(1, int(page_number))
     old = (query.get("paging") or [""])[0]
+    # Important: page 1 must use the canonical profile URL if no paging token is
+    # already present. A fabricated token can make Tradera return an empty page.
+    if page_number == 1 and not old:
+        return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
     suffix = ""
     if "." in old:
         suffix = old[old.find("."):]
     if not suffix:
         profile = parse_profile_url(profile_url) or {}
         seller_id = str(profile.get("seller_id") or "")
-        suffix = _PAGING_SUFFIX_CACHE.get(seller_id, ".a0.s999999")
-    query["paging"] = [f"{max(1, int(page_number))}{suffix}"]
+        suffix = _PAGING_SUFFIX_CACHE.get(seller_id, ".a0.s48")
+    query["paging"] = [f"{page_number}{suffix}"]
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
 
@@ -237,6 +243,13 @@ def fetch_public_seller_inventory_batch(
             return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
         response_url = str(getattr(response, "url", None) or url)
         _remember_paging_suffix(response_url, response.text)
+        total_listing_estimate = None
+        total_match = _TOTAL_LISTINGS_RE.search(_text(response.text))
+        if total_match:
+            try:
+                total_listing_estimate = int(re.sub(r"[^0-9]", "", total_match.group("count")))
+            except (TypeError, ValueError):
+                total_listing_estimate = None
         items = extract_public_profile_items(response.text, seller_alias=effective_alias, seller_id=parsed["seller_id"])
         ids = tuple(sorted(x["tradera_item_id"] for x in items if x.get("tradera_item_id")))
         page_reports.append({"page": page, "count": len(items), "url": response_url})
@@ -261,4 +274,5 @@ def fetch_public_seller_inventory_batch(
         "next_page": page,
         "exhausted": exhausted,
         "inventory_source": "TRADERA_PUBLIC_PROFILE",
+        "total_listing_estimate": locals().get("total_listing_estimate"),
     }
