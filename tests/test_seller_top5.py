@@ -64,7 +64,7 @@ def test_ordinary_zero_comp_undersok_is_returned_but_not_upgraded_to_buy():
     assert out["rows"][0]["label"] == "VÄRT ATT UNDERSÖKA"
 
 
-def test_ordinary_final_rank_order_is_reused_exactly():
+def test_buy_evidence_wins_then_ordinary_rank_breaks_equal_opportunity_ties():
     items = [
         {"titel": "A", "lank": "a", "rank": 80, "player_market": 20, "profit": 100, "decision": "SKIP"},
         {"titel": "B", "lank": "b", "rank": 80, "player_market": 70, "profit": 10, "decision": "SKIP"},
@@ -73,7 +73,7 @@ def test_ordinary_final_rank_order_is_reused_exactly():
         {"titel": "E", "lank": "e", "rank": 70, "player_market": 100, "profit": 999, "decision": "KÖP"},
     ]
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
-    assert [row["title"] for row in out["rows"]] == ["D", "C", "B", "A", "E"]
+    assert [row["title"] for row in out["rows"]] == ["E", "D", "C", "B", "A"]
     assert out["ranking_source"] == "ORDINARY_FLIPFYND_RANK"
 
 
@@ -88,7 +88,7 @@ def test_fast_preselection_prefers_ordinary_rank_over_cheap_mediocre_card():
     })
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=20, full_limit=10)
     assert out["rows"][0]["title"] == "Elite rookie patch /25"
-    assert out["seller_analysis_contract"] == "v2-ordinary-rank-preselection"
+    assert out["seller_analysis_contract"] == "v3-ordinary-evidence-opportunity-overlay"
 
 
 def test_verified_buy_ranks_before_equal_rank_skip_via_quick_preselection_stability():
@@ -162,3 +162,25 @@ def test_explicitly_damaged_card_is_ranked_after_clean_alternatives():
 
     assert all("Märken på" not in row["title"] for row in out["rows"])
     assert out["condition_risks_demoted"] >= 1
+
+
+def test_card_specific_rarity_beats_common_star_base_when_evidence_tier_is_equal():
+    items = [
+        {
+            "titel": "2022-23 Topps Common Base Superstar #100 Famous Player",
+            "lank": "base",
+            "rank": 65,
+            "decision": "SKIP",
+        },
+        {
+            "titel": "2021 Donruss Elite Rookie Orange /75 #185 Young Prospect RC",
+            "lank": "rare",
+            "rank": 50,
+            "decision": "SKIP",
+        },
+    ]
+
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
+
+    assert out["rows"][0]["title"].startswith("2021 Donruss Elite Rookie Orange /75")
+    assert out["rows"][0]["collector_signal_score"] > out["rows"][1]["collector_signal_score"]

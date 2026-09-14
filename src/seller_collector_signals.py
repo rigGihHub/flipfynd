@@ -21,7 +21,10 @@ def collector_signals(item: dict) -> dict:
             signals.append((name, weight))
 
     add("one_of_one", 24, bool(re.search(r"(?:\b1\s*/\s*1\b|\bone[- ]of[- ]one\b)", text)))
-    add("serial_numbered", 18, bool(re.search(r"\b\d{1,4}\s*/\s*(?:5|10|15|20|25|49|50|75|99|100|199|299|499)\b", text)) or "numbered" in text or "numrerad" in text)
+    add("serial_numbered", 18, bool(re.search(
+        r"(?:\b\d{1,4}\s*)?/\s*(?:5|10|15|20|25|49|50|75|99|100|199|299|499)\b",
+        text,
+    )) or "numbered" in text or "numrerad" in text)
 
     explicit_auto = bool(re.search(r"\b(?:autograph(?:ed)?|auto|on[- ]card\s+auto|hard[- ]signed)\b", text))
     add("autograph", 17, explicit_auto and not _FALSE_AUTO.search(text))
@@ -35,7 +38,7 @@ def collector_signals(item: dict) -> dict:
 
     penalty = 0
     if re.search(r"\b(?:base\s+card|basekort|common|bas\s*kort)\b", text):
-        penalty -= 8
+        penalty -= 14
 
     raw = sum(weight for _, weight in signals) + penalty
     score = max(0, min(40, raw))

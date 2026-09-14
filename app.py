@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.93"
+APP_VERSION = "v0.12.94"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6623,6 +6623,25 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             else:
                 st.markdown(badge)
             st.caption(f"FlipFynd-score {_rank_score:.0f}/100")
+            _signal_labels = {
+                "one_of_one": "1/1",
+                "serial_numbered": "Numrerat",
+                "autograph": "Autograf",
+                "patch_relic": "Patch/relic",
+                "case_hit_ssp": "SSP/case hit",
+                "premium_insert": "Premiuminsert",
+                "rookie": "Rookie",
+                "premium_parallel": "Premium parallel",
+                "error_variation": "Variation/feltryck",
+                "short_print": "Short print",
+            }
+            _signals = [
+                _signal_labels.get(signal, str(signal))
+                for signal in (row.get("collector_signals") or [])
+                if signal
+            ]
+            if _signals:
+                st.caption("Varför den prioriteras: " + " · ".join(_signals))
             reason = str(row.get("reason") or "").strip()
             if reason:
                 st.caption(reason)

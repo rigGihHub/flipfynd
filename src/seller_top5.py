@@ -125,16 +125,39 @@ def _ordinary_rank_key(row: dict):
     )
 
 
+def _seller_opportunity_rank_key(row: dict):
+    """Order seller candidates without weakening ordinary BUY evidence gates."""
+    decision = str(row.get("decision") or "").upper()
+    decision_tier = 2 if decision.startswith("KÖP") else 1 if decision.startswith("UNDERSÖK") else 0
+    sold = int(_num(row.get("sold_comps")))
+    evidence_tier = 1 if row.get("identity_ok") and sold > 0 else 0
+    collector = min(40.0, _num(row.get("collector_signal_score")))
+    opportunity_score = _num(row.get("rank_score")) + collector * 1.5
+    return (
+        decision_tier,
+        evidence_tier,
+        opportunity_score,
+        _num(row.get("rank_score")),
+        _num(row.get("player_market_score")),
+        _num(row.get("risk_adjusted_profit")),
+    )
+
+
 def _quick_rank_key(row: dict):
     decision = str(row.get("decision") or "").upper()
     sold = int(_num(row.get("sold_comps")))
     identity_ok = bool(row.get("identity_ok"))
+    decision_tier = 0 if decision.startswith("KÖP") else 1 if decision.startswith("UNDERSÖK") else 2
+    evidence_tier = 0 if identity_ok and sold > 0 else 1
+    collector = min(40.0, _num(row.get("collector_signal_score")))
+    opportunity_score = _num(row.get("rank_score")) + collector * 1.5
     return (
+        decision_tier,
+        evidence_tier,
+        -opportunity_score,
         -_num(row.get("rank_score")),
         -_num(row.get("player_market_score")),
         -_num(row.get("risk_adjusted_profit")),
-        0 if decision.startswith("KÖP") else 1,
-        0 if identity_ok and sold > 0 else 1,
         -sold,
         -_num(row.get("quick_score")),
         -_num(row.get("collector_signal_score")),
@@ -297,13 +320,15 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         if row is not None:
             row = dict(row)
             row["quick_score"] = qrow.get("quick_score")
+            row["collector_signal_score"] = qrow.get("collector_signal_score", 0)
+            row["collector_signals"] = list(qrow.get("collector_signals") or [])
             row["seller"] = alias
             row["sport"] = item_sport
             row["analysis_level"] = "full"
             full_rows.append(_seller_presentation_label(row))
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
-    full_rows.sort(key=_ordinary_rank_key, reverse=True)
+    full_rows.sort(key=_seller_opportunity_rank_key, reverse=True)
     selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     selected_opportunities = {_card_opportunity_key(row) for row in selected}
@@ -335,7 +360,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "coverage_complete": bool(quick.get("coverage_complete")),
         "full_candidate_limit": candidate_limit,
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v2-ordinary-rank-preselection",
+        "seller_analysis_contract": "v3-ordinary-evidence-opportunity-overlay",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
         "duplicate_opportunities_removed": duplicate_opportunities_removed,
