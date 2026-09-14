@@ -1,6 +1,7 @@
 import hashlib
 import json
 import time
+from threading import RLock
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -11,6 +12,7 @@ CACHE_SCHEMA_VERSION = 2
 CACHE_MODEL_VERSION = "flip_v26_exact_premium_valuation"
 
 _memory_cache: Optional[Dict[str, Any]] = None
+_cache_lock = RLock()
 
 
 def _now_ts() -> float:
@@ -138,13 +140,13 @@ def _prune_entries(entries: dict, max_entries: int = 4000) -> dict:
 
 def clear_analysis_cache() -> None:
     global _memory_cache
-    _memory_cache = None
-
-    if CACHE_PATH.exists():
-        try:
-            CACHE_PATH.unlink()
-        except Exception:
-            pass
+    with _cache_lock:
+        _memory_cache = None
+        if CACHE_PATH.exists():
+            try:
+                CACHE_PATH.unlink()
+            except Exception:
+                pass
 
 
 def build_analysis_signature(item: dict, data_size: int, mode: str) -> str:
@@ -163,29 +165,26 @@ def build_analysis_signature(item: dict, data_size: int, mode: str) -> str:
 
 
 def get_cached_analysis(signature: str):
-    payload = _load_cache_payload()
-    entries = payload["entries"]
-
-    entry = entries.get(signature)
-    if not entry:
-        return None
-
-    entry["last_accessed"] = _now_ts()
-    return entry.get("result")
+    with _cache_lock:
+        payload = _load_cache_payload()
+        entries = payload["entries"]
+        entry = entries.get(signature)
+        if not entry:
+            return None
+        entry["last_accessed"] = _now_ts()
+        return entry.get("result")
 
 
 def set_cached_analysis(signature: str, result: dict) -> None:
-    payload = _load_cache_payload()
-    entries = payload["entries"]
-
-    existing = entries.get(signature)
-    created_at = existing.get("created_at", _now_ts()) if isinstance(existing, dict) else _now_ts()
-
-    entries[signature] = {
-        "result": result,
-        "created_at": created_at,
-        "last_accessed": _now_ts(),
-    }
-
-    payload["entries"] = _prune_entries(entries, max_entries=4000)
-    _save_cache_payload(payload)
+    with _cache_lock:
+        payload = _load_cache_payload()
+        entries = payload["entries"]
+        existing = entries.get(signature)
+        created_at = existing.get("created_at", _now_ts()) if isinstance(existing, dict) else _now_ts()
+        entries[signature] = {
+            "result": result,
+            "created_at": created_at,
+            "last_accessed": _now_ts(),
+        }
+        payload["entries"] = _prune_entries(entries, max_entries=4000)
+        _save_cache_payload(payload)
