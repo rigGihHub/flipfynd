@@ -1,6 +1,7 @@
 from src.listing_detail_enrichment import (
     extract_jsonld_detail,
     parse_detail_text,
+    persist_seller_identity,
     score_detail_priority,
     select_detail_candidates,
 )
@@ -51,3 +52,44 @@ def test_priority_output_contains_no_valuation_fields():
     payload = {"detail_priority_score": score, "detail_priority_reasons": reasons}
     forbidden = {"market_value", "profit", "roi", "max_bid", "max_purchase_price"}
     assert forbidden.isdisjoint(payload)
+
+
+def test_persist_seller_identity_canonicalizes_nested_alias_id_and_profile_url():
+    item = {
+        "titel": "Card",
+        "seller": {
+            "alias": "Etanol71",
+            "id": 771,
+            "url": "https://www.tradera.com/profile/items/771/Etanol71",
+        },
+    }
+
+    out = persist_seller_identity(item)
+
+    assert out["saljare"] == "Etanol71"
+    assert out["seller_alias"] == "Etanol71"
+    assert out["seller_name"] == "Etanol71"
+    assert out["seller_id"] == "771"
+    assert out["saljare_id"] == "771"
+    assert out["seller_url"].endswith("/Etanol71")
+    assert out["saljare_url"].endswith("/Etanol71")
+
+
+def test_persist_seller_identity_does_not_overwrite_existing_canonical_metadata():
+    item = {
+        "titel": "Card",
+        "seller_alias": "ExistingSeller",
+        "seller_id": "42",
+        "seller_url": "https://example.test/existing",
+        "seller": {
+            "alias": "NestedSeller",
+            "id": 99,
+            "url": "https://example.test/nested",
+        },
+    }
+
+    out = persist_seller_identity(item, "ParsedSeller")
+
+    assert out["seller_alias"] == "ExistingSeller"
+    assert out["seller_id"] == "42"
+    assert out["seller_url"] == "https://example.test/existing"
