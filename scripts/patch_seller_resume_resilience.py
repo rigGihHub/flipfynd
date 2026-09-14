@@ -1,39 +1,33 @@
 from pathlib import Path
 
-# Make Seller Top 5 resilient to dropped Streamlit sessions:
-# - five pages per visible batch
-# - checkpoint every fetched page
-# - mirror checkpoints to local disk through seller_checkpoint_store
-# - persist seller/profile in URL query params so form fields survive reconnects
+# Compatibility patch. Controller v3 already owns five-page batches and
+# per-page checkpoints. Keep only the app-side form persistence patch when v3
+# is present, so CI never rewrites the controller back toward an older shape.
 
 controller = Path('src/seller_top5_controller.py')
 text = controller.read_text(encoding='utf-8')
-original = text
+controller_v3 = '_CHECKPOINT_SCHEMA = "v3"' in text and '_partial_result_from_saved' in text
 
-text = text.replace('from typing import Callable, Iterable\n', 'from typing import Callable, Iterable\n\nfrom src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint\n', 1)
-text = text.replace('PUBLIC_BATCH_PAGES = 10', 'PUBLIC_BATCH_PAGES = 5')
+if not controller_v3:
+    original = text
+    text = text.replace('from typing import Callable, Iterable\n', 'from typing import Callable, Iterable\n\nfrom src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint\n', 1)
+    text = text.replace('PUBLIC_BATCH_PAGES = 10', 'PUBLIC_BATCH_PAGES = 5')
 
-old_load = '''        checkpoint = None\n        if session is not None:\n            checkpoint = session.get(key)\n        if not isinstance(checkpoint, dict):\n            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}\n'''
-new_load = '''        checkpoint = load_checkpoint(key, session=session)\n        if not isinstance(checkpoint, dict):\n            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}\n'''
-text = text.replace(old_load, new_load, 1)
+    old_load = '''        checkpoint = None\n        if session is not None:\n            checkpoint = session.get(key)\n        if not isinstance(checkpoint, dict):\n            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}\n'''
+    new_load = '''        checkpoint = load_checkpoint(key, session=session)\n        if not isinstance(checkpoint, dict):\n            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}\n'''
+    text = text.replace(old_load, new_load, 1)
 
-old_fetch = '''        try:\n            public = _fetch_public(\n                public_fetcher,\n                profile_text,\n                start_page=start_page,\n                public_pages=batch_pages,\n                progress_callback=combined_progress,\n                seller_alias=alias,\n            )\n        except Exception as exc:\n            public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}\n'''
-new_fetch = '''        # Fetch one page at a time and persist a checkpoint immediately after\n        # every successful page. A dropped Streamlit session therefore loses at\n        # most the in-flight page, not the entire block.\n        public = None\n        current_page = start_page\n        pages_this_run = 0\n        exhausted = False\n        for _ in range(batch_pages):\n            try:\n                page_result = _fetch_public(\n                    public_fetcher,\n                    profile_text,\n                    start_page=current_page,\n                    public_pages=1,\n                    progress_callback=combined_progress,\n                    seller_alias=alias,\n                )\n            except Exception as exc:\n                page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}\n            if not page_result.get("ok"):\n                public = page_result\n                break\n            for item in page_result.get("items") or []:\n                if isinstance(item, dict):\n                    item_id = _item_key(item)\n                    if item_id:\n                        stored_items[item_id] = dict(item)\n            pages_this_run += int(page_result.get("pages_read") or 0)\n            current_page = int(page_result.get("next_page") or (current_page + 1))\n            exhausted = bool(page_result.get("exhausted"))\n            save_checkpoint(\n                key,\n                {\n                    "next_page": current_page,\n                    "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run,\n                    "items": stored_items,\n                },\n                session=session,\n            )\n            if exhausted:\n                break\n        if public is None or public.get("ok"):\n            public = {\n                "ok": True,\n                "status": "OK",\n                "items": list(stored_items.values()),\n                "pages_read": pages_this_run,\n                "next_page": current_page,\n                "exhausted": exhausted,\n            }\n'''
-if old_fetch in text:
-    text = text.replace(old_fetch, new_fetch, 1)
-elif 'Fetch one page at a time and persist a checkpoint immediately' not in text:
-    raise SystemExit('public batch fetch block not found')
+    old_fetch = '''        try:\n            public = _fetch_public(\n                public_fetcher,\n                profile_text,\n                start_page=start_page,\n                public_pages=batch_pages,\n                progress_callback=combined_progress,\n                seller_alias=alias,\n            )\n        except Exception as exc:\n            public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}\n'''
+    new_fetch = '''        public = None\n        current_page = start_page\n        pages_this_run = 0\n        exhausted = False\n        for _ in range(batch_pages):\n            try:\n                page_result = _fetch_public(\n                    public_fetcher, profile_text, start_page=current_page, public_pages=1,\n                    progress_callback=combined_progress, seller_alias=alias,\n                )\n            except Exception as exc:\n                page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}\n            if not page_result.get("ok"):\n                public = page_result\n                break\n            for item in page_result.get("items") or []:\n                if isinstance(item, dict):\n                    item_id = _item_key(item)\n                    if item_id:\n                        stored_items[item_id] = dict(item)\n            pages_this_run += int(page_result.get("pages_read") or 0)\n            current_page = int(page_result.get("next_page") or (current_page + 1))\n            exhausted = bool(page_result.get("exhausted"))\n            save_checkpoint(key, {"next_page": current_page, "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run, "items": stored_items}, session=session)\n            if exhausted:\n                break\n        if public is None or public.get("ok"):\n            public = {"ok": True, "status": "OK", "items": list(stored_items.values()), "pages_read": pages_this_run, "next_page": current_page, "exhausted": exhausted}\n'''
+    if old_fetch in text:
+        text = text.replace(old_fetch, new_fetch, 1)
+    elif 'pages_this_run' not in text:
+        raise SystemExit('public batch fetch block not found')
 
-old_save = '''                if session is not None:\n                    session[key] = {\n                        "next_page": next_page,\n                        "pages_read": total_pages_read,\n                        "items": stored_items,\n                    }\n'''
-new_save = '''                save_checkpoint(\n                    key,\n                    {"next_page": next_page, "pages_read": total_pages_read, "items": stored_items},\n                    session=session,\n                )\n'''
-text = text.replace(old_save, new_save, 1)
-
-old_clear = '''            if session is not None:\n                try:\n                    del session[key]\n                except Exception:\n                    pass\n'''
-new_clear = '''            clear_checkpoint(key, session=session)\n'''
-text = text.replace(old_clear, new_clear, 1)
-
-if text != original:
-    controller.write_text(text, encoding='utf-8')
+    if text != original:
+        controller.write_text(text, encoding='utf-8')
+else:
+    print('controller v3 already contains resume resilience')
 
 app = Path('app.py')
 text = app.read_text(encoding='utf-8')
@@ -60,4 +54,4 @@ text = text.replace('fler 10-sidorsblock', 'fler 5-sidorsblock')
 if text != original:
     app.write_text(text, encoding='utf-8')
 
-print('patched Seller Top 5 resume resilience: 5-page batches, per-page checkpoints, URL form persistence')
+print('Seller Top 5 resume compatibility patch complete')
