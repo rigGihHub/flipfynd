@@ -1,4 +1,9 @@
-"""Rank the best current FlipFynd opportunities from one Tradera seller."""
+"""Rank the best current FlipFynd card candidates from one Tradera seller.
+
+Seller-specific logic is deliberately limited to inventory filtering and cheap
+triage. Final decisions and final ordering reuse the normal FlipFynd full
+analysis contract: rank_score, player_market_score, risk_adjusted_profit.
+"""
 from __future__ import annotations
 
 from typing import Callable, Iterable
@@ -23,19 +28,17 @@ def _identity_key(item: dict) -> str:
     return str(item.get("titel") or item.get("title") or "").strip().casefold()
 
 
-def _rank_key(row: dict):
-    decision = str(row.get("decision") or "").upper()
-    is_buy = decision.startswith("KÖP")
-    sold = int(_num(row.get("sold_comps")))
-    identity_ok = bool(row.get("identity_ok"))
-    edge = _num(row.get("market_edge"))
-    valuation = _num(row.get("valuation_confidence"))
-    quick = _num(row.get("quick_score"))
-    price = _num(row.get("price"), 10**12)
-    return (0 if is_buy else 1, 0 if identity_ok and sold >= 2 else 1, -sold, -edge, -valuation, -quick, price)
+def _ordinary_rank_key(row: dict):
+    """Mirror the ordinary result ordering in app.py, descending."""
+    return (
+        _num(row.get("rank_score")),
+        _num(row.get("player_market_score")),
+        _num(row.get("risk_adjusted_profit")),
+    )
 
 
 def _quick_rank_key(row: dict):
+    """Seller-only preselection; never used as the final rank when full data exists."""
     decision = str(row.get("decision") or "").upper()
     sold = int(_num(row.get("sold_comps")))
     identity_ok = bool(row.get("identity_ok"))
@@ -48,11 +51,6 @@ def _quick_rank_key(row: dict):
         -_num(row.get("quick_score")),
         _num(row.get("price"), 10**12),
     )
-
-
-def _display_worthy(row: dict) -> bool:
-    decision = str(row.get("decision") or "").upper().strip()
-    return decision.startswith("KÖP") or decision.startswith("UNDERSÖK")
 
 
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int) -> dict:
@@ -100,20 +98,30 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
 
 
 def _fallback_row(qrow: dict, alias: str) -> dict:
-    decision = str(qrow.get("decision") or "").upper()
-    if decision.startswith("UNDERSÖK"):
-        label = "VÄRT ATT UNDERSÖKA"
-        reason = qrow.get("reason") or "Behöver verifieras innan köp."
+    """Last-resort row when fewer than five full analyses succeed.
+
+    This never upgrades the underlying decision. It is visibly marked as a
+    quick-analysis fallback so users do not confuse it with an ordinary full
+    FlipFynd result.
+    """
+    decision = str(qrow.get("decision") or "SKIP")
+    decision_upper = decision.upper()
+    if decision_upper.startswith("KÖP"):
+        label = "KÖP-KANDIDAT · SNABBANALYS"
+    elif decision_upper.startswith("UNDERSÖK"):
+        label = "VÄRT ATT UNDERSÖKA · SNABBANALYS"
     else:
-        label = "BÄST AV RESTEN"
-        reason = "En av säljarens högst rankade kortkandidater, men FlipFynd har ännu inte tillräckligt underlag för köp eller en stark fyndsignal."
+        label = "BÄST AV RESTEN · SNABBANALYS"
     return {
         "title": qrow.get("title"), "price": qrow.get("price"), "url": qrow.get("url"),
-        "decision": qrow.get("decision") or "SKIP", "label": label, "reason": reason,
+        "decision": decision, "label": label,
+        "reason": "Reservresultat från snabbanalysen eftersom färre än fem fullanalyser lyckades.",
         "identity_ok": qrow.get("identity_ok"), "sold_comps": qrow.get("sold_comps", 0),
         "valuation_confidence": qrow.get("valuation_confidence", 0),
         "market_edge": qrow.get("market_edge", 0), "quick_score": qrow.get("quick_score", 0),
+        "rank_score": 0, "player_market_score": 0, "risk_adjusted_profit": 0,
         "seller": alias, "source_item": qrow.get("source_item") or {},
+        "analysis_level": "quick_fallback",
     }
 
 
@@ -143,31 +151,37 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         }
 
     quick = _quick_scan_inventory(alias, inventory, analyze_fn=analyze_fn, sport=sport, quick_limit=quick_limit)
-    candidate_limit = max(5, min(int(full_limit), 20))
+
+    # Full-analyse a broader shortlist than the final five. This mirrors the
+    # ordinary search architecture: cheap preselection first, authoritative full
+    # analysis second. The caller's old full_limit=10 is treated as a floor only;
+    # large seller inventories deserve at least 20 full-analysis attempts.
+    candidate_limit = min(max(int(full_limit or 20), 20), 40)
     candidates = list(quick.get("rows") or [])[:candidate_limit]
     full_rows = []
     failed = 0
     for qrow in candidates:
         source_item = qrow.get("source_item") or {}
         try:
-            full = full_analyze_live_seller_item(
+            row = full_analyze_live_seller_item(
                 source_item, analyze_fn=analyze_fn, all_items=inventory,
                 sport=sport, strategy_mode="quick_flip",
             )
         except Exception:
             failed += 1
             continue
-        row = dict(full)
+        row = dict(row)
         row["quick_score"] = qrow.get("quick_score")
         row["seller"] = alias
-        if _display_worthy(row):
-            full_rows.append(row)
+        row["analysis_level"] = "full"
+        full_rows.append(row)
 
-    # Product contract: this view ranks the seller's five best *card candidates*.
-    # It does not claim all five are finds. Strong full-analysis rows come first;
-    # remaining slots are filled from quick triage and clearly labelled as weak.
-    full_rows.sort(key=_rank_key)
+    # Exact same final ranking fields as the ordinary FlipFynd result list.
+    full_rows.sort(key=_ordinary_rank_key, reverse=True)
     selected = list(full_rows[:5])
+
+    # Only use quick rows if too few full analyses succeeded. Never overwrite a
+    # full result and never manufacture a stronger decision.
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     for qrow in quick.get("rows") or []:
         if len(selected) >= 5:
@@ -188,6 +202,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "quick_failed": int(quick.get("failed_count") or 0),
         "quick_batches": int(quick.get("batch_count") or 0),
         "coverage_complete": bool(quick.get("coverage_complete")),
+        "full_candidate_limit": candidate_limit,
+        "ranking_source": "ORDINARY_FLIPFYND_RANK",
     }
     return {
         "status": "READY" if selected else "NO_CARD_CANDIDATES",
