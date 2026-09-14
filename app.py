@@ -6378,7 +6378,24 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             sport_key = "hockey" if seller_top5_sport_label == "Hockey" else "football"
             local_market = get_data(get_data_version())
             seller_status = st.status(f"🔎 Söker igenom {alias}…", expanded=True)
+            seller_progress_line = seller_status.empty()
             seller_status.write("Startar säljarinventering och prioritering av kandidater.")
+
+            def _seller_search_progress(info):
+                phase = str((info or {}).get("phase") or "")
+                page = int((info or {}).get("page") or 0)
+                found = int((info or {}).get("found_count") or 0)
+                pages_read = int((info or {}).get("pages_read") or 0)
+                max_pages = int((info or {}).get("max_pages") or 0)
+                if phase == "fetching":
+                    seller_progress_line.info(f"📄 Läser profilsida {page} · {found} unika annonser hittade hittills")
+                elif phase == "page_complete":
+                    seller_progress_line.success(f"Sida {page} klar · {found} unika annonser hittade · {pages_read}/{max_pages} sidor i detta block")
+                elif phase == "exhausted":
+                    seller_progress_line.success(f"Profilens slut nått vid sida {page} · {found} unika annonser hittade")
+                elif phase == "complete":
+                    seller_progress_line.info(f"Inventering klar · {found} annonser · går vidare till analys")
+
             try:
                 try:
                     top5 = resolve_seller_top5(
@@ -6388,6 +6405,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         sport=sport_key,
                         credentials=creds,
                         profile_url=seller_top5_profile_url,
+                        progress_callback=_seller_search_progress,
                         quick_limit=60,
                         full_limit=10,
                     )
@@ -6395,7 +6413,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     # Streamlit Cloud can briefly serve a mixed deploy where app.py is newer
                     # than seller_top5_controller.py. Retry the legacy signature instead of
                     # taking down the whole app. Only swallow the known signature mismatch.
-                    if "profile_url" not in str(exc):
+                    if "profile_url" not in str(exc) and "progress_callback" not in str(exc):
                         raise
                     seller_status.write("Deployen synkas fortfarande – använder kompatibilitetsläge.")
                     top5 = resolve_seller_top5(
@@ -6431,7 +6449,25 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.warning("Ange ett säljarnamn först.")
         else:
             creds = _resolve_tradera_api_credentials()
-            with st.spinner(f"Läser in annonser från {import_alias}…"):
+            import_status_box = st.status(f"📥 Läser in annonser från {import_alias}…", expanded=True)
+            import_progress_line = import_status_box.empty()
+
+            def _seller_import_progress(info):
+                phase = str((info or {}).get("phase") or "")
+                page = int((info or {}).get("page") or 0)
+                found = int((info or {}).get("found_count") or 0)
+                pages_read = int((info or {}).get("pages_read") or 0)
+                max_pages = int((info or {}).get("max_pages") or 0)
+                if phase == "fetching":
+                    import_progress_line.info(f"📄 Läser profilsida {page} · {found} unika annonser hittade hittills")
+                elif phase == "page_complete":
+                    import_progress_line.success(f"Sida {page} klar · {found} unika annonser hittade · {pages_read}/{max_pages} sidor i detta block")
+                elif phase == "exhausted":
+                    import_progress_line.success(f"Profilens slut nått · {found} annonser hittade")
+                elif phase == "complete":
+                    import_progress_line.info(f"Importblocket klart · {found} annonser · startar triage")
+
+            with import_status_box:
                 imported = None
                 if creds:
                     imported = discover_active_seller_inventory(
@@ -6468,6 +6504,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         str(seller_top5_profile_url).strip(),
                         start_page=import_next_page,
                         max_pages=12,
+                        progress_callback=_seller_import_progress,
                     )
                     if imported.get("ok"):
                         items = imported.get("items") or []
@@ -6509,6 +6546,11 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         "status": imported.get("status") or "IMPORT_FAILED",
                         "seller": import_alias,
                     }
+
+            if imported is not None and imported.get("ok"):
+                import_status_box.update(label=f"✅ Importblock klart för {import_alias}", state="complete", expanded=False)
+            elif imported is not None:
+                import_status_box.update(label=f"❌ Importen av {import_alias} avbröts", state="error", expanded=True)
 
     seller_inventory_status = st.session_state.get("seller_inventory_import_status")
     if seller_inventory_status and seller_inventory_status.get("seller") == str(seller_top5_alias or "").strip():
