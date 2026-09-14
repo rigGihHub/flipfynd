@@ -2,25 +2,21 @@
 
 One click owns the whole seller workflow. Public Tradera profiles are read in
 small checkpointed batches so Streamlit never needs to keep one very long
-request alive. Ranking starts only after the complete public inventory has been
-collected.
+request alive. Partial inventories may show a provisional Top 5; completed
+inventories get the final ranking.
 """
 from __future__ import annotations
 
 from typing import Callable, Iterable
 
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
-
-from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
-
-from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
-
-from src.public_seller_inventory import fetch_public_seller_inventory_batch
+from src.public_seller_inventory import fetch_public_seller_inventory_batch, parse_profile_url
 from src.seller_top5 import build_seller_top5
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
 PUBLIC_BATCH_PAGES = 5
+_CHECKPOINT_SCHEMA = "v3"
 
 
 def _credentials_pair(credentials):
@@ -106,9 +102,10 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress
     def combined_progress(payload):
         _emit(progress_callback, ui, payload)
 
+    rows = [dict(x) for x in (items or []) if isinstance(x, dict)]
     result = build_seller_top5(
         alias,
-        [dict(x) for x in (items or []) if isinstance(x, dict)],
+        rows,
         analyze_fn=analyze_fn,
         sport="all",
         quick_limit=quick_limit,
@@ -143,7 +140,6 @@ def _fetch_public(public_fetcher, profile_url, *, start_page, public_pages, prog
 
 
 def _streamlit_session_state():
-    """Return Streamlit session_state only inside a real app run."""
     try:
         import streamlit as st
         from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -155,7 +151,16 @@ def _streamlit_session_state():
 
 
 def _checkpoint_key(alias: str, profile_url: str) -> str:
-    return "seller_public_checkpoint::" + str(alias or "").strip().casefold() + "::" + str(profile_url or "").strip()
+    # Schema suffix intentionally invalidates checkpoints created by older
+    # versions that could accidentally contain the full local market.
+    return (
+        "seller_public_checkpoint::"
+        + _CHECKPOINT_SCHEMA
+        + "::"
+        + str(alias or "").strip().casefold()
+        + "::"
+        + str(profile_url or "").strip()
+    )
 
 
 def _item_key(item: dict) -> str:
@@ -169,6 +174,77 @@ def _item_key(item: dict) -> str:
         or item.get("title")
         or ""
     ).strip()
+
+
+def _public_item_matches_profile(item: dict, *, seller_alias: str, seller_id: str | None) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if str(item.get("source_type") or "") != "tradera_public_seller_profile":
+        return False
+    item_seller_id = str(item.get("seller_user_id") or "").strip()
+    if seller_id and item_seller_id and item_seller_id != str(seller_id):
+        return False
+    item_alias = str(item.get("saljare") or item.get("seller") or item.get("seller_name") or "").strip()
+    if seller_alias and item_alias and item_alias.casefold() != seller_alias.casefold():
+        return False
+    return bool(_item_key(item))
+
+
+def _sanitize_public_items(items, *, seller_alias: str, seller_id: str | None) -> dict[str, dict]:
+    clean: dict[str, dict] = {}
+    for item in items or []:
+        if _public_item_matches_profile(item, seller_alias=seller_alias, seller_id=seller_id):
+            clean[_item_key(item)] = dict(item)
+    return clean
+
+
+def _partial_result_from_saved(
+    alias: str,
+    saved_items: dict[str, dict],
+    *,
+    analyze_fn: Callable,
+    quick_limit: int,
+    full_limit: int,
+    progress_callback,
+    ui,
+    public_status: str,
+    public_error,
+    pages_read: int,
+    next_page: int,
+    api_status: str,
+    fallback_reason: str,
+    resume_required: bool,
+):
+    if saved_items:
+        preview = _rank(
+            alias,
+            list(saved_items.values()),
+            analyze_fn=analyze_fn,
+            quick_limit=quick_limit,
+            full_limit=min(5, max(1, int(full_limit or 5))),
+            source="TRADERA_PUBLIC_PROFILE",
+            progress_callback=progress_callback,
+            ui=ui,
+        )
+        preview = dict(preview)
+    else:
+        preview = {"seller": alias, "rows": []}
+    preview.update({
+        "status": "INVENTORY_PARTIAL",
+        "inventory_count": len(saved_items),
+        "inventory_source": "TRADERA_PUBLIC_PROFILE",
+        "public_status": public_status,
+        "public_error": public_error,
+        "public_pages_read": pages_read,
+        "public_next_page": next_page,
+        "public_batch_pages": 0,
+        "public_inventory_complete": False,
+        "provisional_top5": bool(saved_items),
+        "resume_required": bool(resume_required),
+        "fallback_reason": fallback_reason,
+        "api_status": api_status,
+    })
+    return preview
 
 
 def resolve_seller_top5(
@@ -221,26 +297,34 @@ def resolve_seller_top5(
             return result
         api_failure = fetched
 
-    public_failure = None
     profile_text = str(profile_url or "").strip()
     if profile_text:
         session = _streamlit_session_state()
+        parsed_profile = parse_profile_url(profile_text) or {}
+        seller_id = str(parsed_profile.get("seller_id") or "").strip() or None
         key = _checkpoint_key(alias, profile_text)
         checkpoint = load_checkpoint(key, session=session)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}
 
-        start_page = max(1, int(checkpoint.get("next_page") or 1))
-        stored_items = dict(checkpoint.get("items") or {})
-        batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
+        raw_checkpoint_items = (checkpoint.get("items") or {}).values() if isinstance(checkpoint.get("items"), dict) else []
+        stored_items = _sanitize_public_items(raw_checkpoint_items, seller_alias=alias, seller_id=seller_id)
+        if len(stored_items) != len(checkpoint.get("items") or {}):
+            checkpoint = {
+                "next_page": 1,
+                "pages_read": 0,
+                "items": {},
+            }
+            stored_items = {}
+            save_checkpoint(key, checkpoint, session=session)
 
-        # Fetch one page at a time and persist a checkpoint immediately after
-        # every successful page. A dropped Streamlit session therefore loses at
-        # most the in-flight page, not the entire block.
-        public = None
+        start_page = max(1, int(checkpoint.get("next_page") or 1))
+        batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
         current_page = start_page
         pages_this_run = 0
         exhausted = False
+        public_failure = None
+
         for _ in range(batch_pages):
             try:
                 page_result = _fetch_public(
@@ -253,14 +337,15 @@ def resolve_seller_top5(
                 )
             except Exception as exc:
                 page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
+
             if not page_result.get("ok"):
-                public = page_result
+                public_failure = page_result
                 break
-            for item in page_result.get("items") or []:
-                if isinstance(item, dict):
-                    item_id = _item_key(item)
-                    if item_id:
-                        stored_items[item_id] = dict(item)
+
+            page_items = _sanitize_public_items(
+                page_result.get("items") or [], seller_alias=alias, seller_id=seller_id
+            )
+            stored_items.update(page_items)
             pages_this_run += int(page_result.get("pages_read") or 0)
             current_page = int(page_result.get("next_page") or (current_page + 1))
             exhausted = bool(page_result.get("exhausted"))
@@ -275,106 +360,70 @@ def resolve_seller_top5(
             )
             if exhausted:
                 break
-        if public is None or public.get("ok"):
-            public = {
-                "ok": True,
-                "status": "OK",
-                "items": list(stored_items.values()),
-                "pages_read": pages_this_run,
-                "next_page": current_page,
-                "exhausted": exhausted,
-            }
 
-        if public.get("ok"):
-            for item in public.get("items") or []:
-                if isinstance(item, dict):
-                    k = _item_key(item)
-                    if k:
-                        stored_items[k] = dict(item)
-            total_pages_read = int(checkpoint.get("pages_read") or 0) + int(public.get("pages_read") or 0)
-            next_page = int(public.get("next_page") or (start_page + batch_pages))
-            exhausted = bool(public.get("exhausted"))
+        total_pages_read = int(checkpoint.get("pages_read") or 0) + pages_this_run
+        api_status = (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK")
 
-            if not exhausted:
-                save_checkpoint(
-                    key,
-                    {"next_page": next_page, "pages_read": total_pages_read, "items": stored_items},
-                    session=session,
-                )
-                # Show a living provisional Top 5 after every 10-page block. Keep
-                # this preview deliberately lighter than the final pass so a
-                # checkpoint remains fast and robust on Streamlit Cloud.
-                preview = _rank(
-                    alias,
-                    list(stored_items.values()),
-                    analyze_fn=analyze_fn,
-                    quick_limit=quick_limit,
-                    full_limit=min(5, max(1, int(full_limit or 5))),
-                    source="TRADERA_PUBLIC_PROFILE",
-                    progress_callback=progress_callback,
-                    ui=ui,
-                )
-                preview = dict(preview)
-                preview.update({
-                    "status": "INVENTORY_PARTIAL",
-                    "inventory_count": len(stored_items),
-                    "inventory_source": "TRADERA_PUBLIC_PROFILE",
-                    "public_status": public.get("status") or "OK",
-                    "public_pages_read": total_pages_read,
-                    "public_next_page": next_page,
-                    "public_batch_pages": int(public.get("pages_read") or 0),
-                    "public_inventory_complete": False,
-                    "provisional_top5": True,
-                    "fallback_reason": "NO_API_CREDENTIALS" if not creds else "API_FAILED",
-                    "api_status": (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK"),
-                })
-                return preview
-
-            clear_checkpoint(key, session=session)
-
-            result = _rank(
+        if public_failure:
+            return _partial_result_from_saved(
                 alias,
-                list(stored_items.values()),
+                stored_items,
                 analyze_fn=analyze_fn,
                 quick_limit=quick_limit,
                 full_limit=full_limit,
-                source="TRADERA_PUBLIC_PROFILE",
                 progress_callback=progress_callback,
                 ui=ui,
+                public_status=public_failure.get("status") or "FETCH_FAILED",
+                public_error=public_failure.get("error"),
+                pages_read=total_pages_read,
+                next_page=current_page,
+                api_status=api_status,
+                fallback_reason="PUBLIC_PROFILE_INTERRUPTED",
+                resume_required=True,
             )
-            result["public_status"] = public.get("status") or "OK"
-            result["public_pages_read"] = total_pages_read
-            result["public_inventory_complete"] = True
-            result["fallback_reason"] = "NO_API_CREDENTIALS" if not creds else "API_FAILED"
-            result["api_status"] = (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK")
-            return result
-        public_failure = public
-        # A supplied public profile is authoritative for Seller Top 5. If the
-        # next page fails, keep the persisted checkpoint and ask the UI to
-        # continue from the same page. Never rank unrelated LOCAL_MARKET rows
-        # and never emit a false completed-analysis state.
-        saved_checkpoint = load_checkpoint(key, session=session) or checkpoint
-        saved_items = dict((saved_checkpoint or {}).get("items") or {})
-        saved_pages = int((saved_checkpoint or {}).get("pages_read") or 0)
-        saved_next_page = max(1, int((saved_checkpoint or {}).get("next_page") or start_page))
-        return {
-            "status": "INVENTORY_PARTIAL",
-            "seller": alias,
-            "rows": [],
-            "inventory_count": len(saved_items),
-            "inventory_source": "TRADERA_PUBLIC_PROFILE",
-            "public_status": (public_failure or {}).get("status") or "FETCH_FAILED",
-            "public_error": (public_failure or {}).get("error"),
-            "public_pages_read": saved_pages,
-            "public_next_page": saved_next_page,
-            "public_batch_pages": 0,
-            "public_inventory_complete": False,
-            "provisional_top5": False,
-            "resume_required": True,
-            "fallback_reason": "PUBLIC_PROFILE_INTERRUPTED",
-            "api_status": (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK"),
-        }
 
+        if not exhausted:
+            save_checkpoint(
+                key,
+                {"next_page": current_page, "pages_read": total_pages_read, "items": stored_items},
+                session=session,
+            )
+            return _partial_result_from_saved(
+                alias,
+                stored_items,
+                analyze_fn=analyze_fn,
+                quick_limit=quick_limit,
+                full_limit=full_limit,
+                progress_callback=progress_callback,
+                ui=ui,
+                public_status="OK",
+                public_error=None,
+                pages_read=total_pages_read,
+                next_page=current_page,
+                api_status=api_status,
+                fallback_reason="NO_API_CREDENTIALS" if not creds else "API_FAILED",
+                resume_required=False,
+            )
+
+        clear_checkpoint(key, session=session)
+        result = _rank(
+            alias,
+            list(stored_items.values()),
+            analyze_fn=analyze_fn,
+            quick_limit=quick_limit,
+            full_limit=full_limit,
+            source="TRADERA_PUBLIC_PROFILE",
+            progress_callback=progress_callback,
+            ui=ui,
+        )
+        result["public_status"] = "OK"
+        result["public_pages_read"] = total_pages_read
+        result["public_inventory_complete"] = True
+        result["fallback_reason"] = "NO_API_CREDENTIALS" if not creds else "API_FAILED"
+        result["api_status"] = api_status
+        return result
+
+    # Only use the local market when no public profile URL was supplied.
     seller_rows = local_inventory_for_seller(alias, local_rows)
     combined_progress({
         "phase": "filter_start",
@@ -404,6 +453,4 @@ def resolve_seller_top5(
     else:
         result["fallback_reason"] = "NO_API_CREDENTIALS"
         result["api_status"] = "NOT_CONFIGURED"
-    if public_failure:
-        result["public_status"] = public_failure.get("status") or "UNKNOWN_PUBLIC_ERROR"
     return result
