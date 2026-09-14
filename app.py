@@ -247,8 +247,18 @@ div[data-testid="stCaptionContainer"] {
 }
 @media (max-width: 640px) {
   .stApp { background-size: 24px 24px, 24px 24px, auto; }
+  [data-testid="stSidebar"] {
+    width: min(92vw, 420px) !important;
+    min-width: min(92vw, 420px) !important;
+  }
+  [data-testid="stSidebar"] > div:first-child {
+    width: min(92vw, 420px) !important;
+  }
   [data-testid="stMetric"], [data-testid="stExpander"], div[data-testid="stVerticalBlockBorderWrapper"] {
     border-radius: 10px;
+  }
+  [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+    line-height: 1.35;
   }
 }
 </style>
@@ -256,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.83"
+APP_VERSION = "v0.12.84"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6366,35 +6376,14 @@ if "seller_top5_alias" not in st.session_state and _seller_qp_alias:
 if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
     st.session_state["seller_top5_profile_url"] = _seller_qp_profile
 with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
-    st.caption("Ange säljaren och tryck en gång. FlipFynd läser in säljarens annonser, filtrerar till samlarkort, analyserar hockey och fotboll tillsammans och rankar de fem bästa möjligheterna.")
-    seller_top5_alias = st.text_input("Säljarnamn", key="seller_top5_alias", placeholder="t.ex. Etanol71")
+    st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
+    seller_top5_alias = st.text_input("Säljare", key="seller_top5_alias", placeholder="t.ex. Etanol71")
     seller_top5_profile_url = st.text_input(
-        "Tradera-profillänk (valfri)",
+        "Tradera-profil",
         key="seller_top5_profile_url",
         placeholder="https://www.tradera.com/profile/items/...",
-        help="Behövs som fallback när Tradera API saknas. Öppna säljarens profilsida på Tradera och klistra in länken.",
+        help="Klistra in säljarens profilsida, till exempel https://www.tradera.com/profile/items/5412219/",
     )
-    try:
-        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
-            st.query_params["seller"] = str(seller_top5_alias)
-        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
-            st.query_params["seller_profile"] = str(seller_top5_profile_url)
-    except Exception:
-        pass
-    try:
-        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
-            st.query_params["seller"] = str(seller_top5_alias)
-        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
-            st.query_params["seller_profile"] = str(seller_top5_profile_url)
-    except Exception:
-        pass
-    try:
-        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
-            st.query_params["seller"] = str(seller_top5_alias)
-        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
-            st.query_params["seller_profile"] = str(seller_top5_profile_url)
-    except Exception:
-        pass
     try:
         if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
             st.query_params["seller"] = str(seller_top5_alias)
@@ -6413,7 +6402,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
     _seller_previous_result = st.session_state.get("seller_top5_result") or {}
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
-    _seller_button_label = "📥 Fortsätt läsa nästa 5 sidor" if _seller_continue_inventory else "🔎 Läs in & ranka säljarens 5 bästa"
+    _seller_button_label = "Fortsätt söka" if _seller_continue_inventory else "🔎 Hitta säljarens bästa kort"
     if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
         if not alias:
@@ -6422,10 +6411,9 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             creds = _resolve_tradera_api_credentials()
             sport_key = "all"
             local_market = get_data(get_data_version())
-            seller_status = st.status(f"🔎 Söker igenom {alias}…", expanded=True)
+            seller_status = st.status(f"🔎 Söker {alias}", expanded=False)
             seller_progress_line = seller_status.empty()
-            seller_progress_bar = st.progress(0, text="0% · Startar analysen…")
-            seller_status.write("Startar säljarinventering och prioritering av kandidater.")
+            seller_progress_bar = st.progress(0, text="Startar…")
 
             def _seller_search_progress(info):
                 phase = str((info or {}).get("phase") or "")
@@ -6453,13 +6441,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                 done = int((info or {}).get("done") or 0)
                 total = int((info or {}).get("total") or 0)
                 if phase in {"starting", "fetching", "page_complete", "exhausted"}:
-                    progress_text = f"{progress_percent}% · Hämtar annonser · {found} hittade"
+                    progress_text = f"{progress_percent}% · {found} annonser hittade"
                 elif phase.startswith("filter"):
-                    progress_text = f"{progress_percent}% · Filtrerar samlarkort" + (f" · {done}/{total}" if total else "")
+                    progress_text = f"{progress_percent}% · Filtrerar kort" + (f" · {done}/{total}" if total else "")
                 elif phase.startswith("quick"):
-                    progress_text = f"{progress_percent}% · Snabbanalyserar" + (f" · {done}/{total}" if total else "")
+                    progress_text = f"{progress_percent}% · Prioriterar" + (f" · {done}/{total}" if total else "")
                 elif phase.startswith("full"):
-                    progress_text = f"{progress_percent}% · Fullanalyserar" + (f" · {done}/{total}" if total else "")
+                    progress_text = f"{progress_percent}% · Analyserar toppkandidater" + (f" · {done}/{total}" if total else "")
                 elif phase == "ranking":
                     progress_text = f"{progress_percent}% · Rankar Top 5"
                 elif phase == "complete":
@@ -6468,13 +6456,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     progress_text = f"{progress_percent}% · Bearbetar…"
                 seller_progress_bar.progress(progress_percent, text=progress_text)
                 if phase == "fetching":
-                    seller_progress_line.info(f"📄 Läser profilsida {page} · {found} unika annonser hittade hittills")
+                    seller_progress_line.caption(f"Sida {page} · {found} annonser")
                 elif phase == "page_complete":
-                    seller_progress_line.success(f"Sida {page} klar · {found} unika annonser hittade · {pages_read}/{max_pages} sidor i detta block")
+                    seller_progress_line.caption(f"Sida {page} klar · {found} annonser")
                 elif phase == "exhausted":
-                    seller_progress_line.success(f"Profilens slut nått vid sida {page} · {found} unika annonser hittade")
+                    seller_progress_line.caption(f"Alla sidor lästa · {found} annonser")
                 elif phase == "complete":
-                    seller_progress_line.info(f"Inventering klar · {found} annonser · går vidare till analys")
+                    seller_progress_line.caption(f"{found} annonser · rankar bästa korten")
 
             try:
                 try:
@@ -6511,26 +6499,6 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         quick_limit=60,
                         full_limit=30,
                     )
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
                 if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
                     top5 = dict(top5)
                     top5["status"] = "PROFILE_INCOMPLETE"
@@ -6574,42 +6542,31 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         _pages = int(seller_top5_result.get("public_pages_read") or 0)
         _next = int(seller_top5_result.get("public_next_page") or 1)
         if seller_top5_result.get("resume_required"):
-            st.warning(f"📥 Inläsningen avbröts, men checkpointen är sparad. {_pages} profilsidor och {_saved} annonser är bevarade. Tryck på ‘Fortsätt läsa nästa 5 sidor’ för att fortsätta från sida {_next}.")
+            st.caption(f"Sökningen pausades · {_pages} sidor och {_saved} annonser sparade · fortsätter från sida {_next}.")
         else:
-            st.info(f"📥 Inventering pågår: {_pages} profilsidor lästa och {_saved} unika annonser sparade. Nästa block börjar på sida {_next}. Preliminär Top 5 uppdateras löpande; tryck på ‘Fortsätt läsa nästa 5 sidor’.")
+            st.caption(f"Sökning pågår · {_pages} sidor · {_saved} annonser · nästa sida {_next}.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
-        st.warning("Hela Tradera-profilen kunde inte verifieras som inläst. FlipFynd visar därför ingen Top 5 från den lokala fallback-datan. Kör profilinläsningen igen/fortsätt nästa block.")
+        st.caption("Profilen är inte färdigläst ännu. Tryck på Fortsätt söka.")
     if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE" and (seller_top5_result.get("rows") or []):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
         if _seller_result_status == "INVENTORY_PARTIAL":
-            st.markdown(f"### 🏆 Preliminär Top 5 hos {seller_name}")
-            st.caption("Listan uppdateras när fler 5-sidorsblock läses in. Kort kan flytta upp, ner eller försvinna när bättre fynd hittas.")
+            st.markdown(f"### 🏆 Bästa fynd just nu · {seller_name}")
+            st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
         else:
-            st.markdown(f"### 🏆 Slutlig Top 5 hos {seller_name}")
+            st.markdown(f"### 🏆 Slutlig Top 5 · {seller_name}")
         st.caption(
-            f"{inv_count} annonser hittades · "
-            f"{int(seller_top5_result.get('quick_analysed') or 0)} snabbanalyserade · "
-            f"{int(seller_top5_result.get('full_analysed') or 0)} fullanalyserade"
+            f"{inv_count} annonser hittade · "
+            f"{int(seller_top5_result.get('full_analysed') or 0)} djupanalyserade"
         )
         inventory_source = seller_top5_result.get("inventory_source")
         if inventory_source == "TRADERA_API":
-            st.caption("Källa: live-inventarie via Tradera API.")
+            st.caption("Live via Tradera")
         elif inventory_source == "TRADERA_PUBLIC_PROFILE":
             pages_read = int(seller_top5_result.get("public_pages_read") or 0)
-            st.caption(f"Källa: säljarens publika Tradera-profil · {pages_read} profilsidor lästa.")
+            st.caption(f"Tradera-profil · {pages_read} sidor lästa")
             if seller_top5_result.get("public_inventory_complete"):
-                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
-            if seller_top5_result.get("public_inventory_complete"):
-                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
-            if seller_top5_result.get("public_inventory_complete"):
-                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
-            if seller_top5_result.get("public_inventory_complete"):
-                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
-            if seller_top5_result.get("public_inventory_complete"):
-                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
-            if seller_top5_result.get("public_inventory_complete"):
-                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
+                st.caption("✅ Hela säljarprofilen är inläst.")
         elif inventory_source == "LOCAL_MARKET":
             reason = seller_top5_result.get("fallback_reason")
             if reason == "NO_API_CREDENTIALS":
@@ -6625,7 +6582,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         if rejected_count:
             st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
-            st.caption("Top 5 rankas med samma fullanalys och slutranking som den ordinarie FlipFynd-sökningen.")
+            st.caption("Samma rankingmotor som i ordinarie FlipFynd-sökningen.")
         if not rows:
             st.info("Inga samlarkort kunde rankas hos säljaren just nu.")
         for idx, row in enumerate(rows[:5], start=1):
@@ -6637,8 +6594,9 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             elif decision.startswith("UNDERSÖK"):
                 badge = "🟡 Värt att undersöka"
             else:
-                badge = "⚪ Bäst av resten"
+                badge = "⚪ Kandidat · ej verifierad"
             st.markdown(f"#### #{idx} {title}")
+            _rank_score = float(row.get("rank_score") or 0)
             if price is not None:
                 try:
                     st.markdown(f"**{float(price):.0f} kr** · {badge}")
@@ -6646,18 +6604,22 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     st.markdown(badge)
             else:
                 st.markdown(badge)
+            st.caption(f"FlipFynd-score {_rank_score:.0f}/100")
             reason = str(row.get("reason") or "").strip()
             if reason:
                 st.caption(reason)
-            with st.expander("Visa analysdetaljer", expanded=False):
-                st.write(f"**Ordinarie rank:** {float(row.get('rank_score') or 0):.0f}")
-                st.write(f"**Spelarscore:** {float(row.get('player_market_score') or 0):.0f}/100")
-                st.write(f"**Riskjusterad vinst:** {float(row.get('risk_adjusted_profit') or 0):.0f} kr")
-                st.write(f"**Exact SOLD:** {int(row.get('sold_comps') or 0)}")
-                st.write(f"**Market edge:** {float(row.get('market_edge') or 0):.0f}/100")
-                st.write(f"**Värderingssäkerhet:** {float(row.get('valuation_confidence') or 0):.0f}/100")
+            with st.expander("Analysdetaljer", expanded=False):
+                st.caption(
+                    f"Spelare {float(row.get('player_market_score') or 0):.0f}/100 · "
+                    f"Market edge {float(row.get('market_edge') or 0):.0f}/100 · "
+                    f"Värderingssäkerhet {float(row.get('valuation_confidence') or 0):.0f}/100"
+                )
+                st.caption(
+                    f"Exact SOLD {int(row.get('sold_comps') or 0)} · "
+                    f"riskjusterad vinst {float(row.get('risk_adjusted_profit') or 0):.0f} kr"
+                )
                 if row.get("analysis_level") == "quick_fallback":
-                    st.warning("Detta reservresultat är endast snabbanalyserat.")
+                    st.caption("Preliminär analys – djupanalys återstår.")
             if row.get("url"):
                 st.link_button("Öppna annonsen ↗", row.get("url"), use_container_width=True)
             st.divider()
