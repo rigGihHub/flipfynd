@@ -6355,7 +6355,7 @@ with st.expander("⚙️ Administration & data"):
 
 # SELLER_TOP5_UI_V1
 with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
-    st.caption("Skriv ett Tradera-säljarnamn. FlipFynd hämtar säljarens aktiva annonser och rankar de fem bästa möjligheterna med samma försiktiga analysregler som i huvudsökningen.")
+    st.caption("Ange säljaren och tryck en gång. FlipFynd läser in säljarens annonser, filtrerar till samlarkort, analyserar hockey och fotboll tillsammans och rankar de fem bästa möjligheterna.")
     seller_top5_alias = st.text_input("Säljarnamn", key="seller_top5_alias", placeholder="t.ex. Etanol71")
     seller_top5_profile_url = st.text_input(
         "Tradera-profillänk (valfri)",
@@ -6363,12 +6363,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         placeholder="https://www.tradera.com/profile/items/...",
         help="Behövs som fallback när Tradera API saknas. Öppna säljarens profilsida på Tradera och klistra in länken.",
     )
-    seller_top5_sport_label = st.radio(
-        "Sport",
-        ["Hockey", "Fotboll"],
-        horizontal=True,
-        key="seller_top5_sport",
-    )
+    seller_top5_sport_label = "Alla"
     seller_top5_profile_url_resolved = str(seller_top5_profile_url or "").strip()
     _profile_alias = str(seller_top5_alias or "").strip()
     if seller_top5_profile_url_resolved and _profile_alias:
@@ -6377,13 +6372,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         if "/profile/items/" in _profile_clean and _profile_clean.rsplit("/", 1)[-1].isdigit():
             _profile_base = _profile_clean + "/" + _profile_alias.replace(" ", "%20")
             seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
-    if st.button("🔎 Hitta säljarens 5 bästa fynd", key="seller_top5_run", use_container_width=True):
+    if st.button("🔎 Läs in & ranka säljarens 5 bästa", key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
         if not alias:
             st.warning("Ange ett säljarnamn först.")
         else:
             creds = _resolve_tradera_api_credentials()
-            sport_key = "hockey" if seller_top5_sport_label == "Hockey" else "football"
+            sport_key = "all"
             local_market = get_data(get_data_version())
             seller_status = st.status(f"🔎 Söker igenom {alias}…", expanded=True)
             seller_progress_line = seller_status.empty()
@@ -6448,222 +6443,6 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                 raise
 
 
-    import_alias = str(seller_top5_alias or "").strip()
-    import_cursor_key = f"seller_inventory_next_page::{import_alias.casefold()}" if import_alias else "seller_inventory_next_page"
-    import_next_page = int(st.session_state.get(import_cursor_key, 1) or 1)
-    import_label = "📥 Läs in säljarens annonser för analys" if import_next_page <= 1 else f"📥 Läs in nästa annonser (från sida {import_next_page})"
-    if st.button(import_label, key="seller_inventory_import", use_container_width=True):
-        if not import_alias:
-            st.warning("Ange ett säljarnamn först.")
-        else:
-            creds = _resolve_tradera_api_credentials()
-            import_status_box = st.status(f"📥 Läser in annonser från {import_alias}…", expanded=True)
-            import_progress_line = import_status_box.empty()
-
-            def _seller_import_progress(info):
-                phase = str((info or {}).get("phase") or "")
-                page = int((info or {}).get("page") or 0)
-                found = int((info or {}).get("found_count") or 0)
-                pages_read = int((info or {}).get("pages_read") or 0)
-                max_pages = int((info or {}).get("max_pages") or 0)
-                if phase == "fetching":
-                    import_progress_line.info(f"📄 Läser profilsida {page} · {found} unika annonser hittade hittills")
-                elif phase == "page_complete":
-                    import_progress_line.success(f"Sida {page} klar · {found} unika annonser hittade · {pages_read}/{max_pages} sidor i detta block")
-                elif phase == "exhausted":
-                    import_progress_line.success(f"Profilens slut nått · {found} annonser hittade")
-                elif phase == "complete":
-                    import_progress_line.info(f"Importblocket klart · {found} annonser · startar triage")
-
-            with import_status_box:
-                imported = None
-                if creds:
-                    imported = discover_active_seller_inventory(
-                        seller_alias=import_alias,
-                        app_id=creds[0],
-                        app_key=creds[1],
-                        category_id=0,
-                    )
-                    if imported.get("ok"):
-                        items = imported.get("items") or []
-                        total_saved = save_expansion_items(SEARCH_EXPANSION_DATA_PATH, items)
-                        get_data.clear()
-                        st.session_state["result_cache"] = {}
-                        triage_market = get_data(get_data_version())
-                        triage_sport = "hockey" if seller_top5_sport_label == "Hockey" else "football"
-                        st.session_state["seller_inventory_triage_result"] = build_seller_inventory_triage(
-                            import_alias,
-                            triage_market,
-                            analyze_fn=analyze_item,
-                            sport=triage_sport,
-                            max_fast_analyses=120,
-                            top_n=20,
-                        )
-                        st.session_state["seller_inventory_import_status"] = {
-                            "ok": True,
-                            "source": "TRADERA_API",
-                            "batch_count": len(items),
-                            "total_saved": total_saved,
-                            "complete": True,
-                            "seller": import_alias,
-                        }
-                elif seller_top5_profile_url_resolved:
-                    try:
-                        imported = fetch_public_seller_inventory_batch(
-                            seller_top5_profile_url_resolved,
-                            start_page=import_next_page,
-                            max_pages=12,
-                            progress_callback=_seller_import_progress,
-                            fallback_alias=import_alias,
-                        )
-                    except TypeError as exc:
-                        msg = str(exc)
-                        if "fallback_alias" in msg:
-                            import_status_box.write("Deployen synkas fortfarande – använder kompatibilitetsläge för säljaralias.")
-                            try:
-                                imported = fetch_public_seller_inventory_batch(
-                                    seller_top5_profile_url_resolved,
-                                    start_page=import_next_page,
-                                    max_pages=12,
-                                    progress_callback=_seller_import_progress,
-                                )
-                            except TypeError as inner_exc:
-                                if "progress_callback" not in str(inner_exc):
-                                    raise
-                                import_status_box.write("Fortsätter utan live-progress i detta block.")
-                                imported = fetch_public_seller_inventory_batch(
-                                    seller_top5_profile_url_resolved,
-                                    start_page=import_next_page,
-                                    max_pages=12,
-                                )
-                        elif "progress_callback" in msg:
-                            import_status_box.write("Deployen synkas fortfarande – fortsätter utan live-progress i detta block.")
-                            try:
-                                imported = fetch_public_seller_inventory_batch(
-                                    seller_top5_profile_url_resolved,
-                                    start_page=import_next_page,
-                                    max_pages=12,
-                                    fallback_alias=import_alias,
-                                )
-                            except TypeError as inner_exc:
-                                if "fallback_alias" not in str(inner_exc):
-                                    raise
-                                imported = fetch_public_seller_inventory_batch(
-                                    seller_top5_profile_url_resolved,
-                                    start_page=import_next_page,
-                                    max_pages=12,
-                                )
-                        else:
-                            raise
-                    if imported.get("ok"):
-                        items = imported.get("items") or []
-                        total_saved = save_expansion_items(SEARCH_EXPANSION_DATA_PATH, items)
-                        get_data.clear()
-                        st.session_state["result_cache"] = {}
-                        triage_market = get_data(get_data_version())
-                        triage_sport = "hockey" if seller_top5_sport_label == "Hockey" else "football"
-                        st.session_state["seller_inventory_triage_result"] = build_seller_inventory_triage(
-                            import_alias,
-                            triage_market,
-                            analyze_fn=analyze_item,
-                            sport=triage_sport,
-                            max_fast_analyses=120,
-                            top_n=20,
-                        )
-                        exhausted = bool(imported.get("exhausted"))
-                        st.session_state[import_cursor_key] = 1 if exhausted else int(imported.get("next_page") or (import_next_page + 12))
-                        st.session_state["seller_inventory_import_status"] = {
-                            "ok": True,
-                            "source": "TRADERA_PUBLIC_PROFILE",
-                            "batch_count": len(items),
-                            "pages_read": int(imported.get("pages_read") or 0),
-                            "total_saved": total_saved,
-                            "complete": exhausted,
-                            "next_page": None if exhausted else st.session_state[import_cursor_key],
-                            "seller": import_alias,
-                        }
-                else:
-                    st.session_state["seller_inventory_import_status"] = {
-                        "ok": False,
-                        "status": "PROFILE_URL_REQUIRED",
-                        "seller": import_alias,
-                    }
-
-                if imported is not None and not imported.get("ok"):
-                    st.session_state["seller_inventory_import_status"] = {
-                        "ok": False,
-                        "status": imported.get("status") or "IMPORT_FAILED",
-                        "seller": import_alias,
-                    }
-
-            if imported is not None and imported.get("ok"):
-                import_status_box.update(label=f"✅ Importblock klart för {import_alias}", state="complete", expanded=False)
-            elif imported is not None:
-                import_status_box.update(label=f"❌ Importen av {import_alias} avbröts", state="error", expanded=True)
-
-    seller_inventory_status = st.session_state.get("seller_inventory_import_status")
-    if seller_inventory_status and seller_inventory_status.get("seller") == str(seller_top5_alias or "").strip():
-        if seller_inventory_status.get("ok"):
-            batch_count = int(seller_inventory_status.get("batch_count") or 0)
-            total_saved = int(seller_inventory_status.get("total_saved") or 0)
-            if seller_inventory_status.get("source") == "TRADERA_API":
-                st.success(f"{batch_count} annonser lästes in. {total_saved} säljar-/sökannonser finns nu i analysunderlaget.")
-            elif seller_inventory_status.get("complete"):
-                st.success(f"Hela den publika säljarprofilen är genomläst. {total_saved} annonser finns nu i analysunderlaget.")
-            else:
-                pages_read = int(seller_inventory_status.get("pages_read") or 0)
-                next_page = seller_inventory_status.get("next_page")
-                st.success(f"{batch_count} annonser från {pages_read} profilsidor lästes in. Fortsätt från sida {next_page} för nästa block.")
-        elif seller_inventory_status.get("status") == "PROFILE_URL_REQUIRED":
-            st.warning("Tradera API är inte konfigurerat. Klistra in säljarens publika Tradera-profillänk ovan för att läsa in lagret.")
-        else:
-            st.error(f"Kunde inte läsa in säljarens annonser ({seller_inventory_status.get('status')}).")
-
-    if st.button("🎯 Uppdatera Bästa 20 att undersöka", key="seller_inventory_triage_refresh", use_container_width=True):
-        triage_alias = str(seller_top5_alias or "").strip()
-        if not triage_alias:
-            st.warning("Ange ett säljarnamn först.")
-        else:
-            triage_sport = "hockey" if seller_top5_sport_label == "Hockey" else "football"
-            with st.spinner(f"Prioriterar inlästa annonser från {triage_alias}…"):
-                st.session_state["seller_inventory_triage_result"] = build_seller_inventory_triage(
-                    triage_alias,
-                    get_data(get_data_version()),
-                    analyze_fn=analyze_item,
-                    sport=triage_sport,
-                    max_fast_analyses=120,
-                    top_n=20,
-                )
-
-    triage_result = st.session_state.get("seller_inventory_triage_result")
-    if triage_result and triage_result.get("seller") == str(seller_top5_alias or "").strip():
-        triage_rows = triage_result.get("rows") or []
-        with st.expander("🎯 Bästa 20 att undersöka", expanded=bool(triage_rows)):
-            st.caption(
-                f"{int(triage_result.get('cheap_scanned_count') or 0)} säljarannonser skannade · "
-                f"{int(triage_result.get('fast_analysed_count') or 0)} snabbanalyserade. "
-                "Detta är prioritering för vidare analys, inte KÖP-signaler."
-            )
-            if not triage_rows:
-                st.info("Inga prioriterade kandidater finns i det hittills inlästa säljar-lagret.")
-            for triage_idx, triage_row in enumerate(triage_rows[:20], start=1):
-                triage_title = triage_row.get("title") or "Kortannons"
-                triage_price = triage_row.get("price")
-                triage_score = float(triage_row.get("quick_score") or 0)
-                triage_label = triage_row.get("label") or "UNDERSÖK"
-                st.markdown(f"**#{triage_idx} {triage_title}**")
-                triage_facts = [triage_label, f"prioritet {triage_score:.0f}/100"]
-                if triage_price is not None:
-                    try:
-                        triage_facts.insert(0, f"pris {float(triage_price):.0f} kr")
-                    except (TypeError, ValueError):
-                        pass
-                st.caption(" · ".join(triage_facts))
-                if triage_row.get("reason"):
-                    st.caption(triage_row.get("reason"))
-                if triage_row.get("url"):
-                    st.link_button("Öppna annonsen ↗", triage_row.get("url"), use_container_width=True, key=f"triage_link_{triage_idx}_{str(triage_row.get('url'))[-16:]}")
-                st.divider()
 
     seller_top5_result = st.session_state.get("seller_top5_result")
     if seller_top5_result:
