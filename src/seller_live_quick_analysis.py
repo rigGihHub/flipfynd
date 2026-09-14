@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
+from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
+
 
 def _text(item: dict) -> str:
     return str(item.get("titel") or item.get("title") or "").strip()
@@ -111,16 +113,17 @@ def quick_analyze_seller_inventory(
     for item in items or []:
         if not isinstance(item, dict):
             continue
-        key = _identity_key(item)
+        prepared_item = apply_seller_metadata(item)
+        key = _identity_key(prepared_item)
         if not key or key == anchor_key:
             continue
-        unique[key] = dict(item)
+        unique[key] = dict(prepared_item)
 
     candidates = sorted(unique.values(), key=_priority_seed)[: max(1, int(limit))]
     rows = []
     failed = 0
     for raw in candidates:
-        prepared = dict(raw)
+        prepared = apply_seller_metadata(raw)
         if not prepared.get("source_category"):
             prepared["source_category"] = "Hockey - NHL" if sport == "hockey" else "Fotboll"
         try:
@@ -136,6 +139,7 @@ def quick_analyze_seller_inventory(
         merged = dict(prepared)
         if isinstance(result, dict):
             merged.update(result)
+        merged = apply_seller_metadata(merged, prepared)
         score = _quick_score(merged)
         label, reason = _label(merged, score)
         rows.append({
@@ -151,6 +155,9 @@ def quick_analyze_seller_inventory(
             "sold_comps": int(_num(merged.get("sold_comparable_count") or merged.get("sold_comps"))),
             "valuation_confidence": _num(merged.get("valuation_confidence_score")),
             "market_edge": _num(merged.get("market_edge_score")),
+            "seller_alias": seller_alias(merged),
+            "seller_id": seller_id(merged),
+            "seller_url": seller_url(merged),
             "source_item": merged,
         })
 
