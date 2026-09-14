@@ -6500,12 +6500,22 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                             "seller": import_alias,
                         }
                 elif str(seller_top5_profile_url or "").strip():
-                    imported = fetch_public_seller_inventory_batch(
-                        str(seller_top5_profile_url).strip(),
-                        start_page=import_next_page,
-                        max_pages=12,
-                        progress_callback=_seller_import_progress,
-                    )
+                    try:
+                        imported = fetch_public_seller_inventory_batch(
+                            str(seller_top5_profile_url).strip(),
+                            start_page=import_next_page,
+                            max_pages=12,
+                            progress_callback=_seller_import_progress,
+                        )
+                    except TypeError as exc:
+                        if "progress_callback" not in str(exc):
+                            raise
+                        import_status_box.write("Deployen synkas fortfarande – fortsätter utan live-progress i detta block.")
+                        imported = fetch_public_seller_inventory_batch(
+                            str(seller_top5_profile_url).strip(),
+                            start_page=import_next_page,
+                            max_pages=12,
+                        )
                     if imported.get("ok"):
                         items = imported.get("items") or []
                         total_saved = save_expansion_items(SEARCH_EXPANSION_DATA_PATH, items)
