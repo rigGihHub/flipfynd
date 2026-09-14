@@ -7,6 +7,7 @@ Nothing in this module attempts to identify the card or estimate its value.
 from __future__ import annotations
 
 from collections import Counter
+import re
 from typing import Iterable
 
 
@@ -17,6 +18,32 @@ _ALLOWED_EVIDENCE = {
     "explicit_sold_flag",
     "explicit_sold_status",
 }
+_NEGATIVE_SALE_STATUSES = (
+    "unsold", "not sold", "osåld", "ej såld", "completed unsold",
+    "ended unsold", "not completed sale", "cancelled", "canceled",
+    "withdrawn", "expired", "active", "live", "open",
+)
+
+
+def _status_text(value) -> str:
+    text = str(value or "").casefold().strip()
+    text = re.sub(r"[_-]+", " ", text)
+    return " ".join(text.split())
+
+
+def _contradicts_realised_sale(record: dict) -> bool:
+    for key in ("sold", "is_sold", "was_sold", "completed_sale"):
+        if key not in record:
+            continue
+        value = record.get(key)
+        text = _status_text(value)
+        if value is False or text in {"false", "0", "no", "nej", "unsold", "osåld"}:
+            return True
+    for key in ("sale_status", "status", "listing_status", "state", "market_state"):
+        status = _status_text(record.get(key))
+        if status and any(marker in status for marker in _NEGATIVE_SALE_STATUSES):
+            return True
+    return False
 
 
 def _positive_number(value) -> bool:
@@ -28,13 +55,21 @@ def classify_sold_comp(record: dict) -> dict:
 
     ``safe_for_valuation`` is intentionally strict. A numeric ``sold_price`` or
     the word ``sold`` alone is not enough; the row must have passed FlipFynd's
-    verification pipeline and retain explicit evidence metadata.
+    verification pipeline and retain explicit evidence metadata. Explicit
+    unsold/active/cancelled state always blocks valuation even on legacy rows.
     """
     if not isinstance(record, dict):
         return {
             "safe_for_valuation": False,
             "quality": "rejected",
             "reason": "not_an_object",
+        }
+
+    if _contradicts_realised_sale(record):
+        return {
+            "safe_for_valuation": False,
+            "quality": "rejected",
+            "reason": "contradictory_unsold_state",
         }
 
     verification = str(record.get("sold_verification_status") or "").casefold().strip()
