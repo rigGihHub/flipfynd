@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.87"
+APP_VERSION = "v0.12.88"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6514,10 +6514,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     next_page = int(top5.get("public_next_page") or 1)
                     seller_progress_bar.progress(100, text=f"{found_count} annonser inlästa · block klart")
                     seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
-                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt nästa 5 sidor", state="complete", expanded=False)
+                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt till nästa sida", state="complete", expanded=False)
                     st.rerun()  # refresh Seller Top 5 continuation UI
                 elif result_status == "PROFILE_INCOMPLETE":
-                    seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Fortsätt läsa nästa 5 sidor")
+                    seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Läs nästa sida")
                     seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
                     st.rerun()  # refresh continuation button after incomplete profile
                 else:

@@ -17,7 +17,7 @@ from src.seller_card_domain import seller_item_domain_check
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
-PUBLIC_BATCH_PAGES = 5
+PUBLIC_BATCH_PAGES = 1
 _CHECKPOINT_SCHEMA = "v3"
 
 
@@ -213,7 +213,7 @@ def _partial_result_from_saved(
 
     Partial seller inventories are intentionally ranked with cheap title/domain
     signals only. The full ordinary FlipFynd analysis still runs once the whole
-    seller inventory is loaded. This keeps each 5-page request short enough for
+    seller inventory is loaded. This keeps each one-page request short enough for
     Streamlit while still showing the best five candidates found so far.
     """
     candidates = []
