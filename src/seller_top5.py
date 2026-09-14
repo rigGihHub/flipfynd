@@ -41,11 +41,6 @@ def _identity_key(item: dict) -> str:
 
 
 def _supported_sport(item: dict, fallback: str = "hockey") -> str:
-    """Infer hockey/football for the normal analyser without user input.
-
-    Strong textual/category evidence wins. Ambiguous legacy listings retain the
-    supplied fallback so existing behaviour stays deterministic.
-    """
     text = " ".join(
         str(item.get(key) or "")
         for key in (
@@ -74,7 +69,6 @@ def _supported_sport(item: dict, fallback: str = "hockey") -> str:
 
 
 def _ordinary_rank_key(row: dict):
-    """Mirror the ordinary result ordering in app.py, descending."""
     return (
         _num(row.get("rank_score")),
         _num(row.get("player_market_score")),
@@ -83,7 +77,6 @@ def _ordinary_rank_key(row: dict):
 
 
 def _quick_rank_key(row: dict):
-    """Preselect using ordinary fast-analysis ranking fields first."""
     decision = str(row.get("decision") or "").upper()
     sold = int(_num(row.get("sold_comps")))
     identity_ok = bool(row.get("identity_ok"))
@@ -112,15 +105,7 @@ def _seller_presentation_label(row: dict) -> dict:
     return out
 
 
-def _quick_scan_inventory(
-    alias: str,
-    inventory: list[dict],
-    *,
-    analyze_fn: Callable,
-    sport: str,
-    quick_limit: int,
-    progress_callback=None,
-) -> dict:
+def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int, progress_callback=None) -> dict:
     anchor = {"saljare": alias, "tradera_item_id": "__seller_top5_anchor__"}
     batch_size = max(20, min(int(quick_limit or 60), 100))
     unique: dict[str, dict] = {}
@@ -129,13 +114,9 @@ def _quick_scan_inventory(
         if key:
             unique[key] = row
     unique_inventory = list(unique.values())
-
-    # Mixed-sport product mode: route each listing to the normal sport-specific
-    # analyser, then merge the results into one seller ranking.
     groups = {"hockey": [], "football": []}
     for row in unique_inventory:
-        inferred = _supported_sport(row, fallback=sport)
-        groups[inferred].append(row)
+        groups[_supported_sport(row, fallback=sport)].append(row)
 
     all_rows: dict[str, dict] = {}
     failed = 0
@@ -153,13 +134,8 @@ def _quick_scan_inventory(
                 continue
             batches += 1
             quick = quick_analyze_seller_inventory(
-                anchor,
-                batch,
-                analyze_fn=analyze_fn,
-                sport=group_sport,
-                strategy_mode="quick_flip",
-                limit=len(batch),
-                shortlist=min(5, len(batch)),
+                anchor, batch, analyze_fn=analyze_fn, sport=group_sport,
+                strategy_mode="quick_flip", limit=len(batch), shortlist=min(5, len(batch)),
             )
             failed += int(quick.get("failed_count") or 0)
             domain_rejected += int(quick.get("domain_rejected_count") or 0)
@@ -175,14 +151,7 @@ def _quick_scan_inventory(
                 if previous is None or _quick_rank_key(row) < _quick_rank_key(previous):
                     all_rows[key] = row
             pct = 28 + int(37 * min(1.0, analysed_so_far / max(1, total)))
-            _emit(
-                progress_callback,
-                phase="quick_progress",
-                done=min(analysed_so_far, total),
-                total=total,
-                percent=pct,
-                sport=group_sport,
-            )
+            _emit(progress_callback, phase="quick_progress", done=min(analysed_so_far, total), total=total, percent=pct, sport=group_sport)
 
     rows = list(all_rows.values())
     rows.sort(key=_quick_rank_key)
@@ -224,16 +193,9 @@ def _fallback_row(qrow: dict, alias: str) -> dict:
     }
 
 
-def build_seller_top5(
-    seller_alias: str,
-    items: Iterable[dict] | None,
-    *,
-    analyze_fn: Callable,
-    sport: str = "all",
-    quick_limit: int = 60,
-    full_limit: int = 10,
-    progress_callback=None,
-) -> dict:
+def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyze_fn: Callable,
+                      sport: str = "all", quick_limit: int = 60, full_limit: int = 10,
+                      progress_callback=None) -> dict:
     alias = str(seller_alias or "").strip()
     raw_inventory = [dict(x) for x in (items or []) if isinstance(x, dict)]
     if not alias:
@@ -251,27 +213,18 @@ def build_seller_top5(
         else:
             rejected.append({"title": check.get("title"), "reason": check.get("reason")})
         if idx == len(raw_inventory) or idx % 100 == 0:
-            pct = 20 + int(8 * idx / max(1, len(raw_inventory)))
-            _emit(progress_callback, phase="filter_progress", done=idx, total=len(raw_inventory), percent=pct)
+            _emit(progress_callback, phase="filter_progress", done=idx, total=len(raw_inventory), percent=20 + int(8 * idx / max(1, len(raw_inventory))))
 
     if not inventory:
         _emit(progress_callback, phase="complete", done=0, total=0, percent=100)
-        return {
-            "status": "NO_CARD_ITEMS", "rows": [], "seller": alias,
-            "inventory_count": len(raw_inventory), "card_inventory_count": 0,
-            "domain_rejected_count": len(rejected),
-        }
+        return {"status": "NO_CARD_ITEMS", "rows": [], "seller": alias,
+                "inventory_count": len(raw_inventory), "card_inventory_count": 0,
+                "domain_rejected_count": len(rejected)}
 
-    # "all" is the product default. A legacy explicit sport parameter remains a
-    # deterministic fallback only for titles whose sport cannot be inferred.
     fallback_sport = sport if sport in {"hockey", "football"} else "hockey"
     quick = _quick_scan_inventory(
-        alias,
-        inventory,
-        analyze_fn=analyze_fn,
-        sport=fallback_sport,
-        quick_limit=quick_limit,
-        progress_callback=progress_callback,
+        alias, inventory, analyze_fn=analyze_fn, sport=fallback_sport,
+        quick_limit=quick_limit, progress_callback=progress_callback,
     )
 
     candidate_limit = min(max(int(full_limit or 20), 20), 40)
@@ -286,11 +239,8 @@ def build_seller_top5(
         item_sport = qrow.get("sport") or _supported_sport(source_item, fallback=fallback_sport)
         try:
             row = full_analyze_live_seller_item(
-                source_item,
-                analyze_fn=analyze_fn,
-                all_items=inventory,
-                sport=item_sport,
-                strategy_mode="quick_flip",
+                source_item, analyze_fn=analyze_fn, all_items=inventory,
+                sport=item_sport, strategy_mode="quick_flip",
             )
         except Exception:
             failed += 1
@@ -302,12 +252,10 @@ def build_seller_top5(
             row["sport"] = item_sport
             row["analysis_level"] = "full"
             full_rows.append(_seller_presentation_label(row))
-        pct = 66 + int(28 * idx / max(1, len(candidates)))
-        _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=pct)
+        _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
     full_rows.sort(key=_ordinary_rank_key, reverse=True)
     selected = list(full_rows[:5])
-
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     for qrow in quick.get("rows") or []:
         if len(selected) >= 5:
@@ -334,13 +282,12 @@ def build_seller_top5(
         "coverage_complete": bool(quick.get("coverage_complete")),
         "full_candidate_limit": candidate_limit,
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v3-cross-sport-one-click-progress",
+        "seller_analysis_contract": "v2-ordinary-rank-preselection",
+        "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
     }
-    result = {
-        "status": "READY" if selected else "NO_CARD_CANDIDATES",
-        "rows": selected, "full_analysed": len(full_rows), "failed_full": failed,
-        **common_meta,
-    }
+    result = {"status": "READY" if selected else "NO_CARD_CANDIDATES",
+              "rows": selected, "full_analysed": len(full_rows), "failed_full": failed,
+              **common_meta}
     _emit(progress_callback, phase="complete", done=5 if selected else 0, total=5, percent=100)
     return result
