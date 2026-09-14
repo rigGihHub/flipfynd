@@ -51,13 +51,35 @@ def _quick_rank_key(row: dict):
 
 
 def _display_worthy(row: dict) -> bool:
+    """Only expose candidates with real evidence, never merely a label.
+
+    KÖP is already gated by the full analyser. UNDERSÖK must still have a
+    verified/searchable identity plus either real SOLD evidence or a genuinely
+    strong research signal. This prevents ordinary base cards with 0 comps from
+    being presented as finds just because an upstream analyser said UNDERSÖK.
+    """
     decision = str(row.get("decision") or "").upper().strip()
     if decision.startswith("KÖP"):
         return True
-    if decision.startswith("UNDERSÖK"):
-        return True
-    # Do not pad Seller Top 5 with SKIP/insufficient-underlag rows.
-    return False
+    if not decision.startswith("UNDERSÖK"):
+        return False
+    identity_ok = bool(row.get("identity_ok"))
+    sold = int(_num(row.get("sold_comps")))
+    edge = _num(row.get("market_edge"))
+    valuation = _num(row.get("valuation_confidence"))
+    quick = _num(row.get("quick_score"))
+    return identity_ok and (sold >= 1 or (edge >= 55 and valuation >= 45 and quick >= 48))
+
+
+def _quick_research_worthy(row: dict) -> bool:
+    if not str(row.get("decision") or "").upper().startswith("UNDERSÖK"):
+        return False
+    identity_ok = bool(row.get("identity_ok"))
+    sold = int(_num(row.get("sold_comps")))
+    edge = _num(row.get("market_edge"))
+    valuation = _num(row.get("valuation_confidence"))
+    quick = _num(row.get("quick_score"))
+    return identity_ok and (sold >= 1 or (edge >= 55 and valuation >= 45 and quick >= 48))
 
 
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int) -> dict:
@@ -163,11 +185,9 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     }
 
     if not full_rows:
-        # Do not manufacture five weak rows. Only quick rows already labelled
-        # UNDERSÖK may survive as explicit research candidates.
         fallback = []
         for qrow in quick.get("rows") or []:
-            if not str(qrow.get("decision") or "").upper().startswith("UNDERSÖK"):
+            if not _quick_research_worthy(qrow):
                 continue
             fallback.append({
                 "title": qrow.get("title"), "price": qrow.get("price"), "url": qrow.get("url"),
