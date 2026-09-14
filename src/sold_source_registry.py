@@ -15,7 +15,27 @@ SOURCES = (
         "automated_ingestion": False,
         "status": "RESEARCH_AND_EXPLICIT_IMPORT",
         "evidence_type": "DIRECT_REALIZED_SALES",
-        "note": "Prioriterad lokal svensk comp-källa. Aktiv annons eller avslutad osåld annons är inte SOLD. Import kräver explicit sale-status/pris och exakt identitet.",
+        "access_requirement": "GENERAL_MARKET_SOLD_FEED_NOT_AVAILABLE",
+        "note": (
+            "Prioriterad lokal svensk comp-källa. Publik/app-autentiserad Tradera-sökning ger inte ett generellt "
+            "sold-flöde. Seller orders/transactions kräver User+Seller och gäller den autentiserade säljarens egna "
+            "affärer. Aktiv annons eller avslutad osåld annons är inte SOLD."
+        ),
+    },
+    {
+        "key": "ebay_marketplace_insights",
+        "label": "eBay Marketplace Insights API",
+        "research_url": "https://developer.ebay.com/develop/api/buy/marketplace-insights_api",
+        "supports_sports_cards": True,
+        "automated_ingestion": False,
+        "status": "DIRECT_API_ACCESS_BLOCKED",
+        "evidence_type": "DIRECT_REALIZED_SALES",
+        "access_requirement": "EBAY_LIMITED_RELEASE_NOT_OPEN_TO_NEW_USERS",
+        "note": (
+            "Officiell eBay-API för sales history. Detta är den tekniskt rätta typen av källa för automatiska "
+            "SOLD-comps, men eBay anger att Marketplace Insights är restricted/Limited Release och inte öppen för "
+            "nya användare. FlipFynd får inte falla tillbaka till aktiva Browse-listningar som om de vore SOLD."
+        ),
     },
     {
         "key": "ebay_product_research",
@@ -25,6 +45,7 @@ SOURCES = (
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
         "evidence_type": "DIRECT_REALIZED_SALES",
+        "access_requirement": "MANUAL_EBAY_RESEARCH_ACCESS",
         "note": "Officiell eBay-research med upp till 3 års försäljningsdata och faktiskt accepted Best Offer-pris. Kräver manuell research/inloggning; inget webb-UI skrapas.",
     },
     {
@@ -35,6 +56,7 @@ SOURCES = (
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
         "evidence_type": "DIRECT_REALIZED_SALES",
+        "access_requirement": "MANUAL_WEB_RESEARCH",
         "note": "Bra primär kontrollkälla för färska avslut. Regular sold search är kortare historik än Product Research och kan dölja accepted Best Offer-priset.",
     },
     {
@@ -108,6 +130,10 @@ def ingestion_ready_sources() -> list[dict]:
     return [source for source in sold_source_registry() if source["automated_ingestion"]]
 
 
+def access_blocked_sources() -> list[dict]:
+    return [source for source in sold_source_registry() if source["status"] == "DIRECT_API_ACCESS_BLOCKED"]
+
+
 def research_only_sources() -> list[dict]:
     return [source for source in sold_source_registry() if not source["automated_ingestion"]]
 
@@ -115,9 +141,11 @@ def research_only_sources() -> list[dict]:
 def source_readiness_summary() -> dict:
     sources = sold_source_registry()
     ready = ingestion_ready_sources()
+    blocked = access_blocked_sources()
     return {
         "source_count": len(sources),
         "automated_count": len(ready),
+        "access_blocked_count": len(blocked),
         "research_only_count": len(sources) - len(ready),
         "status": "AUTOMATION_READY" if ready else "MANUAL_RESEARCH_REQUIRED",
     }
