@@ -117,6 +117,7 @@ from src.tradera_seller_inventory import discover_active_seller_inventory
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5
+from src.seller_top5_controller import resolve_seller_top5
 from src.search_yield_learning import build_yield_report, route_budget_guidance
 from src.near_buy_guidance import build_near_buy_guidance
 from src.detail_evidence_fusion import build_detail_evidence_fusion
@@ -6366,32 +6367,19 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.warning("Ange ett säljarnamn först.")
         else:
             creds = _resolve_tradera_api_credentials()
-            if not creds:
-                st.error("Tradera API är inte konfigurerat i miljön, så säljarens aktiva annonser kan inte hämtas automatiskt ännu.")
-            else:
-                with st.spinner(f"Hämtar och analyserar aktiva annonser från {alias}…"):
-                    fetched = discover_active_seller_inventory(
-                        seller_alias=alias,
-                        app_id=creds[0],
-                        app_key=creds[1],
-                        category_id=0,
-                    )
-                    if not fetched.get("ok"):
-                        st.error("Kunde inte hämta säljarens aktiva annonser från Tradera.")
-                        if fetched.get("status"):
-                            st.caption(f"Status: {fetched.get('status')}")
-                    else:
-                        items = fetched.get("items") or []
-                        sport_key = "hockey" if seller_top5_sport_label == "Hockey" else "fotboll"
-                        top5 = build_seller_top5(
-                            alias,
-                            items,
-                            analyze_fn=analyze_item,
-                            sport=sport_key,
-                            quick_limit=60,
-                            full_limit=10,
-                        )
-                        st.session_state["seller_top5_result"] = top5
+            sport_key = "hockey" if seller_top5_sport_label == "Hockey" else "football"
+            local_market = get_data(get_data_version())
+            with st.spinner(f"Hämtar och analyserar annonser från {alias}…"):
+                top5 = resolve_seller_top5(
+                    alias,
+                    local_market,
+                    analyze_fn=analyze_item,
+                    sport=sport_key,
+                    credentials=creds,
+                    quick_limit=60,
+                    full_limit=10,
+                )
+                st.session_state["seller_top5_result"] = top5
 
     seller_top5_result = st.session_state.get("seller_top5_result")
     if seller_top5_result:
@@ -6399,10 +6387,22 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
         st.markdown(f"### 🏆 Top 5 hos {seller_name}")
         st.caption(
-            f"{inv_count} aktiva annonser hittades · "
+            f"{inv_count} annonser hittades · "
             f"{int(seller_top5_result.get('quick_analysed') or 0)} snabbanalyserade · "
             f"{int(seller_top5_result.get('full_analysed') or 0)} fullanalyserade"
         )
+        inventory_source = seller_top5_result.get("inventory_source")
+        if inventory_source == "TRADERA_API":
+            st.caption("Källa: live-inventarie via Tradera API.")
+        elif inventory_source == "LOCAL_MARKET":
+            reason = seller_top5_result.get("fallback_reason")
+            if reason == "NO_API_CREDENTIALS":
+                st.caption("Källa: redan inläst FlipFynd-data · Tradera API är inte konfigurerat.")
+            elif reason == "API_FAILED":
+                api_status = seller_top5_result.get("api_status") or "okänt fel"
+                st.caption(f"Källa: redan inläst FlipFynd-data · API-fallback efter {api_status}.")
+            else:
+                st.caption("Källa: redan inläst FlipFynd-data.")
         rows = seller_top5_result.get("rows") or []
         if not rows:
             st.info("Inga tillräckligt analyserbara kandidater hittades hos säljaren just nu.")
