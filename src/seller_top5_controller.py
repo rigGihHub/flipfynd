@@ -34,18 +34,9 @@ def _credentials_pair(credentials):
 
 
 class _SellerProgress:
-    """Best-effort Streamlit progress UI; inert when an external callback owns UI."""
+    """Compatibility shim. Seller Top 5 renders progress only in app.py."""
     def __init__(self, enabled: bool = True):
         self.bar = None
-        if not enabled:
-            return
-        try:
-            import streamlit as st
-            from streamlit.runtime.scriptrunner import get_script_run_ctx
-            if get_script_run_ctx() is not None:
-                self.bar = st.progress(0, text="Steg 1/5 · Hämtar säljarens annonser…")
-        except Exception:
-            self.bar = None
 
     def update(self, payload):
         if self.bar is None:
@@ -266,12 +257,18 @@ def resolve_seller_top5(
     progress_callback=None,
 ) -> dict:
     alias = str(seller or "").strip()
+    profile_text = str(profile_url or "").strip()
+    input_profile = parse_profile_url(profile_text) or {}
+    if not alias:
+        alias = str(input_profile.get("alias") or "").strip()
+    if not alias and input_profile.get("seller_id"):
+        alias = f"Tradera #{input_profile.get('seller_id')}"
     local_rows = [dict(x) for x in (market_items or []) if isinstance(x, dict)]
     if not alias:
         return {"status": "NO_SELLER", "rows": [], "seller": None,
                 "inventory_count": 0, "inventory_source": "NONE", "fallback_reason": None}
 
-    ui = _SellerProgress(enabled=progress_callback is None)
+    ui = _SellerProgress(enabled=False)
 
     def combined_progress(payload):
         _emit(progress_callback, ui, payload)
@@ -300,7 +297,6 @@ def resolve_seller_top5(
             return result
         api_failure = fetched
 
-    profile_text = str(profile_url or "").strip()
     if profile_text:
         session = _streamlit_session_state()
         parsed_profile = parse_profile_url(profile_text) or {}
@@ -346,6 +342,10 @@ def resolve_seller_top5(
             if not page_result.get("ok"):
                 public_failure = page_result
                 break
+
+            resolved_alias = str(((page_result.get("seller") or {}).get("alias")) or "").strip()
+            if resolved_alias:
+                alias = resolved_alias
 
             if page_result.get("total_listing_estimate"):
                 total_listing_estimate = int(page_result.get("total_listing_estimate"))

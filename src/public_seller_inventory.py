@@ -242,6 +242,11 @@ def fetch_public_seller_inventory_batch(
             _emit_progress(progress_callback, phase="error", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), status="HTTP_ERROR")
             return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
         response_url = str(getattr(response, "url", None) or url)
+        redirected_profile = parse_profile_url(response_url) or {}
+        redirected_alias = str(redirected_profile.get("alias") or "").strip() or None
+        if redirected_alias:
+            effective_alias = redirected_alias
+            parsed["alias"] = redirected_alias
         _remember_paging_suffix(response_url, response.text)
         total_listing_estimate = None
         total_match = _TOTAL_LISTINGS_RE.search(_text(response.text))

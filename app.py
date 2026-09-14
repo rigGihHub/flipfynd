@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.85"
+APP_VERSION = "v0.12.86"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6377,7 +6377,7 @@ if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
     st.session_state["seller_top5_profile_url"] = _seller_qp_profile
 with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
     st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
-    seller_top5_alias = st.text_input("Säljare", key="seller_top5_alias", placeholder="t.ex. Etanol71")
+    seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
     seller_top5_profile_url = st.text_input(
         "Tradera-profil",
         key="seller_top5_profile_url",
@@ -6405,8 +6405,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
     _seller_button_label = "Fortsätt söka" if _seller_continue_inventory else "🔎 Hitta säljarens bästa kort"
     if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
-        if not alias:
-            st.warning("Ange ett säljarnamn först.")
+        if not alias and not seller_top5_profile_url_resolved:
+            st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
         else:
             creds = _resolve_tradera_api_credentials()
             sport_key = "all"
