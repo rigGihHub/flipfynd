@@ -1,9 +1,9 @@
 """Choose the safest available inventory source for Seller Top 5.
 
-One click owns the whole seller workflow: fetch inventory, filter non-cards,
-triage supported sports, full-analyse the strongest candidates and return one
-cross-sport Top 5. Live Tradera API is preferred; public profile is next; local
-market data is the conservative fallback.
+One click owns the whole seller workflow. Public Tradera profiles are read in
+small checkpointed batches so Streamlit never needs to keep one very long
+request alive. Ranking starts only after the complete public inventory has been
+collected.
 """
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
+
+PUBLIC_BATCH_PAGES = 10
 
 
 def _credentials_pair(credentials):
@@ -112,8 +114,11 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress
     return result
 
 
-def _fetch_public(public_fetcher, profile_url, *, public_pages, progress_callback=None, seller_alias=None):
-    kwargs = {"start_page": 1, "max_pages": max(1, int(public_pages or 1))}
+def _fetch_public(public_fetcher, profile_url, *, start_page, public_pages, progress_callback=None, seller_alias=None):
+    kwargs = {
+        "start_page": max(1, int(start_page or 1)),
+        "max_pages": max(1, int(public_pages or 1)),
+    }
     if progress_callback is not None:
         kwargs["progress_callback"] = progress_callback
     if str(seller_alias or "").strip():
@@ -129,6 +134,35 @@ def _fetch_public(public_fetcher, profile_url, *, public_pages, progress_callbac
                 continue
             kwargs.pop(optional_key, None)
     return public_fetcher(str(profile_url).strip(), **kwargs)
+
+
+def _streamlit_session_state():
+    """Return Streamlit session_state only inside a real app run."""
+    try:
+        import streamlit as st
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        if get_script_run_ctx() is not None:
+            return st.session_state
+    except Exception:
+        pass
+    return None
+
+
+def _checkpoint_key(alias: str, profile_url: str) -> str:
+    return "seller_public_checkpoint::" + str(alias or "").strip().casefold() + "::" + str(profile_url or "").strip()
+
+
+def _item_key(item: dict) -> str:
+    return str(
+        item.get("tradera_item_id")
+        or item.get("item_id")
+        or item.get("id")
+        or item.get("lank")
+        or item.get("url")
+        or item.get("titel")
+        or item.get("title")
+        or ""
+    ).strip()
 
 
 def resolve_seller_top5(
@@ -152,8 +186,6 @@ def resolve_seller_top5(
         return {"status": "NO_SELLER", "rows": [], "seller": None,
                 "inventory_count": 0, "inventory_source": "NONE", "fallback_reason": None}
 
-    # app.py owns the visible progress bar when it supplies a callback. Creating
-    # another Streamlit bar here would duplicate the progress UI on mobile.
     ui = _SellerProgress(enabled=progress_callback is None)
 
     def combined_progress(payload):
@@ -184,31 +216,88 @@ def resolve_seller_top5(
         api_failure = fetched
 
     public_failure = None
-    if str(profile_url or "").strip():
+    profile_text = str(profile_url or "").strip()
+    if profile_text:
+        session = _streamlit_session_state()
+        key = _checkpoint_key(alias, profile_text)
+        checkpoint = None
+        if session is not None:
+            checkpoint = session.get(key)
+        if not isinstance(checkpoint, dict):
+            checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}
+
+        start_page = max(1, int(checkpoint.get("next_page") or 1))
+        stored_items = dict(checkpoint.get("items") or {})
+        batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
+
         try:
             public = _fetch_public(
-                public_fetcher, profile_url, public_pages=public_pages,
-                progress_callback=combined_progress, seller_alias=alias,
+                public_fetcher,
+                profile_text,
+                start_page=start_page,
+                public_pages=batch_pages,
+                progress_callback=combined_progress,
+                seller_alias=alias,
             )
         except Exception as exc:
             public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
-        if public.get("ok") and (public.get("items") or []):
+
+        if public.get("ok"):
+            for item in public.get("items") or []:
+                if isinstance(item, dict):
+                    k = _item_key(item)
+                    if k:
+                        stored_items[k] = dict(item)
+            total_pages_read = int(checkpoint.get("pages_read") or 0) + int(public.get("pages_read") or 0)
+            next_page = int(public.get("next_page") or (start_page + batch_pages))
+            exhausted = bool(public.get("exhausted"))
+
+            if not exhausted:
+                if session is not None:
+                    session[key] = {
+                        "next_page": next_page,
+                        "pages_read": total_pages_read,
+                        "items": stored_items,
+                    }
+                return {
+                    "status": "INVENTORY_PARTIAL",
+                    "seller": alias,
+                    "rows": [],
+                    "inventory_count": len(stored_items),
+                    "inventory_source": "TRADERA_PUBLIC_PROFILE",
+                    "public_status": public.get("status") or "OK",
+                    "public_pages_read": total_pages_read,
+                    "public_next_page": next_page,
+                    "public_batch_pages": int(public.get("pages_read") or 0),
+                    "public_inventory_complete": False,
+                    "fallback_reason": "NO_API_CREDENTIALS" if not creds else "API_FAILED",
+                    "api_status": (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK"),
+                }
+
+            if session is not None:
+                try:
+                    del session[key]
+                except Exception:
+                    pass
+
             result = _rank(
-                alias, public.get("items") or [], analyze_fn=analyze_fn,
-                quick_limit=quick_limit, full_limit=full_limit,
-                source="TRADERA_PUBLIC_PROFILE", progress_callback=progress_callback, ui=ui,
+                alias,
+                list(stored_items.values()),
+                analyze_fn=analyze_fn,
+                quick_limit=quick_limit,
+                full_limit=full_limit,
+                source="TRADERA_PUBLIC_PROFILE",
+                progress_callback=progress_callback,
+                ui=ui,
             )
             result["public_status"] = public.get("status") or "OK"
-            result["public_pages_read"] = int(public.get("pages_read") or 0)
-            result["public_inventory_complete"] = bool(public.get("exhausted"))
+            result["public_pages_read"] = total_pages_read
+            result["public_inventory_complete"] = True
             result["fallback_reason"] = "NO_API_CREDENTIALS" if not creds else "API_FAILED"
             result["api_status"] = (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK")
             return result
         public_failure = public
 
-    # Local fallback: resolve the seller inventory first, then run the normal
-    # cross-sport ranking only on those rows. Progress therefore reflects the
-    # seller's actual inventory rather than the entire local FlipFynd market.
     seller_rows = local_inventory_for_seller(alias, local_rows)
     combined_progress({
         "phase": "filter_start",
