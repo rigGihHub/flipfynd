@@ -1,5 +1,6 @@
 import statistics
 import re
+from functools import lru_cache
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import List, Optional
@@ -26,8 +27,15 @@ def _safe_total_cost(item: dict) -> Optional[float]:
     return float(total) if total is not None else None
 
 
-def _normalize_features(item: dict) -> dict:
-    title = item.get("titel", "") or ""
+@lru_cache(maxsize=12000)
+def _normalize_title_features(title: str) -> dict:
+    """Parse immutable title data once per search process.
+
+    Full analysis compares dozens of candidates with the same market inventory.
+    Parsing every comparison title again made the work grow roughly as
+    candidates × market rows. Return values are copied by the public helper so
+    callers can never mutate the cached dictionary.
+    """
     features = parse_card_features(title)
 
     player_name = features.get("player_name")
@@ -41,6 +49,11 @@ def _normalize_features(item: dict) -> dict:
 
     features.update(build_card_identity(features))
     return features
+
+
+def _normalize_features(item: dict) -> dict:
+    title = str(item.get("titel", "") or "")
+    return dict(_normalize_title_features(title))
 
 
 def _same_last_name(name1: Optional[str], name2: Optional[str]) -> bool:
@@ -994,4 +1007,3 @@ def build_market_analysis(item: dict, all_items: list) -> dict:
         "valuation_confidence_reasons": valuation_confidence["reasons"],
         "valuation_confidence_components": valuation_confidence["components"],
     }
-
