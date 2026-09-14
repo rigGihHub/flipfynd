@@ -3,6 +3,7 @@ import pytest
 from src.external_sold_sources import adapt_external_rows
 from src.sold_comp_collector import collect_sold_comps, has_explicit_sold_evidence
 from src.sold_comp_import import import_sold_comp_rows, normalize_sold_comp
+from src.sold_comp_quality import classify_sold_comp
 
 
 def test_collector_rejects_unsold_even_when_word_contains_sold():
@@ -75,3 +76,29 @@ def test_central_normalizer_still_accepts_sold_price_when_no_contradiction_exist
     row = normalize_sold_comp({"title": "Card sale", "sold_price": 100})
     assert row["market_state"] == "sold"
     assert row["sold_price"] == 100
+
+
+def test_stored_quality_gate_rejects_legacy_verified_row_with_unsold_state():
+    legacy = {
+        "titel": "Bad legacy comp",
+        "sold_price": 100,
+        "sold_verification_status": "verified",
+        "sale_evidence_type": "explicit_sold_price",
+        "market_state": "unsold",
+    }
+    verdict = classify_sold_comp(legacy)
+    assert verdict["safe_for_valuation"] is False
+    assert verdict["reason"] == "contradictory_unsold_state"
+
+
+def test_stored_quality_gate_keeps_clean_verified_sale_safe():
+    clean = {
+        "titel": "Clean sale",
+        "sold_price": 100,
+        "sold_verification_status": "verified",
+        "sale_evidence_type": "explicit_sold_price",
+        "market_state": "sold",
+        "source_platform": "manual",
+    }
+    verdict = classify_sold_comp(clean)
+    assert verdict["safe_for_valuation"] is True
