@@ -42,6 +42,16 @@ def test_skip_rows_can_fill_top5_without_becoming_find_signals():
     assert all(row["label"] == "BÄST AV RESTEN" for row in out["rows"])
 
 
+def test_serie_nytt_is_never_a_seller_top5_card():
+    items = [
+        {"titel": "1978 Serie Nytt #11", "lank": "comic", "pris": 20, "rank": 100, "decision": "KÖP"},
+        {"titel": "Wayne Gretzky Upper Deck card", "lank": "card", "pris": 50, "rank": 40, "decision": "SKIP"},
+    ]
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
+    assert all(row["title"] != "1978 Serie Nytt #11" for row in out["rows"])
+    assert out["domain_rejected_count"] >= 1
+
+
 def test_ordinary_zero_comp_undersok_is_returned_but_not_upgraded_to_buy():
     items = [{
         "titel": "1986-87 Kraft Dan Daoust", "lank": "dan", "pris": 87,
@@ -65,6 +75,20 @@ def test_ordinary_final_rank_order_is_reused_exactly():
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
     assert [row["title"] for row in out["rows"]] == ["D", "C", "B", "A", "E"]
     assert out["ranking_source"] == "ORDINARY_FLIPFYND_RANK"
+
+
+def test_fast_preselection_prefers_ordinary_rank_over_cheap_mediocre_card():
+    items = [
+        {"titel": f"Mediocre card {i}", "lank": f"m{i}", "pris": 5 + i, "rank": 5, "player_market": 5, "profit": 0}
+        for i in range(40)
+    ]
+    items.append({
+        "titel": "Elite rookie patch /25", "lank": "elite", "pris": 250,
+        "rank": 92, "player_market": 88, "profit": 300, "decision": "UNDERSÖK",
+    })
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=20, full_limit=10)
+    assert out["rows"][0]["title"] == "Elite rookie patch /25"
+    assert out["seller_analysis_contract"] == "v2-ordinary-rank-preselection"
 
 
 def test_verified_buy_ranks_before_equal_rank_skip_via_quick_preselection_stability():
