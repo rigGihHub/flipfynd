@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
+from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
+
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
-PUBLIC_BATCH_PAGES = 10
+PUBLIC_BATCH_PAGES = 5
 
 
 def _credentials_pair(credentials):
@@ -220,9 +222,7 @@ def resolve_seller_top5(
     if profile_text:
         session = _streamlit_session_state()
         key = _checkpoint_key(alias, profile_text)
-        checkpoint = None
-        if session is not None:
-            checkpoint = session.get(key)
+        checkpoint = load_checkpoint(key, session=session)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}}
 
@@ -230,17 +230,56 @@ def resolve_seller_top5(
         stored_items = dict(checkpoint.get("items") or {})
         batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
 
-        try:
-            public = _fetch_public(
-                public_fetcher,
-                profile_text,
-                start_page=start_page,
-                public_pages=batch_pages,
-                progress_callback=combined_progress,
-                seller_alias=alias,
+        # Fetch one page at a time and persist a checkpoint immediately after
+        # every successful page. A dropped Streamlit session therefore loses at
+        # most the in-flight page, not the entire block.
+        public = None
+        current_page = start_page
+        pages_this_run = 0
+        exhausted = False
+        for _ in range(batch_pages):
+            try:
+                page_result = _fetch_public(
+                    public_fetcher,
+                    profile_text,
+                    start_page=current_page,
+                    public_pages=1,
+                    progress_callback=combined_progress,
+                    seller_alias=alias,
+                )
+            except Exception as exc:
+                page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
+            if not page_result.get("ok"):
+                public = page_result
+                break
+            for item in page_result.get("items") or []:
+                if isinstance(item, dict):
+                    item_id = _item_key(item)
+                    if item_id:
+                        stored_items[item_id] = dict(item)
+            pages_this_run += int(page_result.get("pages_read") or 0)
+            current_page = int(page_result.get("next_page") or (current_page + 1))
+            exhausted = bool(page_result.get("exhausted"))
+            save_checkpoint(
+                key,
+                {
+                    "next_page": current_page,
+                    "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run,
+                    "items": stored_items,
+                },
+                session=session,
             )
-        except Exception as exc:
-            public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
+            if exhausted:
+                break
+        if public is None or public.get("ok"):
+            public = {
+                "ok": True,
+                "status": "OK",
+                "items": list(stored_items.values()),
+                "pages_read": pages_this_run,
+                "next_page": current_page,
+                "exhausted": exhausted,
+            }
 
         if public.get("ok"):
             for item in public.get("items") or []:
@@ -253,12 +292,11 @@ def resolve_seller_top5(
             exhausted = bool(public.get("exhausted"))
 
             if not exhausted:
-                if session is not None:
-                    session[key] = {
-                        "next_page": next_page,
-                        "pages_read": total_pages_read,
-                        "items": stored_items,
-                    }
+                save_checkpoint(
+                    key,
+                    {"next_page": next_page, "pages_read": total_pages_read, "items": stored_items},
+                    session=session,
+                )
                 # Show a living provisional Top 5 after every 10-page block. Keep
                 # this preview deliberately lighter than the final pass so a
                 # checkpoint remains fast and robust on Streamlit Cloud.
@@ -288,11 +326,7 @@ def resolve_seller_top5(
                 })
                 return preview
 
-            if session is not None:
-                try:
-                    del session[key]
-                except Exception:
-                    pass
+            clear_checkpoint(key, session=session)
 
             result = _rank(
                 alias,
