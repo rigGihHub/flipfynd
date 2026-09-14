@@ -28,4 +28,4 @@ def test_ui_explicitly_keeps_main_search_available():
     app = open("app.py", encoding="utf-8").read()
     assert "Du kan använda den vanliga sökningen samtidigt." in app
     assert "disabled=_seller_running" in app
-    assert 'APP_VERSION = "v0.13.1"' in app
+    assert "submit_seller_job(_background_task)" in app

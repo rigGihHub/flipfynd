@@ -1,20 +1,23 @@
 """Single-worker background queue for non-blocking seller searches."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from threading import Lock
+from threading import Lock, Thread
 from time import time
 from uuid import uuid4
 
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="flipfynd-seller")
 _lock = Lock()
 _jobs: dict[str, dict] = {}
+_active_job_id: str | None = None
 
 
 def submit_seller_job(task) -> str:
+    global _active_job_id
     job_id = uuid4().hex
     with _lock:
+        if _active_job_id and _jobs.get(_active_job_id, {}).get("status") in {"QUEUED", "RUNNING"}:
+            return _active_job_id
         _jobs[job_id] = {"status": "QUEUED", "progress": {}, "result": None, "error": None, "created_at": time()}
+        _active_job_id = job_id
 
     def progress(payload):
         with _lock:
@@ -33,7 +36,7 @@ def submit_seller_job(task) -> str:
             with _lock:
                 _jobs[job_id].update(status="COMPLETE", result=result)
 
-    _executor.submit(run)
+    Thread(target=run, name="flipfynd-seller", daemon=True).start()
     return job_id
 
 
@@ -53,7 +56,10 @@ def seller_job_snapshot(job_id: str | None) -> dict:
 
 
 def discard_seller_job(job_id: str | None) -> None:
+    global _active_job_id
     if not job_id:
         return
     with _lock:
         _jobs.pop(str(job_id), None)
+        if _active_job_id == str(job_id):
+            _active_job_id = None
