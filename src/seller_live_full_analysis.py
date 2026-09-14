@@ -92,9 +92,15 @@ def full_analyze_live_seller_item(
     elif decision_upper.startswith("UNDERSÖK"):
         label = "VÄRT ATT UNDERSÖKA"
         reason = "Den ordinarie analysmotorn prioriterar kortet för vidare kontroll, men köpkraven är inte verifierade."
+    elif identity_ok and sold >= 2 and valuation >= 45:
+        label = "VERIFIERAD MEN INTE KÖP"
+        reason = "Identitet och marknadsunderlag är tillräckligt starka, men ekonomin klarar inte köpgränsen."
+    elif identity_ok and sold >= 1:
+        label = "BEVAKA / FORSKA VIDARE"
+        reason = "Kortet är sökbart och har viss SOLD-evidens, men beslutsunderlaget är ännu för tunt."
     else:
-        label = "BÄST AV RESTEN"
-        reason = "Kortet rankas högt inom säljarens lager men den ordinarie analysmotorn ger ingen köp- eller undersöksignal."
+        label = "OTILLRÄCKLIGT UNDERLAG"
+        reason = "Fullanalysen kan ännu inte verifiera tillräcklig identitet och marknadsevidens för köp."
 
     return {
         "ok": True,
