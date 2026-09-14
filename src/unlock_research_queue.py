@@ -150,7 +150,16 @@ def _status(item):
     return "REVIEW", "Granska nästa saknade evidenssteg."
 
 
-def build_unlock_research_queue(items, limit=10):
+def _is_actionable_research_row(row, min_merit=18):
+    """Return whether a row deserves scarce comp-research time."""
+    if row.get("status") in {"ONE_SALE_AWAY", "VALUATION_NEXT", "MAX_PRICE_NEXT"}:
+        return True
+    if row.get("status") in {"EXACT_READY_NO_SALES", "RESEARCH_READY_NO_SALES"}:
+        return _n(row.get("research_merit_score"), 0) >= max(0, _n(min_merit, 18))
+    return False
+
+
+def build_unlock_research_queue(items, limit=10, *, actionable_only=False, min_merit=18):
     rows = []
     for item in items or []:
         if not isinstance(item, dict): continue
@@ -164,6 +173,13 @@ def build_unlock_research_queue(items, limit=10):
             "identity_ready": _identity_ready(item), "research_identity_ready": _research_identity_ready(item), "market_value_ready": _market_value_ready(item),
             "max_price_ready": _max_price_ready(item), "potential": max(0.0, min(100.0, _n(item.get("deal_score")))), "source_item": item,
         })
+    counts={}
+    for row in rows: counts[row["status"]]=counts.get(row["status"],0)+1
+    suppressed_count = 0
+    if actionable_only:
+        kept = [row for row in rows if _is_actionable_research_row(row, min_merit=min_merit)]
+        suppressed_count = len(rows) - len(kept)
+        rows = kept
     status_order = {"ONE_SALE_AWAY":0,"VALUATION_NEXT":1,"MAX_PRICE_NEXT":2,"EXACT_READY_NO_SALES":3,"RESEARCH_READY_NO_SALES":4,"EXACT_READY_LOW_MERIT":5,"EXACT_READY_LOW_GUIDE":6,"IDENTITY_FIRST":7,"REVIEW":8}
     rows.sort(key=lambda r:(status_order.get(r["status"],9),-r["unlock_score"],-r["research_merit_score"],-r["potential"],r["title"]))
     selected, used_players = [], set()
@@ -176,6 +192,4 @@ def build_unlock_research_queue(items, limit=10):
     for row in rows:
         if len(selected)>=max(0,int(limit)): break
         if row not in selected: selected.append(row)
-    counts={}
-    for row in rows: counts[row["status"]]=counts.get(row["status"],0)+1
-    return {"rows":selected,"counts":counts,"total":len(rows),"near_unlock_count":counts.get("ONE_SALE_AWAY",0),"exact_ready_no_sales_count":counts.get("EXACT_READY_NO_SALES",0),"low_merit_exact_count":counts.get("EXACT_READY_LOW_MERIT",0),"low_guide_exact_count":counts.get("EXACT_READY_LOW_GUIDE",0),"note":"Researchkön prioriterar evidenshävstång, kortspecifik samlarmerit och eventuell prisguide-triage. Exact ID ensam räcker inte för topplacering och guidevärden skapar aldrig KÖP."}
+    return {"rows":selected,"counts":counts,"total":sum(counts.values()),"actionable_total":len(rows),"suppressed_count":suppressed_count,"near_unlock_count":counts.get("ONE_SALE_AWAY",0),"exact_ready_no_sales_count":counts.get("EXACT_READY_NO_SALES",0),"low_merit_exact_count":counts.get("EXACT_READY_LOW_MERIT",0),"low_guide_exact_count":counts.get("EXACT_READY_LOW_GUIDE",0),"note":"Researchkön visar bara evidensnära kort eller noll-sale-kort med tydlig kortspecifik samlarmerit. Svaga bas- och standardkort används inte som utfyllnad. Exact ID eller en sökbar titel räcker aldrig ensamt och guidevärden skapar aldrig KÖP."}

@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.95"
+APP_VERSION = "v0.12.96"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2414,14 +2414,23 @@ if st.session_state.get("results") is not None:
                     common=sorted(decision_tiers["rejection_reasons"].items(), key=lambda kv: kv[1], reverse=True)[:3]
                     st.caption("Vanligaste verifieringsluckorna: " + " · ".join(f"{reason} ({count})" for reason,count in common))
 
-                unlock_queue = build_unlock_research_queue(st.session_state.get("results") or [], limit=10)
+                unlock_queue = build_unlock_research_queue(
+                    st.session_state.get("results") or [],
+                    limit=10,
+                    actionable_only=True,
+                )
                 if unlock_queue.get("rows"):
                     with st.expander("⚡ Närmast att låsa upp – research med högst hävstång", expanded=True):
                         u1, u2, u3 = st.columns(3)
                         u1.metric("1 sale från comp-tröskeln", unlock_queue.get("near_unlock_count", 0))
                         u2.metric("Exact ID men 0 sales", unlock_queue.get("exact_ready_no_sales_count", 0))
-                        u3.metric("Researchkö", len(unlock_queue.get("rows") or []))
+                        u3.metric("Värda research", len(unlock_queue.get("rows") or []))
                         st.caption("I stället för att forska på hundratals kort samtidigt prioriterar FlipFynd de kort där minsta nästa evidenssteg sannolikt gör mest nytta.")
+                        if unlock_queue.get("suppressed_count"):
+                            st.caption(
+                                f"{unlock_queue['suppressed_count']} svaga bas-/standardkort har dolts. "
+                                "En sökbar titel räcker inte för att få en plats i researchkön."
+                            )
 
                         if st.button("🚀 Kör automatisk comp-jakt på topp 5", key="auto_comp_hunt_top5", use_container_width=True):
                             queue_items = [row.get("source_item") for row in (unlock_queue.get("rows") or [])[:5] if isinstance(row.get("source_item"), dict)]
