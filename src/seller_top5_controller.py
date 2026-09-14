@@ -11,6 +11,8 @@ from typing import Callable, Iterable
 
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
 
+from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
+
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
 from src.seller_top5_fallback import local_inventory_for_seller
