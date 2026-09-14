@@ -31,7 +31,9 @@ def _first(row: dict, names: tuple[str, ...]):
 
 
 def _norm(value) -> str:
-    text = str(value or "").casefold().strip()
+    # Do not use ``value or ''`` here: False is meaningful SOLD evidence and
+    # must normalise to "false" rather than disappearing as an empty string.
+    text = str(value if value is not None else "").casefold().strip()
     text = re.sub(r"[_-]+", " ", text)
     return " ".join(text.split())
 
@@ -41,6 +43,8 @@ _UNSOLD_MARKERS = (
     "ended unsold", "not completed sale", "cancelled", "canceled",
     "withdrawn", "expired",
 )
+_NEGATIVE_SOLD_FLAGS = {"false", "0", "no", "nej", "unsold", "osåld"}
+_POSITIVE_SOLD_FLAGS = {"true", "1", "yes", "ja", "sold", "såld"}
 
 
 COMMON_MAP = {
@@ -99,11 +103,19 @@ def available_adapters() -> list[dict]:
     return [{"key": a.key, "label": a.label} for a in ADAPTERS.values()]
 
 
+def _sold_flag_values(row: dict, adapter: SourceAdapter):
+    for name in adapter.field_map["sold_flag"]:
+        if name in row and row.get(name) not in (None, ""):
+            yield row.get(name)
+
+
 def _explicitly_unsold(row: dict, adapter: SourceAdapter) -> bool:
+    # Inspect every provided SOLD flag. One explicit negative flag makes the
+    # evidence contradictory and therefore unsafe, even if another field says sold.
+    for raw_flag in _sold_flag_values(row, adapter):
+        if raw_flag is False or _norm(raw_flag) in _NEGATIVE_SOLD_FLAGS:
+            return True
     status = _norm(_first(row, adapter.field_map["status"]))
-    sold_flag = _norm(_first(row, adapter.field_map["sold_flag"]))
-    if sold_flag in {"false", "0", "no", "nej", "unsold", "osåld"}:
-        return True
     return bool(status and any(marker in status for marker in _UNSOLD_MARKERS))
 
 
@@ -112,9 +124,9 @@ def _explicitly_sold(row: dict, adapter: SourceAdapter) -> tuple[bool, str | Non
     # ``unsold`` and ``not sold`` must never pass because they contain "sold".
     if _explicitly_unsold(row, adapter):
         return False, None
-    sold_flag = _first(row, adapter.field_map["sold_flag"])
-    if sold_flag is True or _norm(sold_flag) in {"true", "1", "yes", "ja", "sold", "såld"}:
-        return True, "explicit_sold_flag"
+    for raw_flag in _sold_flag_values(row, adapter):
+        if raw_flag is True or _norm(raw_flag) in _POSITIVE_SOLD_FLAGS:
+            return True, "explicit_sold_flag"
     status = _norm(_first(row, adapter.field_map["status"]))
     markers = {_norm(marker) for marker in adapter.sold_markers}
     if status and status in markers:
