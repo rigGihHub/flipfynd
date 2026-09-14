@@ -15,6 +15,7 @@ from src.seller_card_domain import seller_item_domain_check
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.card_parser import parse_card_features
+from src.adaptive_deepening import select_dynamic_seller_deep_rows
 
 
 def _emit(callback, **payload):
@@ -314,8 +315,12 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         quick_limit=quick_limit, progress_callback=progress_callback,
     )
 
-    candidate_limit = min(max(int(full_limit or 20), 20), 40)
-    candidates = list(quick.get("rows") or [])[:candidate_limit]
+    candidates = select_dynamic_seller_deep_rows(
+        quick.get("rows") or [],
+        base_limit=max(int(full_limit or 20), 20),
+        max_cap=60,
+    )
+    candidate_limit = len(candidates)
     full_rows = []
     failed = 0
     _emit(progress_callback, phase="full_start", done=0, total=len(candidates), percent=66)

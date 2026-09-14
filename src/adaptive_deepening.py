@@ -1,3 +1,47 @@
+from src.seller_collector_signals import collector_signals
+
+
+def _independent_value_signal(candidate):
+    item, fast, attention = candidate
+    attention_score = int((attention or {}).get("score", 0) or 0)
+    demand_boost = int(fast.get("player_card_demand_preselection_boost", 0) or 0)
+    review_priority = int(fast.get("player_card_demand_review_priority_score", 0) or 0)
+    title_signal = int(collector_signals(item or {}).get("score") or 0)
+    return attention_score >= 12 or demand_boost >= 8 or review_priority >= 12 or title_signal >= 10
+
+
+def dynamic_deep_analysis_cap(candidates, base_limit=12, floor=48, max_cap=96):
+    """Size the expensive pass from actual value signals, not a fixed Top N."""
+    total = len(candidates or [])
+    if not total:
+        return 0
+    signaled = sum(1 for candidate in candidates if _independent_value_signal(candidate))
+    target = max(int(base_limit or 1), int(floor or 1), int(base_limit or 1) + signaled)
+    return min(total, max(int(base_limit or 1), min(int(max_cap or target), target)))
+
+
+def select_dynamic_seller_deep_rows(rows, base_limit=30, max_cap=120):
+    """Keep the baseline leaders and every credible late value signal within a CPU cap."""
+    rows = list(rows or [])
+    baseline = rows[:max(1, int(base_limit or 1))]
+    selected = list(baseline)
+    selected_ids = {id(row) for row in selected}
+    for row in rows[len(baseline):]:
+        if len(selected) >= max(int(base_limit or 1), int(max_cap or base_limit)):
+            break
+        decision = str(row.get("decision") or "").upper()
+        credible = (
+            int(row.get("collector_signal_score") or 0) >= 10
+            or int(row.get("sold_comps") or 0) > 0
+            or decision.startswith(("KÖP", "UNDERSÖK"))
+            or float(row.get("market_edge") or 0) >= 55
+        )
+        if credible and id(row) not in selected_ids:
+            selected.append(row)
+            selected_ids.add(id(row))
+    return selected
+
+
 def select_adaptive_full_analysis_indices(candidates, base_limit=12, hard_cap=30):
     """Select candidates for expensive full analysis without changing valuation.
 
@@ -22,11 +66,8 @@ def select_adaptive_full_analysis_indices(candidates, base_limit=12, hard_cap=30
             break
         _item, fast, attention = candidates[idx]
         fast_score = float(fast.get("rank_score", 0) or 0)
-        attention_score = int((attention or {}).get("score", 0) or 0)
-        demand_boost = int(fast.get("player_card_demand_preselection_boost", 0) or 0)
-        review_priority = int(fast.get("player_card_demand_review_priority_score", 0) or 0)
         close_enough = near_cutoff is not None and fast_score >= near_cutoff
-        independent_signal = attention_score >= 12 or demand_boost >= 8 or review_priority >= 12
+        independent_signal = _independent_value_signal(candidates[idx])
         if close_enough or independent_signal:
             selected.append(idx)
     return selected

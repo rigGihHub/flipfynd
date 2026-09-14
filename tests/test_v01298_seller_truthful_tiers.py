@@ -13,4 +13,4 @@ def test_seller_ui_uses_truthful_headings():
     app = Path("app.py").read_text(encoding="utf-8")
     assert "Inga starka fynd hittade ännu" in app
     assert "Kandidater värda fortsatt kontroll" in app
-    assert "APP_VERSION = \"v0.12.98\"" in app
+    assert "seller_result_tier(row)" in app

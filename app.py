@@ -19,7 +19,7 @@ try:
 except ImportError:
     st_autorefresh = None
 
-from src.adaptive_deepening import select_adaptive_full_analysis_indices
+from src.adaptive_deepening import select_adaptive_full_analysis_indices, dynamic_deep_analysis_cap
 from src.candidate_coverage import diversify_full_analysis_indices
 from src.card_market_knowledge import detect_market_attention
 from src.analysis_cache import (
@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.98"
+APP_VERSION = "v0.12.99"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1220,12 +1220,13 @@ def analyze_data(
     )
 
     results = []
-    adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=30)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=48, max_cap=72)
+    adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     full_indices = diversify_full_analysis_indices(
         candidates,
         adaptive_indices,
         base_limit=full_limit,
-        hard_cap=30,
+        hard_cap=dynamic_deep_cap,
         coverage_slots=6,
         max_per_player=3,
     )
@@ -1234,7 +1235,7 @@ def analyze_data(
         full_indices,
         budget=max_price,
         extra_slots=8,
-        hard_cap=38,
+        hard_cap=dynamic_deep_cap,
         max_per_player=2,
     )
     full_indices, segment_added = add_segment_coverage_indices(
@@ -1242,11 +1243,12 @@ def analyze_data(
         full_indices,
         budget=max_price,
         extra_slots=6,
-        hard_cap=42,
+        hard_cap=dynamic_deep_cap,
         max_per_player=2,
     )
     full_index_set = set(full_indices)
     debug["adaptive_full_selected"] = len(adaptive_indices)
+    debug["dynamic_deep_cap"] = dynamic_deep_cap
     debug["adaptive_extra_full"] = max(0, len(adaptive_indices) - min(full_limit, len(candidates)))
     debug["coverage_full_selected"] = len(full_indices)
     debug["coverage_diversified_added"] = len(set(full_indices) - set(adaptive_indices))
@@ -1302,7 +1304,7 @@ def analyze_data(
             candidates,
             full_index_set,
             extra_limit=8,
-            total_hard_cap=48,
+            total_hard_cap=dynamic_deep_cap,
             max_per_player=2,
         )
         after_sweep = full_index_set.union(market_sweep_indices)
@@ -1310,15 +1312,15 @@ def analyze_data(
             candidates,
             after_sweep,
             extra_limit=8,
-            total_hard_cap=48,
+            total_hard_cap=dynamic_deep_cap,
             max_per_player=2,
         )
-        remaining_room = max(0, 48 - len(full_index_set) - len(market_sweep_indices) - len(discovery_indices))
+        remaining_room = max(0, dynamic_deep_cap - len(full_index_set) - len(market_sweep_indices) - len(discovery_indices))
         fallback_indices = select_second_pass_indices(
             len(candidates),
             after_sweep.union(discovery_indices),
             extra_limit=min(12, remaining_room),
-            total_hard_cap=48,
+            total_hard_cap=dynamic_deep_cap,
         )
         extra_indices = market_sweep_indices + discovery_indices + fallback_indices
         debug["market_sweep_deepened"] = len(market_sweep_indices)
