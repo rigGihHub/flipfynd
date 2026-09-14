@@ -8,6 +8,7 @@ weakening the valuation safety gate.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Iterable
 
 from src.sold_comp_import import import_sold_comp_rows
@@ -30,7 +31,16 @@ def _first(row: dict, names: tuple[str, ...]):
 
 
 def _norm(value) -> str:
-    return str(value or "").casefold().strip()
+    text = str(value or "").casefold().strip()
+    text = re.sub(r"[_-]+", " ", text)
+    return " ".join(text.split())
+
+
+_UNSOLD_MARKERS = (
+    "unsold", "not sold", "osåld", "ej såld", "completed unsold",
+    "ended unsold", "not completed sale", "cancelled", "canceled",
+    "withdrawn", "expired",
+)
 
 
 COMMON_MAP = {
@@ -48,8 +58,6 @@ COMMON_MAP = {
     "sold_price_sek": ("sold_price_sek", "pris_sek"),
     "sold_total_price_sek": ("sold_total_price_sek", "total_sek"),
     "fx_rate_to_sek": ("fx_rate_to_sek", "sek_rate"),
-    # Preserve explicit structured card identity from exports. These fields are
-    # never inferred from title text by the adapter.
     "player_name": ("player_name", "player", "athlete"),
     "set_name": ("set_name", "set", "product"),
     "season": ("season", "year"),
@@ -71,17 +79,17 @@ COMMON_MAP = {
 ADAPTERS = {
     "generic": SourceAdapter(
         "generic", "Generisk verifierad export",
-        ("sold", "såld", "completed_sold", "ended_sold", "realized", "realised"),
+        ("sold", "såld", "completed sold", "ended sold", "realized", "realised"),
         COMMON_MAP,
     ),
     "ebay": SourceAdapter(
         "ebay", "eBay avslutade försäljningar",
-        ("sold", "completed", "completed_sold"),
+        ("sold", "completed", "completed sold"),
         COMMON_MAP,
     ),
     "tradera": SourceAdapter(
         "tradera", "Tradera verifierade avslut",
-        ("sold", "såld", "avslutad såld", "ended_sold"),
+        ("sold", "såld", "avslutad såld", "ended sold"),
         COMMON_MAP,
     ),
 }
@@ -91,12 +99,25 @@ def available_adapters() -> list[dict]:
     return [{"key": a.key, "label": a.label} for a in ADAPTERS.values()]
 
 
+def _explicitly_unsold(row: dict, adapter: SourceAdapter) -> bool:
+    status = _norm(_first(row, adapter.field_map["status"]))
+    sold_flag = _norm(_first(row, adapter.field_map["sold_flag"]))
+    if sold_flag in {"false", "0", "no", "nej", "unsold", "osåld"}:
+        return True
+    return bool(status and any(marker in status for marker in _UNSOLD_MARKERS))
+
+
 def _explicitly_sold(row: dict, adapter: SourceAdapter) -> tuple[bool, str | None]:
+    # Contradictory unsold/cancelled evidence always wins. In particular,
+    # ``unsold`` and ``not sold`` must never pass because they contain "sold".
+    if _explicitly_unsold(row, adapter):
+        return False, None
     sold_flag = _first(row, adapter.field_map["sold_flag"])
     if sold_flag is True or _norm(sold_flag) in {"true", "1", "yes", "ja", "sold", "såld"}:
         return True, "explicit_sold_flag"
     status = _norm(_first(row, adapter.field_map["status"]))
-    if status and any(marker in status for marker in adapter.sold_markers):
+    markers = {_norm(marker) for marker in adapter.sold_markers}
+    if status and status in markers:
         return True, "explicit_sold_status"
     return False, None
 
@@ -110,6 +131,9 @@ def adapt_external_rows(rows: Iterable[dict], source_key: str) -> dict:
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             rejected.append({"row": index, "reason": "not_an_object"})
+            continue
+        if _explicitly_unsold(row, adapter):
+            rejected.append({"row": index, "reason": "explicit_unsold_state"})
             continue
         is_sold, evidence = _explicitly_sold(row, adapter)
         if not is_sold:
