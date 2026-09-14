@@ -259,10 +259,22 @@ def resolve_seller_top5(
                         "pages_read": total_pages_read,
                         "items": stored_items,
                     }
-                return {
+                # Show a living provisional Top 5 after every 10-page block. Keep
+                # this preview deliberately lighter than the final pass so a
+                # checkpoint remains fast and robust on Streamlit Cloud.
+                preview = _rank(
+                    alias,
+                    list(stored_items.values()),
+                    analyze_fn=analyze_fn,
+                    quick_limit=quick_limit,
+                    full_limit=min(5, max(1, int(full_limit or 5))),
+                    source="TRADERA_PUBLIC_PROFILE",
+                    progress_callback=progress_callback,
+                    ui=ui,
+                )
+                preview = dict(preview)
+                preview.update({
                     "status": "INVENTORY_PARTIAL",
-                    "seller": alias,
-                    "rows": [],
                     "inventory_count": len(stored_items),
                     "inventory_source": "TRADERA_PUBLIC_PROFILE",
                     "public_status": public.get("status") or "OK",
@@ -270,9 +282,11 @@ def resolve_seller_top5(
                     "public_next_page": next_page,
                     "public_batch_pages": int(public.get("pages_read") or 0),
                     "public_inventory_complete": False,
+                    "provisional_top5": True,
                     "fallback_reason": "NO_API_CREDENTIALS" if not creds else "API_FAILED",
                     "api_status": (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK"),
-                }
+                })
+                return preview
 
             if session is not None:
                 try:

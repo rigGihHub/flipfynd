@@ -6448,7 +6448,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         profile_url=seller_top5_profile_url_resolved,
                         progress_callback=_seller_search_progress,
                         quick_limit=60,
-                        full_limit=10,
+                        full_limit=30,
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
@@ -6470,8 +6470,12 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         profile_url=seller_top5_profile_url_resolved,
                         progress_callback=_seller_search_progress,
                         quick_limit=60,
-                        full_limit=10,
+                        full_limit=30,
                     )
+                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
+                    top5 = dict(top5)
+                    top5["status"] = "PROFILE_INCOMPLETE"
+                    top5["rows"] = []
                 if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
                     top5 = dict(top5)
                     top5["status"] = "PROFILE_INCOMPLETE"
@@ -6514,13 +6518,17 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         _saved = int(seller_top5_result.get("inventory_count") or 0)
         _pages = int(seller_top5_result.get("public_pages_read") or 0)
         _next = int(seller_top5_result.get("public_next_page") or 1)
-        st.info(f"📥 Inventering pågår: {_pages} profilsidor lästa och {_saved} unika annonser sparade. Nästa block börjar på sida {_next}. Tryck på ‘Fortsätt läsa nästa 10 sidor’. Top 5 rankas först när hela profilen är inläst.")
+        st.info(f"📥 Inventering pågår: {_pages} profilsidor lästa och {_saved} unika annonser sparade. Nästa block börjar på sida {_next}. Preliminär Top 5 uppdateras löpande; tryck på ‘Fortsätt läsa nästa 10 sidor’.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.warning("Hela Tradera-profilen kunde inte verifieras som inläst. FlipFynd visar därför ingen Top 5 från den lokala fallback-datan. Kör profilinläsningen igen/fortsätt nästa block.")
-    if seller_top5_result and _seller_result_status not in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}:
+    if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE":
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
-        st.markdown(f"### 🏆 Top 5 hos {seller_name}")
+        if _seller_result_status == "INVENTORY_PARTIAL":
+            st.markdown(f"### 🏆 Preliminär Top 5 hos {seller_name}")
+            st.caption("Listan uppdateras när fler 10-sidorsblock läses in. Kort kan flytta upp, ner eller försvinna när bättre fynd hittas.")
+        else:
+            st.markdown(f"### 🏆 Slutlig Top 5 hos {seller_name}")
         st.caption(
             f"{inv_count} annonser hittades · "
             f"{int(seller_top5_result.get('quick_analysed') or 0)} snabbanalyserade · "
@@ -6532,6 +6540,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         elif inventory_source == "TRADERA_PUBLIC_PROFILE":
             pages_read = int(seller_top5_result.get("public_pages_read") or 0)
             st.caption(f"Källa: säljarens publika Tradera-profil · {pages_read} profilsidor lästa.")
+            if seller_top5_result.get("public_inventory_complete"):
+                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
             if seller_top5_result.get("public_inventory_complete"):
                 st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
         elif inventory_source == "LOCAL_MARKET":
