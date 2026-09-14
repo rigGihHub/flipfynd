@@ -36,6 +36,9 @@ jobs:
       - name: Apply Seller Top 5 v0.12.88 one-page batches
         run: python scripts/patch_seller_top5_v01288.py
 
+      - name: Apply Seller Top 5 v0.12.89 compatibility fix
+        run: python scripts/patch_seller_top5_v01289.py
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -51,12 +54,12 @@ jobs:
       - name: Commit verified Seller Top 5 changes
         if: github.event_name == 'push'
         run: |
-          if git diff --quiet -- app.py src/seller_top5_controller.py src/public_seller_inventory.py; then
+          if git diff --quiet -- app.py VERSION src/seller_top5_controller.py src/public_seller_inventory.py; then
             echo 'No Seller Top 5 changes needed.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '4189824+github-actions[bot]@users.noreply.github.com'
-          git add app.py src/seller_top5_controller.py src/public_seller_inventory.py
-          git commit -m 'Read one seller profile page per click'
+          git add app.py VERSION src/seller_top5_controller.py src/public_seller_inventory.py
+          git commit -m 'Fix one-page seller profile flow compatibility'
           git push origin HEAD:main
