@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
+from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
+
 
 def _num(value, default=0.0):
     try:
@@ -45,7 +47,7 @@ def full_analyze_live_seller_item(
     The returned status is a UI summary only. BUY is copied from the underlying
     analyser; this function never manufactures or upgrades the decision.
     """
-    prepared = dict(item or {})
+    prepared = apply_seller_metadata(item or {})
     if not prepared.get("source_category"):
         prepared["source_category"] = "Hockey - NHL" if sport == "hockey" else "Fotboll"
 
@@ -59,6 +61,7 @@ def full_analyze_live_seller_item(
     merged = dict(prepared)
     if isinstance(result, dict):
         merged.update(result)
+    merged = apply_seller_metadata(merged, prepared)
 
     decision = str(merged.get("beslut") or merged.get("decision") or "SKIP")
     decision_upper = decision.upper()
@@ -104,5 +107,8 @@ def full_analyze_live_seller_item(
         "sold_comps": sold,
         "valuation_confidence": valuation,
         "market_edge": edge,
+        "seller_alias": seller_alias(merged),
+        "seller_id": seller_id(merged),
+        "seller_url": seller_url(merged),
         "source_item": merged,
     }
