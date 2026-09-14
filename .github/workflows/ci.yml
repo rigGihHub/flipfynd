@@ -36,6 +36,9 @@ jobs:
       - name: Apply Seller Top 5 resume resilience
         run: python scripts/patch_seller_resume_resilience.py
 
+      - name: Apply Seller Top 5 incomplete-profile continue patch
+        run: python scripts/patch_seller_continue_incomplete.py
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
