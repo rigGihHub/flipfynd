@@ -22,6 +22,8 @@ _BLOCK_PATTERNS = (
     r"\bpussel\b",
     r"\bmynt\b",
     r"\bcoin\b",
+    r"\bhacke\s+hackspett\b",
+    r"\bkalle\s+anka\b",
 )
 _CARD_HINTS = (
     "card", "kort", "rookie", "rc", "upper deck", "topps", "panini", "o-pee-chee",
@@ -37,12 +39,8 @@ def seller_item_domain_check(item: dict, sport: str = "hockey") -> dict:
         if re.search(pattern, text, re.I):
             return {"allowed": False, "reason": "NOT_A_TRADING_CARD", "title": title}
 
-    # Explicit category metadata can override weak title ambiguity.
     category_text = " ".join(str(item.get(k) or "") for k in ("category_name", "category", "breadcrumb", "path")).casefold()
     if any(word in category_text for word in ("serietid", "böcker", "books", "magasin", "comics")):
         return {"allowed": False, "reason": "NON_CARD_CATEGORY", "title": title}
 
-    # Do not reject terse listings solely because they lack a card word; many real
-    # card listings are just year + player. The guard is intentionally asymmetric:
-    # strong non-card evidence blocks, uncertainty remains analyzable.
     return {"allowed": True, "reason": "NO_NON_CARD_EVIDENCE", "title": title}
