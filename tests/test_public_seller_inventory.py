@@ -16,6 +16,16 @@ def test_build_profile_page_url_preserves_paging_suffix():
     assert "paging=8.a0.s7726" in url
 
 
+def test_resumed_profile_uses_saved_total_as_tradera_paging_suffix():
+    url = build_profile_page_url(
+        "https://www.tradera.com/profile/items/9999999/seller",
+        4,
+        paging_size=9013,
+    )
+    assert "paging=4.a0.s9013" in url
+    assert "s48" not in url
+
+
 def test_extract_embedded_json_listing():
     html = '''
     <html><body>

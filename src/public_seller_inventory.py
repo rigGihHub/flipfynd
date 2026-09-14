@@ -36,7 +36,7 @@ def parse_profile_url(url: str | None) -> dict | None:
     return {"seller_id": match.group("seller_id"), "alias": alias}
 
 
-def build_profile_page_url(profile_url: str, page_number: int) -> str:
+def build_profile_page_url(profile_url: str, page_number: int, paging_size: int | None = None) -> str:
     parsed = urlparse(str(profile_url or "").strip())
     query = parse_qs(parsed.query, keep_blank_values=True)
     page_number = max(1, int(page_number))
@@ -49,7 +49,13 @@ def build_profile_page_url(profile_url: str, page_number: int) -> str:
     if not suffix:
         profile = parse_profile_url(profile_url) or {}
         seller_id = str(profile.get("seller_id") or "")
-        suffix = _PAGING_SUFFIX_CACHE.get(seller_id, ".a0.s48")
+        suffix = _PAGING_SUFFIX_CACHE.get(seller_id, "")
+    if not suffix and paging_size:
+        suffix = f".a0.s{max(1, int(paging_size))}"
+    if not suffix:
+        # This is only a bootstrap fallback. Once page 1 has been read, Tradera's
+        # own paging link or the stored total listing estimate must be reused.
+        suffix = ".a0.s48"
     query["paging"] = [f"{page_number}{suffix}"]
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
@@ -226,6 +232,7 @@ def fetch_public_seller_inventory_batch(
     session=None,
     progress_callback=None,
     fallback_alias: str | None = None,
+    paging_size: int | None = None,
 ) -> dict:
     parsed = parse_profile_url(profile_url)
     if not parsed:
@@ -245,7 +252,7 @@ def fetch_public_seller_inventory_batch(
     _emit_progress(progress_callback, phase="starting", page=page, pages_read=0, max_pages=max_pages, found_count=0, seller_alias=effective_alias)
 
     for _ in range(max_pages):
-        url = build_profile_page_url(profile_url, page)
+        url = build_profile_page_url(profile_url, page, paging_size=paging_size)
         _emit_progress(progress_callback, phase="fetching", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), seller_alias=effective_alias)
         try:
             response = client.get(url, headers={

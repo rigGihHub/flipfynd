@@ -110,7 +110,7 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress
     return result
 
 
-def _fetch_public(public_fetcher, profile_url, *, start_page, public_pages, progress_callback=None, seller_alias=None):
+def _fetch_public(public_fetcher, profile_url, *, start_page, public_pages, progress_callback=None, seller_alias=None, paging_size=None):
     kwargs = {
         "start_page": max(1, int(start_page or 1)),
         "max_pages": max(1, int(public_pages or 1)),
@@ -119,8 +119,10 @@ def _fetch_public(public_fetcher, profile_url, *, start_page, public_pages, prog
         kwargs["progress_callback"] = progress_callback
     if str(seller_alias or "").strip():
         kwargs["fallback_alias"] = str(seller_alias).strip()
+    if paging_size:
+        kwargs["paging_size"] = int(paging_size)
 
-    for optional_key in ("fallback_alias", "progress_callback"):
+    for optional_key in ("paging_size", "fallback_alias", "progress_callback"):
         try:
             return public_fetcher(str(profile_url).strip(), **kwargs)
         except TypeError as exc:
@@ -358,6 +360,7 @@ def resolve_seller_top5(
                     public_pages=1,
                     progress_callback=combined_progress,
                     seller_alias=alias,
+                    paging_size=total_listing_estimate,
                 )
             except Exception as exc:
                 page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
