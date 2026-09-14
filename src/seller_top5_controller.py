@@ -11,6 +11,7 @@ from typing import Callable, Iterable
 
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
 from src.public_seller_inventory import fetch_public_seller_inventory_batch, parse_profile_url
+from src.seller_proxy_inventory import fetch_proxy_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
 from src.seller_collector_signals import collector_signals
 from src.seller_card_domain import seller_item_domain_check
@@ -396,6 +397,34 @@ def resolve_seller_top5(
                 )
             except Exception as exc:
                 page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
+
+            if not page_result.get("ok"):
+                # Streamlit Cloud can be blocked/reset by Tradera even when the
+                # public profile is healthy. Retry the same single page through
+                # the dedicated browser-like Render fetcher before giving up.
+                try:
+                    proxy_result = fetch_proxy_seller_inventory_batch(
+                        profile_text,
+                        start_page=current_page,
+                        max_pages=1,
+                        progress_callback=combined_progress,
+                        fallback_alias=alias,
+                    )
+                except Exception as exc:
+                    proxy_result = {
+                        "ok": False,
+                        "status": "PROXY_FETCH_EXCEPTION",
+                        "error": str(exc),
+                        "items": [],
+                        "next_page": current_page,
+                    }
+                if proxy_result.get("ok"):
+                    page_result = proxy_result
+                else:
+                    page_result = dict(page_result)
+                    page_result["direct_fetch_error"] = page_result.get("error")
+                    page_result["proxy_status"] = proxy_result.get("status")
+                    page_result["proxy_error"] = proxy_result.get("error")
 
             if not page_result.get("ok"):
                 public_failure = page_result
