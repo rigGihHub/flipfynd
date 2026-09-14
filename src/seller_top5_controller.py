@@ -111,10 +111,7 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress
 
 
 def _fetch_public(public_fetcher, profile_url, *, public_pages, progress_callback=None, seller_alias=None):
-    kwargs = {
-        "start_page": 1,
-        "max_pages": max(1, int(public_pages or 1)),
-    }
+    kwargs = {"start_page": 1, "max_pages": max(1, int(public_pages or 1))}
     if progress_callback is not None:
         kwargs["progress_callback"] = progress_callback
     if str(seller_alias or "").strip():
@@ -137,7 +134,7 @@ def resolve_seller_top5(
     market_items: Iterable[dict] | None,
     *,
     analyze_fn: Callable,
-    sport: str = "all",  # legacy UI arg; intentionally ignored for product ranking
+    sport: str = "all",
     credentials=None,
     profile_url: str | None = None,
     inventory_fetcher: Callable = discover_active_seller_inventory,
@@ -147,19 +144,11 @@ def resolve_seller_top5(
     public_pages: int = 120,
     progress_callback=None,
 ) -> dict:
-    """Fetch the seller's inventory and return one Top 5 across supported sports.
-
-    A successful API response is authoritative. With a public profile URL the
-    reader continues until the profile is exhausted or the high safety cap is
-    reached. The ranking never treats profile discovery data as SOLD evidence.
-    """
     alias = str(seller or "").strip()
     local_rows = [dict(x) for x in (market_items or []) if isinstance(x, dict)]
     if not alias:
-        return {
-            "status": "NO_SELLER", "rows": [], "seller": None,
-            "inventory_count": 0, "inventory_source": "NONE", "fallback_reason": None,
-        }
+        return {"status": "NO_SELLER", "rows": [], "seller": None,
+                "inventory_count": 0, "inventory_source": "NONE", "fallback_reason": None}
 
     ui = _SellerProgress()
 
@@ -172,20 +161,16 @@ def resolve_seller_top5(
         combined_progress({"phase": "starting", "page": 1, "pages_read": 0, "max_pages": 1, "found_count": 0, "percent": 2})
         try:
             fetched = inventory_fetcher(
-                seller_alias=alias,
-                app_id=creds[0],
-                app_key=creds[1],
-                category_id=0,
+                seller_alias=alias, app_id=creds[0], app_key=creds[1], category_id=0,
             )
         except Exception as exc:
             fetched = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
-
         if fetched.get("ok"):
             items = fetched.get("items") or []
             combined_progress({"phase": "page_complete", "page": 1, "pages_read": 1, "max_pages": 1, "found_count": len(items), "percent": 20})
             result = _rank(
-                alias, items, analyze_fn=analyze_fn,
-                quick_limit=quick_limit, full_limit=full_limit, source="TRADERA_API",
+                alias, items, analyze_fn=analyze_fn, quick_limit=quick_limit,
+                full_limit=full_limit, source="TRADERA_API",
                 progress_callback=progress_callback, ui=ui,
             )
             result["api_status"] = fetched.get("status") or "OK"
@@ -198,19 +183,16 @@ def resolve_seller_top5(
     if str(profile_url or "").strip():
         try:
             public = _fetch_public(
-                public_fetcher,
-                profile_url,
-                public_pages=public_pages,
-                progress_callback=combined_progress,
-                seller_alias=alias,
+                public_fetcher, profile_url, public_pages=public_pages,
+                progress_callback=combined_progress, seller_alias=alias,
             )
         except Exception as exc:
             public = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
         if public.get("ok") and (public.get("items") or []):
             result = _rank(
                 alias, public.get("items") or [], analyze_fn=analyze_fn,
-                quick_limit=quick_limit, full_limit=full_limit, source="TRADERA_PUBLIC_PROFILE",
-                progress_callback=progress_callback, ui=ui,
+                quick_limit=quick_limit, full_limit=full_limit,
+                source="TRADERA_PUBLIC_PROFILE", progress_callback=progress_callback, ui=ui,
             )
             result["public_status"] = public.get("status") or "OK"
             result["public_pages_read"] = int(public.get("pages_read") or 0)
@@ -220,19 +202,19 @@ def resolve_seller_top5(
             return result
         public_failure = public
 
-    # Local fallback still uses the same cross-sport engine. Do not let the old
-    # UI sport radio change the product result.
-    result = _rank(
+    # Preserve the seller-scoped local fallback contract and metadata. The local
+    # helper filters exact seller identity before invoking the same Top 5 engine.
+    combined_progress({"phase": "filter_start", "done": 0, "total": len(local_rows), "percent": 20})
+    result = build_local_seller_top5(
         alias,
-        [row for row in local_rows if isinstance(row, dict)],
+        local_rows,
         analyze_fn=analyze_fn,
+        sport="all",
         quick_limit=quick_limit,
         full_limit=full_limit,
-        source="LOCAL_MARKET",
-        progress_callback=progress_callback,
-        ui=ui,
     )
-    result["local_market_count"] = len(local_rows)
+    result = dict(result)
+    combined_progress({"phase": "complete", "done": len(result.get("rows") or []), "total": 5, "percent": 100})
     if creds and api_failure:
         result["fallback_reason"] = "API_FAILED"
         result["api_status"] = api_failure.get("status") or "UNKNOWN_API_ERROR"
