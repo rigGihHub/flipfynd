@@ -184,3 +184,4 @@ def test_card_specific_rarity_beats_common_star_base_when_evidence_tier_is_equal
 
     assert out["rows"][0]["title"].startswith("2021 Donruss Elite Rookie Orange /75")
     assert out["rows"][0]["collector_signal_score"] > out["rows"][1]["collector_signal_score"]
+    assert out["rows"][0]["seller_opportunity_score"] > out["rows"][0]["rank_score"]

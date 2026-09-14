@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.12.94"
+APP_VERSION = "v0.12.95"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6622,7 +6622,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     st.markdown(badge)
             else:
                 st.markdown(badge)
-            st.caption(f"FlipFynd-score {_rank_score:.0f}/100")
+            _opportunity_score = float(row.get("seller_opportunity_score") or _rank_score)
+            st.caption(f"Granskningsprioritet {_opportunity_score:.0f}/100")
             _signal_labels = {
                 "one_of_one": "1/1",
                 "serial_numbered": "Numrerat",
@@ -6642,6 +6643,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             ]
             if _signals:
                 st.caption("Varför den prioriteras: " + " · ".join(_signals))
+            if not decision.startswith("KÖP"):
+                st.caption("Prioriterad för kontroll – inte en köpsignal.")
             reason = str(row.get("reason") or "").strip()
             if reason:
                 st.caption(reason)

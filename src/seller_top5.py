@@ -143,6 +143,11 @@ def _seller_opportunity_rank_key(row: dict):
     )
 
 
+def _seller_opportunity_score(row: dict) -> float:
+    collector = min(40.0, _num(row.get("collector_signal_score")))
+    return round(max(0.0, min(100.0, _num(row.get("rank_score")) + collector * 1.5)), 1)
+
+
 def _quick_rank_key(row: dict):
     decision = str(row.get("decision") or "").upper()
     sold = int(_num(row.get("sold_comps")))
@@ -322,6 +327,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["quick_score"] = qrow.get("quick_score")
             row["collector_signal_score"] = qrow.get("collector_signal_score", 0)
             row["collector_signals"] = list(qrow.get("collector_signals") or [])
+            row["seller_opportunity_score"] = _seller_opportunity_score(row)
             row["seller"] = alias
             row["sport"] = item_sport
             row["analysis_level"] = "full"
