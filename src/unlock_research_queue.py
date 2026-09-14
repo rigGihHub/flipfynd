@@ -121,7 +121,7 @@ def _unlock_score(item):
     market = _market_value_ready(item); max_price = _max_price_ready(item); merit, _ = _structural_merit(item); guide = _guide_context(item)
     if identity and sold == 1: score = 100.0
     elif identity and sold == 0: score = 70.0
-    elif research_identity and sold == 0: score = 64.0
+    elif research_identity and sold == 0: score = 66.0
     elif sold >= 2 and not (market and max_price): score = 74.0
     elif not identity: score = 38.0
     else: score = 52.0
