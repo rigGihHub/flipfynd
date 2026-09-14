@@ -16,6 +16,6 @@ def test_flipfynd_has_one_streamlit_entrypoint():
 def test_seller_top5_is_integrated_in_main_app():
     app_source = (ROOT / "app.py").read_text(encoding="utf-8")
 
-    assert 'with st.sidebar.expander("🏪 Säljare – Top 5 fynd"' in app_source
+    assert 'with st.sidebar.expander("🏪 Säljare – Top 5 kort"' in app_source
     assert 'key="seller_top5_profile_url"' in app_source
     assert 'key="seller_top5_run"' in app_source

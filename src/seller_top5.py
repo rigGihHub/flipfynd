@@ -16,6 +16,7 @@ from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
+from src.seller_card_merit import assess_seller_card_merit
 
 
 def _emit(callback, **payload):
@@ -133,10 +134,12 @@ def _seller_opportunity_rank_key(row: dict):
     sold = int(_num(row.get("sold_comps")))
     evidence_tier = 1 if row.get("identity_ok") and sold > 0 else 0
     collector = min(40.0, _num(row.get("collector_signal_score")))
+    merit = assess_seller_card_merit(row)
     opportunity_score = _num(row.get("rank_score")) + collector * 1.5
     return (
         decision_tier,
         evidence_tier,
+        merit["score"],
         opportunity_score,
         _num(row.get("rank_score")),
         _num(row.get("player_market_score")),
@@ -146,7 +149,8 @@ def _seller_opportunity_rank_key(row: dict):
 
 def _seller_opportunity_score(row: dict) -> float:
     collector = min(40.0, _num(row.get("collector_signal_score")))
-    return round(max(0.0, min(100.0, _num(row.get("rank_score")) + collector * 1.5)), 1)
+    merit = assess_seller_card_merit(row)
+    return round(max(0.0, min(100.0, merit["score"] * 1.4 + _num(row.get("rank_score")) * 0.45 + collector * 0.35)), 1)
 
 
 def _quick_rank_key(row: dict):
@@ -188,7 +192,12 @@ def seller_result_tier(row: dict) -> str:
     decision = str(row.get("decision") or "SKIP").upper()
     if decision.startswith("KÖP"):
         return "FIND"
-    if decision.startswith("UNDERSÖK") or _num(row.get("collector_signal_score")) >= 18:
+    merit = assess_seller_card_merit(row)
+    if merit["eligible"] and (
+        decision.startswith("UNDERSÖK")
+        or merit["score"] >= 25
+        or (merit["strong_signals"] and merit["score"] >= 18)
+    ):
         return "RESEARCH"
     return "WEAK"
 
@@ -315,8 +324,12 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         quick_limit=quick_limit, progress_callback=progress_callback,
     )
 
+    qualified_quick_rows = [
+        row for row in (quick.get("rows") or [])
+        if assess_seller_card_merit(row)["eligible"]
+    ]
     candidates = select_dynamic_seller_deep_rows(
-        quick.get("rows") or [],
+        qualified_quick_rows,
         base_limit=max(int(full_limit or 8), 8),
         max_cap=15,
     )
@@ -346,6 +359,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["seller"] = alias
             row["sport"] = item_sport
             row["analysis_level"] = "full"
+            row["seller_card_merit"] = assess_seller_card_merit(row)
             full_rows.append(_seller_presentation_label(row))
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
@@ -353,7 +367,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     selected_opportunities = {_card_opportunity_key(row) for row in selected}
-    for qrow in quick.get("rows") or []:
+    for qrow in qualified_quick_rows:
         if len(selected) >= 5:
             break
         source = qrow.get("source_item") or {}

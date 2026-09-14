@@ -266,7 +266,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.13.7"
+APP_VERSION = "v0.13.8"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6447,7 +6447,7 @@ if "seller_top5_alias" not in st.session_state and _seller_qp_alias:
     st.session_state["seller_top5_alias"] = _seller_qp_alias
 if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
     st.session_state["seller_top5_profile_url"] = _seller_qp_profile
-with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
+with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
     st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
     seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
     seller_top5_profile_url = st.text_input(
@@ -6641,14 +6641,17 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.caption("Ingen Top 5 visas förrän minst en riktig annons har lästs in.")
         elif _seller_result_status not in {"PROFILE_INCOMPLETE", "INVENTORY_PARTIAL"}:
             st.warning("Sökningen gav ännu inga läsbara kortannonser. Försök igen; FlipFynd visar inte en tom körning som ett lyckat resultat.")
-    if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE" and (seller_top5_result.get("rows") or []):
+    if (
+        seller_top5_result
+        and _seller_result_status != "PROFILE_INCOMPLETE"
+        and int(seller_top5_result.get("inventory_count") or 0) > 0
+    ):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
         _ranked_rows = seller_top5_result.get("rows") or []
         _find_rows = [row for row in _ranked_rows if seller_result_tier(row) == "FIND"]
         _research_rows = [row for row in _ranked_rows if seller_result_tier(row) == "RESEARCH"]
-        _weak_rows = [row for row in _ranked_rows if seller_result_tier(row) == "WEAK"]
-        _seller_display_rows = (_find_rows + _research_rows + _weak_rows)[:5]
+        _seller_display_rows = (_find_rows + _research_rows)[:5]
         if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
             st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
             st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
@@ -6689,7 +6692,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
             st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
         if not rows:
-            st.info("Inga samlarkort kunde rankas hos säljaren just nu.")
+            st.info("Inget kort klarade kvalitetsgränsen ännu. Top 5 uppdateras när fler sidor läses.")
         elif len(rows) < 5:
             st.caption(f"Topplistan innehåller {len(rows)} kort eftersom färre än fem giltiga, unika kortannonser kunde läsas.")
         for idx, row in enumerate(rows[:5], start=1):
@@ -6752,3 +6755,5 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             if row.get("url"):
                 st.link_button("Öppna annonsen ↗", row.get("url"), use_container_width=True)
             st.divider()
+        for empty_rank in range(len(rows) + 1, 6):
+            st.caption(f"#{empty_rank} — Ingen kandidat klarade kvalitetsgränsen ännu")
