@@ -3,6 +3,8 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 
+from src.seller_identity import apply_seller_metadata, seller_alias
+
 
 INTEREST_PATTERNS = {
     "rookie_program": [
@@ -26,8 +28,6 @@ def _canonical_seller(value):
     seller = _norm(value)
     if not (2 <= len(seller) <= 80):
         return None
-    # Reject obvious chunks of surrounding item-page prose if a selector/text
-    # extraction was too broad. Tradera aliases do not need sentence punctuation.
     if seller.count(" ") > 6 or any(token in seller.lower() for token in (
         "köparskydd", "frakt", "omdöme", "betalning", "auktionen",
     )):
@@ -36,28 +36,21 @@ def _canonical_seller(value):
 
 
 def persist_seller_identity(item, seller_value=None):
-    """Preserve one verified seller alias under stable keys used across FlipFynd.
+    """Preserve verified seller metadata under stable keys used across FlipFynd.
 
-    Existing seller identity always wins. A newly parsed detail-page seller is
-    copied to canonical aliases so later pruning, analysis and seller Top 5
-    fallback cannot lose it merely because a source used a different field name.
+    Alias parsing remains conservative, while canonical seller id/profile URL are
+    copied from structured source data when available. Existing non-empty fields
+    win, so detail enrichment cannot silently downgrade richer seller metadata.
     """
-    clone = dict(item or {})
-    existing = None
-    for key in ("saljare", "säljare", "seller_alias", "seller_name", "username", "seller", "seller_detail"):
-        value = clone.get(key)
-        if isinstance(value, dict):
-            value = value.get("alias") or value.get("Alias") or value.get("username") or value.get("Username")
-        candidate = _canonical_seller(value)
-        if candidate:
-            existing = candidate
-            break
+    clone = apply_seller_metadata(dict(item or {}))
+    existing = _canonical_seller(seller_alias(clone))
     seller = existing or _canonical_seller(seller_value)
     if seller:
-        clone["saljare"] = seller
-        clone["seller_alias"] = seller
+        clone["saljare"] = clone.get("saljare") or seller
+        clone["seller_alias"] = clone.get("seller_alias") or seller
+        clone["seller_name"] = clone.get("seller_name") or seller
         clone["seller_detail"] = clone.get("seller_detail") or seller
-    return clone
+    return apply_seller_metadata(clone)
 
 
 def score_detail_priority(item):
