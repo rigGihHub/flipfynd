@@ -129,3 +129,53 @@ def test_missing_seller_is_explicit_and_does_not_call_api():
     assert out["status"] == "NO_SELLER"
     assert out["inventory_source"] == "NONE"
     assert called["value"] is False
+
+
+def test_first_public_page_is_ranked_with_ordinary_engine_immediately(monkeypatch):
+    calls = []
+    monkeypatch.setattr("src.seller_top5_controller.load_checkpoint", lambda *args, **kwargs: None)
+    monkeypatch.setattr("src.seller_top5_controller.save_checkpoint", lambda *args, **kwargs: None)
+
+    def public_fetcher(*args, **kwargs):
+        return {
+            "ok": True,
+            "status": "OK",
+            "seller": {"alias": "TestSeller"},
+            "items": [
+                {
+                    "titel": "2023-24 Upper Deck Young Guns Rookie #201",
+                    "lank": "https://www.tradera.com/item/293316/123456789/card",
+                    "pris": 25,
+                    "saljare": "TestSeller",
+                    "seller_user_id": "987654321",
+                    "tradera_item_id": "123456789",
+                    "source_type": "tradera_public_seller_profile",
+                    "sold": 2,
+                }
+            ],
+            "pages_read": 1,
+            "next_page": 2,
+            "exhausted": False,
+        }
+
+    def analyze(item, **kwargs):
+        calls.append(item["tradera_item_id"])
+        return _fake_analyze(item, **kwargs)
+
+    out = resolve_seller_top5(
+        "",
+        [],
+        analyze_fn=analyze,
+        credentials=None,
+        profile_url="https://www.tradera.com/profile/items/987654321/TestSeller",
+        public_fetcher=public_fetcher,
+        public_pages=1,
+    )
+
+    assert out["status"] == "INVENTORY_PARTIAL"
+    assert out["inventory_count"] == 1
+    assert out["public_pages_read"] == 1
+    assert out["public_next_page"] == 2
+    assert out["ranking_source"] == "ORDINARY_FLIPFYND_RANK"
+    assert out["rows"]
+    assert calls
