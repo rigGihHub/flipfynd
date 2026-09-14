@@ -20,12 +20,22 @@ def _fake_analyze(item, mode="fast", strategy_mode=None, sport=None, all_items=N
 
 def test_returns_at_most_five_rows():
     items = [
-        {"titel": f"Card {i}", "lank": f"u{i}", "pris": 10 + i, "edge": 20 + i, "sold": i % 3}
+        {"titel": f"Card {i}", "lank": f"u{i}", "pris": 10 + i, "edge": 20 + i, "sold": i % 3, "decision": "UNDERSÖK"}
         for i in range(12)
     ]
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=12, full_limit=10)
     assert out["status"] == "READY"
     assert len(out["rows"]) == 5
+
+
+def test_skip_rows_do_not_pad_top5():
+    items = [
+        {"titel": f"Weak card {i}", "lank": f"w{i}", "pris": 10 + i, "edge": 5, "sold": 0, "decision": "SKIP"}
+        for i in range(12)
+    ]
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=12, full_limit=10)
+    assert out["status"] == "NO_STRONG_CANDIDATES"
+    assert out["rows"] == []
 
 
 def test_verified_buy_ranks_before_unverified_skip():
