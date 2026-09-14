@@ -14,14 +14,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 import json
+import re
 
 from src.sold_comp_import import normalize_sold_comp, merge_sold_comps
 
 
 _EXPLICIT_SOLD_STATES = {
-    "sold", "såld", "completed_sold", "ended_sold", "realized", "realised",
-    "completed sold", "ended sold", "avslutad såld",
+    "sold", "såld", "completed sold", "ended sold", "realized", "realised",
+    "avslutad såld",
 }
+_EXPLICIT_UNSOLD_STATES = {
+    "unsold", "not sold", "not sold item", "osåld", "ej såld",
+    "completed unsold", "ended unsold", "not completed sale",
+    "cancelled", "canceled", "withdrawn", "expired",
+}
+
+
+def _status_text(value) -> str:
+    text = str(value or "").casefold().strip()
+    text = re.sub(r"[_-]+", " ", text)
+    return " ".join(text.split())
 
 
 def _float(value):
@@ -35,21 +47,40 @@ def _float(value):
         return None
 
 
-def _explicit_sale_state(row: dict) -> bool:
+def _sale_status_text(row: dict) -> str:
     parts = [
         row.get("market_state"), row.get("sale_status"), row.get("status"),
         row.get("listing_status"), row.get("state"),
     ]
-    text = " ".join(str(x or "").casefold().strip() for x in parts).strip()
+    return " ".join(_status_text(x) for x in parts if x not in (None, "")).strip()
+
+
+def _explicit_unsold_state(row: dict) -> bool:
+    text = _sale_status_text(row)
     if not text:
         return False
-    tokens = set(text.split())
-    return bool(tokens.intersection(_EXPLICIT_SOLD_STATES) or any(marker in text for marker in _EXPLICIT_SOLD_STATES))
+    return any(marker in text for marker in _EXPLICIT_UNSOLD_STATES)
+
+
+def _explicit_sale_state(row: dict) -> bool:
+    if _explicit_unsold_state(row):
+        return False
+    parts = [
+        _status_text(row.get("market_state")), _status_text(row.get("sale_status")),
+        _status_text(row.get("status")), _status_text(row.get("listing_status")),
+        _status_text(row.get("state")),
+    ]
+    return any(part in _EXPLICIT_SOLD_STATES for part in parts if part)
 
 
 def sold_evidence_type(row: dict) -> str | None:
-    """Describe the direct evidence proving a realised sale, or return None."""
-    if not isinstance(row, dict):
+    """Describe the direct evidence proving a realised sale, or return None.
+
+    Explicit contradictory unsold/cancelled state always wins over a price-like
+    field. This prevents values such as ``unsold`` or ``not sold`` from being
+    misread merely because they contain the substring ``sold``.
+    """
+    if not isinstance(row, dict) or _explicit_unsold_state(row):
         return None
     sold_price = _float(row.get("sold_price"))
     if sold_price is not None and sold_price > 0:
@@ -76,6 +107,8 @@ def _collector_row(row: dict) -> dict:
 def _classify_rejection(row) -> str:
     if not isinstance(row, dict):
         return "not_an_object"
+    if _explicit_unsold_state(row):
+        return "explicit_unsold_state"
     price = _float(row.get("pris") if row.get("pris") not in (None, "") else row.get("price"))
     sold_price = _float(row.get("sold_price"))
     if _explicit_sale_state(row) and not ((sold_price and sold_price > 0) or (price and price > 0)):
