@@ -6443,6 +6443,16 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         total_saved = save_expansion_items(SEARCH_EXPANSION_DATA_PATH, items)
                         get_data.clear()
                         st.session_state["result_cache"] = {}
+                        triage_market = get_data(get_data_version())
+                        triage_sport = "hockey" if seller_top5_sport_label == "Hockey" else "football"
+                        st.session_state["seller_inventory_triage_result"] = build_seller_inventory_triage(
+                            import_alias,
+                            triage_market,
+                            analyze_fn=analyze_item,
+                            sport=triage_sport,
+                            max_fast_analyses=120,
+                            top_n=20,
+                        )
                         exhausted = bool(imported.get("exhausted"))
                         st.session_state[import_cursor_key] = 1 if exhausted else int(imported.get("next_page") or (import_next_page + 12))
                         st.session_state["seller_inventory_import_status"] = {
