@@ -119,6 +119,7 @@ from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5
 from src.seller_top5_controller import resolve_seller_top5
+from src.seller_inventory_triage import build_seller_inventory_triage
 from src.search_yield_learning import build_yield_report, route_budget_guidance
 from src.near_buy_guidance import build_near_buy_guidance
 from src.detail_evidence_fusion import build_detail_evidence_fusion
@@ -6413,6 +6414,16 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                         total_saved = save_expansion_items(SEARCH_EXPANSION_DATA_PATH, items)
                         get_data.clear()
                         st.session_state["result_cache"] = {}
+                        triage_market = get_data(get_data_version())
+                        triage_sport = "hockey" if seller_top5_sport_label == "Hockey" else "football"
+                        st.session_state["seller_inventory_triage_result"] = build_seller_inventory_triage(
+                            import_alias,
+                            triage_market,
+                            analyze_fn=analyze_item,
+                            sport=triage_sport,
+                            max_fast_analyses=120,
+                            top_n=20,
+                        )
                         st.session_state["seller_inventory_import_status"] = {
                             "ok": True,
                             "source": "TRADERA_API",
@@ -6475,6 +6486,52 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.warning("Tradera API är inte konfigurerat. Klistra in säljarens publika Tradera-profillänk ovan för att läsa in lagret.")
         else:
             st.error(f"Kunde inte läsa in säljarens annonser ({seller_inventory_status.get('status')}).")
+
+    if st.button("🎯 Uppdatera Bästa 20 att undersöka", key="seller_inventory_triage_refresh", use_container_width=True):
+        triage_alias = str(seller_top5_alias or "").strip()
+        if not triage_alias:
+            st.warning("Ange ett säljarnamn först.")
+        else:
+            triage_sport = "hockey" if seller_top5_sport_label == "Hockey" else "football"
+            with st.spinner(f"Prioriterar inlästa annonser från {triage_alias}…"):
+                st.session_state["seller_inventory_triage_result"] = build_seller_inventory_triage(
+                    triage_alias,
+                    get_data(get_data_version()),
+                    analyze_fn=analyze_item,
+                    sport=triage_sport,
+                    max_fast_analyses=120,
+                    top_n=20,
+                )
+
+    triage_result = st.session_state.get("seller_inventory_triage_result")
+    if triage_result and triage_result.get("seller") == str(seller_top5_alias or "").strip():
+        triage_rows = triage_result.get("rows") or []
+        with st.expander("🎯 Bästa 20 att undersöka", expanded=bool(triage_rows)):
+            st.caption(
+                f"{int(triage_result.get('cheap_scanned_count') or 0)} säljarannonser skannade · "
+                f"{int(triage_result.get('fast_analysed_count') or 0)} snabbanalyserade. "
+                "Detta är prioritering för vidare analys, inte KÖP-signaler."
+            )
+            if not triage_rows:
+                st.info("Inga prioriterade kandidater finns i det hittills inlästa säljar-lagret.")
+            for triage_idx, triage_row in enumerate(triage_rows[:20], start=1):
+                triage_title = triage_row.get("title") or "Kortannons"
+                triage_price = triage_row.get("price")
+                triage_score = float(triage_row.get("quick_score") or 0)
+                triage_label = triage_row.get("label") or "UNDERSÖK"
+                st.markdown(f"**#{triage_idx} {triage_title}**")
+                triage_facts = [triage_label, f"prioritet {triage_score:.0f}/100"]
+                if triage_price is not None:
+                    try:
+                        triage_facts.insert(0, f"pris {float(triage_price):.0f} kr")
+                    except (TypeError, ValueError):
+                        pass
+                st.caption(" · ".join(triage_facts))
+                if triage_row.get("reason"):
+                    st.caption(triage_row.get("reason"))
+                if triage_row.get("url"):
+                    st.link_button("Öppna annonsen ↗", triage_row.get("url"), use_container_width=True, key=f"triage_link_{triage_idx}_{str(triage_row.get('url'))[-16:]}")
+                st.divider()
 
     seller_top5_result = st.session_state.get("seller_top5_result")
     if seller_top5_result:
