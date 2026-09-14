@@ -14,6 +14,7 @@ from typing import Callable, Iterable
 from src.seller_card_domain import seller_item_domain_check
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
+from src.card_parser import parse_card_features
 
 
 def _emit(callback, **payload):
@@ -38,6 +39,54 @@ def _identity_key(item: dict) -> str:
         if value not in (None, ""):
             return str(value).strip()
     return str(item.get("titel") or item.get("title") or "").strip().casefold()
+
+
+def _card_opportunity_key(row: dict) -> str:
+    """Collapse separate listings of the same identifiable card in Top 5."""
+    source = row.get("source_item") or row
+    title = str(source.get("titel") or source.get("title") or row.get("title") or "").strip()
+    features = parse_card_features(title)
+    identity = tuple(
+        str(features.get(key) or "").strip().casefold()
+        for key in ("season", "set_name", "card_number", "player_name", "parallel", "grading_company", "grade")
+    )
+    if identity[0] and identity[1] and identity[2] and identity[3]:
+        return "card:" + "|".join(identity)
+    return "listing:" + _identity_key(source)
+
+
+def _explicit_condition_risk(row: dict) -> bool:
+    source = row.get("source_item") or row
+    text = " ".join(
+        str(source.get(key) or row.get(key) or "")
+        for key in ("titel", "title", "description", "full_description")
+    ).casefold()
+    return any(token in text for token in (
+        "märken på", "skadad", "skador", "dåligt skick", "poor condition",
+        "crease", "creased", "veck", "repor", "repa", "corner damage",
+        "kantstött", "kantstötning",
+    ))
+
+
+def _select_diverse_rows(rows: list[dict], limit: int = 5) -> tuple[list[dict], int, int]:
+    clean, condition_risk = [], []
+    seen = set()
+    duplicate_count = 0
+    for row in rows:
+        key = _card_opportunity_key(row)
+        if key in seen:
+            duplicate_count += 1
+            continue
+        seen.add(key)
+        (condition_risk if _explicit_condition_risk(row) else clean).append(row)
+    selected = clean[:limit]
+    if len(selected) < limit:
+        for raw in condition_risk[: limit - len(selected)]:
+            row = dict(raw)
+            row["condition_risk"] = True
+            row["label"] = "SKICKRISK · BÄST AV RESTEN"
+            selected.append(row)
+    return selected, duplicate_count, len(condition_risk)
 
 
 def _supported_sport(item: dict, fallback: str = "hockey") -> str:
@@ -255,8 +304,9 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
     full_rows.sort(key=_ordinary_rank_key, reverse=True)
-    selected = list(full_rows[:5])
+    selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
+    selected_opportunities = {_card_opportunity_key(row) for row in selected}
     for qrow in quick.get("rows") or []:
         if len(selected) >= 5:
             break
@@ -264,10 +314,13 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         if not seller_item_domain_check(source, sport="all").get("allowed"):
             continue
         key = _identity_key(source or qrow)
-        if key in selected_keys:
+        fallback = _fallback_row(qrow, alias)
+        opportunity_key = _card_opportunity_key(fallback)
+        if key in selected_keys or opportunity_key in selected_opportunities or _explicit_condition_risk(fallback):
             continue
-        selected.append(_fallback_row(qrow, alias))
+        selected.append(fallback)
         selected_keys.add(key)
+        selected_opportunities.add(opportunity_key)
 
     _emit(progress_callback, phase="ranking", done=len(selected), total=5, percent=97)
     common_meta = {
@@ -285,6 +338,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "seller_analysis_contract": "v2-ordinary-rank-preselection",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
+        "duplicate_opportunities_removed": duplicate_opportunities_removed,
+        "condition_risks_demoted": condition_risks_demoted,
     }
     result = {"status": "READY" if selected else "NO_CARD_CANDIDATES",
               "rows": selected, "full_analysed": len(full_rows), "failed_full": failed,

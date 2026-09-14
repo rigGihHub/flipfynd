@@ -133,3 +133,32 @@ def test_duplicate_inventory_rows_are_only_quick_scanned_once():
     assert out["inventory_count"] == 3
     assert out["inventory_unique_count"] == 2
     assert out["quick_analysed"] == 2
+
+
+def test_same_identifiable_card_only_occupies_one_top5_place():
+    items = [
+        {"titel": "2022-23 Topps UEFA Club Superstars #100 Jamal Musiala Common Yellow Variation", "lank": "a", "rank": 90},
+        {"titel": "2022-23 Topps UEFA Club Competitions Superstars Common Yellow Jamal Musiala #100", "lank": "b", "rank": 89},
+        {"titel": "2023-24 Upper Deck Dazzlers #DZ-144 Auston Matthews", "lank": "c", "rank": 70},
+    ]
+
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
+
+    musiala_rows = [row for row in out["rows"] if "Musiala" in row["title"]]
+    assert len(musiala_rows) == 1
+    assert out["duplicate_opportunities_removed"] >= 1
+
+
+def test_explicitly_damaged_card_is_ranked_after_clean_alternatives():
+    items = [
+        {"titel": "2006-07 Fleer Speed Machines #SM8 Joe Sakic Märken på ovandelen", "lank": "damaged", "rank": 99},
+        *[
+            {"titel": f"2023-24 Upper Deck Hockey Card #{i} Player Name{i}", "lank": f"clean-{i}", "rank": 80 - i}
+            for i in range(1, 6)
+        ],
+    ]
+
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
+
+    assert all("Märken på" not in row["title"] for row in out["rows"])
+    assert out["condition_risks_demoted"] >= 1
