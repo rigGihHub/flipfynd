@@ -6388,6 +6388,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
             st.query_params["seller_profile"] = str(seller_top5_profile_url)
     except Exception:
         pass
+    try:
+        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
+            st.query_params["seller"] = str(seller_top5_alias)
+        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
+            st.query_params["seller_profile"] = str(seller_top5_profile_url)
+    except Exception:
+        pass
     seller_top5_sport_label = "Alla"
     seller_top5_profile_url_resolved = str(seller_top5_profile_url or "").strip()
     _profile_alias = str(seller_top5_alias or "").strip()
@@ -6513,6 +6520,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     top5 = dict(top5)
                     top5["status"] = "PROFILE_INCOMPLETE"
                     top5["rows"] = []
+                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
+                    top5 = dict(top5)
+                    top5["status"] = "PROFILE_INCOMPLETE"
+                    top5["rows"] = []
                 st.session_state["seller_top5_result"] = top5
                 found_count = int(top5.get("inventory_count") or 0)
                 quick_count = int(top5.get("quick_analysed") or 0)
@@ -6524,7 +6535,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
                     next_page = int(top5.get("public_next_page") or 1)
                     seller_progress_bar.progress(20, text=f"20% · {found_count} annonser sparade")
                     seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
-                    seller_status.update(label=f"📥 5-sidorsblock klart för {alias}", state="complete", expanded=False)
+                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt nästa 5 sidor", state="complete", expanded=False)
                 elif result_status == "PROFILE_INCOMPLETE":
                     seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Fortsätt läsa nästa 5 sidor")
                     seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
@@ -6551,10 +6562,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         _saved = int(seller_top5_result.get("inventory_count") or 0)
         _pages = int(seller_top5_result.get("public_pages_read") or 0)
         _next = int(seller_top5_result.get("public_next_page") or 1)
-        st.info(f"📥 Inventering pågår: {_pages} profilsidor lästa och {_saved} unika annonser sparade. Nästa block börjar på sida {_next}. Preliminär Top 5 uppdateras löpande; tryck på ‘Fortsätt läsa nästa 5 sidor’.")
+        if seller_top5_result.get("resume_required"):
+            st.warning(f"📥 Inläsningen avbröts, men checkpointen är sparad. {_pages} profilsidor och {_saved} annonser är bevarade. Tryck på ‘Fortsätt läsa nästa 5 sidor’ för att fortsätta från sida {_next}.")
+        else:
+            st.info(f"📥 Inventering pågår: {_pages} profilsidor lästa och {_saved} unika annonser sparade. Nästa block börjar på sida {_next}. Preliminär Top 5 uppdateras löpande; tryck på ‘Fortsätt läsa nästa 5 sidor’.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.warning("Hela Tradera-profilen kunde inte verifieras som inläst. FlipFynd visar därför ingen Top 5 från den lokala fallback-datan. Kör profilinläsningen igen/fortsätt nästa block.")
-    if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE":
+    if seller_top5_result and _seller_result_status != "PROFILE_INCOMPLETE" and (seller_top5_result.get("rows") or []):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
         if _seller_result_status == "INVENTORY_PARTIAL":
@@ -6573,6 +6587,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 fynd", expanded=False):
         elif inventory_source == "TRADERA_PUBLIC_PROFILE":
             pages_read = int(seller_top5_result.get("public_pages_read") or 0)
             st.caption(f"Källa: säljarens publika Tradera-profil · {pages_read} profilsidor lästa.")
+            if seller_top5_result.get("public_inventory_complete"):
+                st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
             if seller_top5_result.get("public_inventory_complete"):
                 st.success("✅ Alla säljarens annonser är inlästa. Top 5 är rankad på hela det hittade lagret.")
             if seller_top5_result.get("public_inventory_complete"):

@@ -13,6 +13,8 @@ from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_
 
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
 
+from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
+
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
 from src.seller_top5_fallback import local_inventory_for_seller
@@ -347,6 +349,31 @@ def resolve_seller_top5(
             result["api_status"] = (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK")
             return result
         public_failure = public
+        # A supplied public profile is authoritative for Seller Top 5. If the
+        # next page fails, keep the persisted checkpoint and ask the UI to
+        # continue from the same page. Never rank unrelated LOCAL_MARKET rows
+        # and never emit a false completed-analysis state.
+        saved_checkpoint = load_checkpoint(key, session=session) or checkpoint
+        saved_items = dict((saved_checkpoint or {}).get("items") or {})
+        saved_pages = int((saved_checkpoint or {}).get("pages_read") or 0)
+        saved_next_page = max(1, int((saved_checkpoint or {}).get("next_page") or start_page))
+        return {
+            "status": "INVENTORY_PARTIAL",
+            "seller": alias,
+            "rows": [],
+            "inventory_count": len(saved_items),
+            "inventory_source": "TRADERA_PUBLIC_PROFILE",
+            "public_status": (public_failure or {}).get("status") or "FETCH_FAILED",
+            "public_error": (public_failure or {}).get("error"),
+            "public_pages_read": saved_pages,
+            "public_next_page": saved_next_page,
+            "public_batch_pages": 0,
+            "public_inventory_complete": False,
+            "provisional_top5": False,
+            "resume_required": True,
+            "fallback_reason": "PUBLIC_PROFILE_INTERRUPTED",
+            "api_status": (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK"),
+        }
 
     seller_rows = local_inventory_for_seller(alias, local_rows)
     combined_progress({
