@@ -5,9 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -15,17 +12,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
-
-      - name: Apply Seller Top 5 live integration
-        run: python scripts/patch_seller_top5_live.py
 
       - name: Install dependencies
         run: |
@@ -38,16 +30,3 @@ jobs:
 
       - name: Run test suite
         run: pytest -q
-
-      - name: Commit verified Seller Top 5 integration
-        if: github.event_name == 'push'
-        run: |
-          if git diff --quiet -- app.py; then
-            echo 'No app.py changes needed.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.py
-          git commit -m 'Wire Seller Top 5 API-first local fallback into live app'
-          git push origin HEAD:main
