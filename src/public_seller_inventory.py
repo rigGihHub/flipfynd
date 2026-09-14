@@ -18,6 +18,8 @@ _PROFILE_RE = re.compile(r"/profile/items/(?P<seller_id>\d+)(?:/(?P<alias>[^/?#]
 _PRICE_RE = re.compile(r"(?P<price>\d[\d\s.]*)\s*kr", re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 _SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", re.I | re.S)
+_PAGING_HINT_RE = re.compile(r"paging=\d+\.a0\.s(?P<count>\d+)", re.I)
+_PAGING_SUFFIX_CACHE: dict[str, str] = {}
 
 
 def parse_profile_url(url: str | None) -> dict | None:
@@ -36,8 +38,22 @@ def build_profile_page_url(profile_url: str, page_number: int) -> str:
     suffix = ""
     if "." in old:
         suffix = old[old.find("."):]
-    query["paging"] = [f"{max(1, int(page_number))}{suffix or '.a0.s7726'}"]
+    if not suffix:
+        profile = parse_profile_url(profile_url) or {}
+        seller_id = str(profile.get("seller_id") or "")
+        suffix = _PAGING_SUFFIX_CACHE.get(seller_id, ".a0.s999999")
+    query["paging"] = [f"{max(1, int(page_number))}{suffix}"]
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+
+def _remember_paging_suffix(profile_url: str, page_html: str) -> None:
+    profile = parse_profile_url(profile_url) or {}
+    seller_id = str(profile.get("seller_id") or "")
+    if not seller_id:
+        return
+    match = _PAGING_HINT_RE.search(_html.unescape(str(page_html or "")))
+    if match:
+        _PAGING_SUFFIX_CACHE[seller_id] = f".a0.s{match.group('count')}"
 
 
 def _text(value) -> str:
@@ -107,28 +123,10 @@ def _normalize_json_listing(row: dict, *, seller_alias=None, seller_id=None):
     }
 
 
-def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id=None) -> list[dict]:
-    """Extract public listings from embedded JSON first, then HTML anchors."""
-    source = str(page_html or "")
+def _extract_anchor_items(source: str, *, seller_alias=None, seller_id=None) -> dict[str, dict]:
     dedup: dict[str, dict] = {}
-
-    for script_body in _SCRIPT_RE.findall(source):
-        body = script_body.strip()
-        if not body or body[0] not in "[{":
-            continue
-        try:
-            payload = json.loads(_html.unescape(body))
-        except Exception:
-            continue
-        for obj in _walk_json(payload):
-            item = _normalize_json_listing(obj, seller_alias=seller_alias, seller_id=seller_id)
-            if item:
-                dedup[item["tradera_item_id"]] = item
-
     for match in _ITEM_HREF_RE.finditer(source):
         item_id = match.group("id")
-        if item_id in dedup:
-            continue
         start = max(0, source.rfind("<a", 0, match.start()))
         end = source.find("</a>", match.end())
         if end < 0:
@@ -153,6 +151,46 @@ def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id
             "source_type": "tradera_public_seller_profile",
             "seller_inventory_candidate": True,
         }
+    return dedup
+
+
+def extract_public_profile_items(page_html: str, *, seller_alias=None, seller_id=None) -> list[dict]:
+    """Extract the seller's visible listing cards and use embedded JSON only as enrichment.
+
+    Tradera pages can contain unrelated recommendation/search JSON. Treating every
+    item-like JSON object as seller inventory polluted Seller Top 5 with thousands
+    of unrelated rows. Visible /item/ anchors are the authoritative page inventory.
+    """
+    source = str(page_html or "")
+    dedup = _extract_anchor_items(source, seller_alias=seller_alias, seller_id=seller_id)
+
+    # Embedded JSON may contain cleaner titles/prices for the SAME visible cards.
+    # Never introduce a new item from JSON when visible seller cards were found.
+    allow_new_json_items = not dedup
+    for script_body in _SCRIPT_RE.findall(source):
+        body = script_body.strip()
+        if not body or body[0] not in "[{":
+            continue
+        try:
+            payload = json.loads(_html.unescape(body))
+        except Exception:
+            continue
+        for obj in _walk_json(payload):
+            item = _normalize_json_listing(obj, seller_alias=seller_alias, seller_id=seller_id)
+            if not item:
+                continue
+            item_id = item["tradera_item_id"]
+            if item_id in dedup:
+                current = dedup[item_id]
+                if item.get("titel"):
+                    current["titel"] = item["titel"]
+                if item.get("pris") is not None:
+                    current["pris"] = item["pris"]
+                if item.get("lank"):
+                    current["lank"] = item["lank"]
+                current["raw_public_item"] = item.get("raw_public_item")
+            elif allow_new_json_items:
+                dedup[item_id] = item
     return list(dedup.values())
 
 
@@ -200,9 +238,10 @@ def fetch_public_seller_inventory_batch(
         if response.status_code != 200:
             _emit_progress(progress_callback, phase="error", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), status="HTTP_ERROR")
             return {"ok": False, "status": "HTTP_ERROR", "http_status": response.status_code, "items": list(all_items.values()), "next_page": page, "page_reports": page_reports}
+        _remember_paging_suffix(str(response.url or profile_url), response.text)
         items = extract_public_profile_items(response.text, seller_alias=effective_alias, seller_id=parsed["seller_id"])
         ids = tuple(sorted(x["tradera_item_id"] for x in items if x.get("tradera_item_id")))
-        page_reports.append({"page": page, "count": len(items), "url": url})
+        page_reports.append({"page": page, "count": len(items), "url": str(response.url or url)})
         if not items or ids == previous_ids:
             exhausted = True
             _emit_progress(progress_callback, phase="exhausted", page=page, pages_read=len(page_reports), max_pages=max_pages, found_count=len(all_items), page_count=len(items), seller_alias=effective_alias)
