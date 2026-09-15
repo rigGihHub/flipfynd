@@ -2,13 +2,13 @@ from src import seller_top5_controller as controller
 
 
 def test_reset_clears_exact_checkpoint_from_all_storage_layers(monkeypatch):
-    cleared = {}
+    cleared = []
     session = {}
     monkeypatch.setattr(
         controller,
         "clear_checkpoint",
-        lambda key, session=None, database_url=None: cleared.update(
-            key=key, session=session, database_url=database_url
+        lambda key, session=None, database_url=None: cleared.append(
+            {"key": key, "session": session, "database_url": database_url}
         ),
     )
     key = controller.reset_seller_top5_search(
@@ -17,10 +17,27 @@ def test_reset_clears_exact_checkpoint_from_all_storage_layers(monkeypatch):
         database_url="postgresql://test",
         session=session,
     )
-    assert key == cleared["key"]
+    assert key == cleared[-1]["key"]
     assert "etanol71" in key
-    assert cleared["session"] is session
-    assert cleared["database_url"] == "postgresql://test"
+    assert cleared[-1]["session"] is session
+    assert cleared[-1]["database_url"] == "postgresql://test"
+
+
+def test_reset_clears_raw_and_alias_normalized_profile_keys(monkeypatch):
+    keys = []
+    monkeypatch.setattr(
+        controller,
+        "clear_checkpoint",
+        lambda key, session=None, database_url=None: keys.append(key),
+    )
+    controller.reset_seller_top5_search(
+        "Etanol71",
+        "https://www.tradera.com/profile/items/5412219",
+        session={},
+    )
+    assert len(keys) == 2
+    assert keys[0].endswith("/5412219")
+    assert keys[1].endswith("/5412219/Etanol71")
 
 
 def test_app_has_visible_reset_without_touching_ordinary_results():

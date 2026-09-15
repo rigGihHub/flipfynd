@@ -8,6 +8,7 @@ inventories get the final ranking.
 from __future__ import annotations
 
 from typing import Callable, Iterable
+from urllib.parse import quote
 
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
 from src.public_seller_inventory import fetch_public_seller_inventory_batch, parse_profile_url
@@ -165,11 +166,29 @@ def reset_seller_top5_search(seller: str, profile_url: str, *, database_url=None
     alias = str(seller or parsed.get("alias") or "").strip()
     if not alias and parsed.get("seller_id"):
         alias = f"Tradera #{parsed.get('seller_id')}"
-    key = _checkpoint_key(alias, profile_text)
     if session is None:
         session = _streamlit_session_state()
-    clear_checkpoint(key, session=session, database_url=database_url)
-    return key
+
+    # app.py adds the seller alias to numeric Tradera profile URLs before a
+    # crawl. The form retains the original URL, so reset must clear both forms.
+    profile_variants = [profile_text]
+    stripped = profile_text.rstrip("/")
+    if stripped and stripped != profile_text:
+        profile_variants.append(stripped)
+    base, separator, query = stripped.partition("?")
+    clean_base = base.rstrip("/")
+    if alias and "/profile/items/" in clean_base and clean_base.rsplit("/", 1)[-1].isdigit():
+        canonical = clean_base + "/" + quote(alias, safe="")
+        if separator:
+            canonical += "?" + query
+        profile_variants.append(canonical)
+
+    cleared_keys = []
+    for candidate in dict.fromkeys(profile_variants):
+        key = _checkpoint_key(alias, candidate)
+        clear_checkpoint(key, session=session, database_url=database_url)
+        cleared_keys.append(key)
+    return cleared_keys[-1]
 
 
 def _item_key(item: dict) -> str:
