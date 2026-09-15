@@ -8,4 +8,4 @@ def test_seller_search_reuses_fast_and_full_analysis_caches():
     assert "_cached_fast_analysis(" in app
     assert 'mode=f"seller_{sport}_{strategy_mode}"' in app
     assert app.count("analyze_fn=_cached_seller_analysis") >= 2
-    assert 'APP_VERSION = "v0.14.6"' in app
+    assert 'APP_VERSION = "v0.14.7"' in app

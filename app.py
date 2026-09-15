@@ -12,6 +12,7 @@ from src.card_parser import parse_card_features
 
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 try:
     from streamlit_autorefresh import (
@@ -205,6 +206,37 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Streamlit can restore an open sidebar from the browser even when the app asks
+# for a collapsed initial state. On narrow screens that hides the entire main
+# app. Normalize that restored state once per new app session; later user opens
+# are left alone.
+if not st.session_state.get("_mobile_sidebar_normalized_v0147", False):
+    components.html(
+        """
+        <script>
+        (() => {
+          let attempts = 0;
+          const closeRestoredMobileSidebar = () => {
+            attempts += 1;
+            const parentDoc = window.parent.document;
+            if (window.parent.innerWidth > 768) return;
+            const sidebar = parentDoc.querySelector('[data-testid="stSidebar"]');
+            const closeButton = sidebar && sidebar.querySelector('button[data-testid="stBaseButton-headerNoPadding"]');
+            if (closeButton && closeButton.textContent.includes('keyboard_double_arrow_left')) {
+              closeButton.click();
+              return;
+            }
+            if (attempts < 20) window.setTimeout(closeRestoredMobileSidebar, 100);
+          };
+          closeRestoredMobileSidebar();
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+    st.session_state["_mobile_sidebar_normalized_v0147"] = True
+
 # Futuristic trading-terminal skin: visual only, no decision semantics.
 st.markdown("""
 <style>
@@ -270,7 +302,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.6"
+APP_VERSION = "v0.14.7"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
