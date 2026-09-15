@@ -202,6 +202,7 @@ st.set_page_config(
     page_title="FlipFynd",
     page_icon="🃏",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 # Futuristic trading-terminal skin: visual only, no decision semantics.
@@ -269,7 +270,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.3"
+APP_VERSION = "v0.14.4"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
