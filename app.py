@@ -305,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.21"
+APP_VERSION = "v0.14.22"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6917,6 +6917,11 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                 "premium_parallel": "Premium parallel",
                 "error_variation": "Variation/feltryck",
                 "short_print": "Short print",
+                "named_chase_insert": "Checklistad chase-insert",
+                "elite_parallel": "Extrem parallel",
+                "premium_autograph_structure": "Premiumautografstruktur",
+                "premium_relic_structure": "Premium patch/relic-struktur",
+                "premium_issue_variant": "Premiumutgåva/variant",
             }
             _signals = [
                 _signal_labels.get(signal, str(signal))

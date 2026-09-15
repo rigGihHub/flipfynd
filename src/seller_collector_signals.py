@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from src.card_parser import has_relic_material_evidence
+from src.sports_card_signal_knowledge import match_sports_card_signals
 
 _FALSE_AUTO = re.compile(r"\b(signature\s*style|silver\s*script|facsimile|facsimile\s*signature|printed\s*signature|pre[- ]?printed\s*signature)\b", re.I)
 
@@ -43,6 +44,7 @@ def collector_signals(item: dict) -> dict:
     title = str(item.get("titel") or item.get("title") or "").strip()
     text = title.casefold()
     signals: list[tuple[str, int]] = []
+    knowledge_matches = match_sports_card_signals(title)
 
     def add(name: str, weight: int, condition: bool):
         if condition:
@@ -65,6 +67,8 @@ def collector_signals(item: dict) -> dict:
     add("photo_variation", 14, bool(re.search(r"\b(?:photo|image|bild)\s+variation\b", text)))
     add("acetate", 10, bool(re.search(r"\bacetate\b", text)))
     add("die_cut", 8, bool(re.search(r"\bdie[- ]?cut\b", text)))
+    for match in knowledge_matches:
+        add(match["name"], int(match["weight"]), True)
 
     penalty = 0
     if re.search(r"\b(?:base\s+card|basekort|common|bas\s*kort)\b", text):
@@ -77,4 +81,6 @@ def collector_signals(item: dict) -> dict:
         "signals": [name for name, _ in signals],
         "penalty": penalty,
         "title": title,
+        "knowledge_matches": knowledge_matches,
+        "verify_first": list(dict.fromkeys(match["verify"] for match in knowledge_matches)),
     }
