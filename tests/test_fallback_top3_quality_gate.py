@@ -58,3 +58,35 @@ def test_special_signal_survives_quality_gate_even_with_low_potential():
         require_verified_economic_edge=True,
     )
     assert [row["title"] for row in result["rows"]] == ["Low-score but misclassified oddity"]
+
+
+def test_dynamic_top_five_never_disappears_when_every_candidate_is_weak():
+    candidates = [
+        {
+            "titel": f"Ordinary card {idx}",
+            "lank": f"https://example.test/{idx}",
+            "beslut": "SKIP",
+            "deal_score": 10 + (idx % 20),
+            "ranking_confidence_score": 12,
+            "sold_comparable_count": 0,
+            "collector_worth_score": 10,
+            "card_hierarchy_score": 10,
+            "player_name": f"Player {idx}",
+        }
+        for idx in range(160)
+    ]
+
+    result = build_decision_tiers_compat(
+        build_decision_tiers,
+        candidates,
+        total_limit=5,
+        require_verified_economic_edge=True,
+    )
+
+    assert len(result["rows"]) == 5
+    assert all(row["decision"] == "UNDERSÖK" for row in result["rows"])
+    assert all(row["tier"] == "PROMISING" for row in result["rows"])
+    assert result["fallback_weak_fill_count"] == 5
+    # The decision builder hands its selected Top 5 to the compatibility gate;
+    # all five are restored because otherwise the visible list would be empty.
+    assert result["suppressed_weak_ordinary_count"] == 0

@@ -303,7 +303,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.12"
+APP_VERSION = "v0.14.13"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2692,6 +2692,9 @@ if st.session_state.get("results") is not None:
                                 st.link_button("Öppna annonsen ↗", rr['url'], key=f"research_open_{idx}")
             if decision_tiers.get("rows"):
                 st.markdown("### 🏆 Dynamisk topp 5 i den här sökningen")
+                verified_top_count = sum(1 for row in decision_tiers.get("rows") or [] if row.get("tier") == "VERIFIED")
+                review_top_count = len(decision_tiers.get("rows") or []) - verified_top_count
+                st.info(f"**{verified_top_count} verifierade fynd · {review_top_count} värda fortsatt kontroll**")
                 st.caption(
                     "FlipFynd skiljer nu på **fyndpotential** och **beslutssäkerhet**. "
                     "Listan uppdateras från hela den analyserade poolen och försöker visa olika spelare. "
@@ -3372,7 +3375,7 @@ if st.session_state.get("results") is not None:
                 d1, d2, d3 = st.columns(3)
                 d1.metric("KÖP", int(d.get("KÖP", 0)))
                 d2.metric("BEVAKA", int(d.get("BEVAKA", 0)))
-                d3.metric("SKIP", int(d.get("SKIP", 0)))
+                d3.metric("EJ KÖPKLARA", int(d.get("SKIP", 0)))
 
                 debug_state = st.session_state.get("debug") or {}
                 coverage_added = int(debug_state.get("coverage_diversified_added", 0) or 0)

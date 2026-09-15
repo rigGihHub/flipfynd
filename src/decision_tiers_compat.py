@@ -210,7 +210,12 @@ def _special_signal(source):
 
 
 def _postprocess_fallback_result(result, total_limit):
-    """Do not call ordinary low-potential cards 'best alternatives'."""
+    """Prefer meaningful candidates without ever emptying the fallback list.
+
+    Weak ordinary cards may be pushed below stronger candidates, but the
+    dynamic list is a relative Top N of the analysed pool.  Suppression must
+    therefore never turn a non-empty candidate pool into an empty result.
+    """
     if not isinstance(result, dict) or not result.get("fallback_investigate_mode"):
         return result
     out = dict(result)
@@ -255,10 +260,29 @@ def _postprocess_fallback_result(result, total_limit):
         ),
         reverse=True,
     )
-    out["rows"] = kept[: max(0, int(total_limit or 0))]
-    out["suppressed_weak_ordinary_count"] = len(suppressed)
-    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in suppressed[:10]]
-    if suppressed:
+    limit = max(0, int(total_limit or 0))
+    # Fill remaining places with the best of the weak pool. They stay clearly
+    # marked UNDERSÖK and never gain SOLD evidence, market value or BUY status.
+    suppressed.sort(
+        key=lambda r: (
+            _n(r.get("investigate_score"), 0),
+            _n(r.get("structural_merit"), 0),
+            _n(r.get("potential"), 0),
+            bool(r.get("research_ready")),
+            _n(r.get("certainty"), 0),
+        ),
+        reverse=True,
+    )
+    # Preserve the quality gate whenever at least one meaningful row survives.
+    # The recovery path exists specifically for the all-suppressed regression.
+    fill_count = min(limit, len(suppressed)) if not kept else 0
+    restored = suppressed[:fill_count]
+    still_suppressed = suppressed[fill_count:]
+    out["rows"] = (kept + restored)[:limit]
+    out["suppressed_weak_ordinary_count"] = len(still_suppressed)
+    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in still_suppressed[:10]]
+    out["fallback_weak_fill_count"] = len(restored)
+    if still_suppressed:
         note = str(out.get("note") or "").strip()
         out["note"] = (note + " Ordinära lågpotentialkort utan tydlig kortspecifik edge döljs från 'Bästa alternativen'.").strip()
     return out
