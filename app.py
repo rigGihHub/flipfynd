@@ -122,7 +122,7 @@ from src.fast_analysis_pool import select_fast_analysis_pool
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
-from src.seller_top5_controller import resolve_seller_top5
+from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
 from src.search_yield_learning import build_yield_report, route_budget_guidance
 from src.near_buy_guidance import build_near_buy_guidance
@@ -302,7 +302,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.8"
+APP_VERSION = "v0.14.9"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6538,6 +6538,27 @@ if "seller_top5_alias" not in st.session_state and _seller_qp_alias:
     st.session_state["seller_top5_alias"] = _seller_qp_alias
 if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
     st.session_state["seller_top5_profile_url"] = _seller_qp_profile
+
+
+def _clear_seller_top5_ui():
+    old_alias = str(st.session_state.get("seller_top5_alias") or "").strip()
+    old_profile = str(st.session_state.get("seller_top5_profile_url") or "").strip()
+    reset_seller_top5_search(
+        old_alias,
+        old_profile,
+        database_url=DATABASE_URL,
+        session=st.session_state,
+    )
+    for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url"):
+        st.session_state.pop(key, None)
+    try:
+        for key in ("seller", "seller_profile"):
+            if key in st.query_params:
+                del st.query_params[key]
+    except Exception:
+        pass
+
+
 with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
     st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
     seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
@@ -6701,6 +6722,15 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
                     pass
                 seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
                 raise
+
+    if seller_top5_alias or seller_top5_profile_url or _seller_previous_result:
+        st.button(
+            "Rensa säljsökningen",
+            key="seller_top5_clear",
+            use_container_width=True,
+            on_click=_clear_seller_top5_ui,
+            help="Tar bort säljarens resultat och fortsättningsläge. Den vanliga fyndsökningen påverkas inte.",
+        )
 
 
 

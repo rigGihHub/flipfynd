@@ -158,6 +158,20 @@ def _checkpoint_key(alias: str, profile_url: str) -> str:
     )
 
 
+def reset_seller_top5_search(seller: str, profile_url: str, *, database_url=None, session=None) -> str:
+    """Clear every continuation layer for one public seller search."""
+    profile_text = str(profile_url or "").strip()
+    parsed = parse_profile_url(profile_text) or {}
+    alias = str(seller or parsed.get("alias") or "").strip()
+    if not alias and parsed.get("seller_id"):
+        alias = f"Tradera #{parsed.get('seller_id')}"
+    key = _checkpoint_key(alias, profile_text)
+    if session is None:
+        session = _streamlit_session_state()
+    clear_checkpoint(key, session=session, database_url=database_url)
+    return key
+
+
 def _item_key(item: dict) -> str:
     return str(
         item.get("tradera_item_id")
