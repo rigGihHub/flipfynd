@@ -17,6 +17,14 @@ def _player(item):
     return str((item or {}).get("player_name") or "").strip()
 
 
+def _listing_url(item):
+    for key in ("lank", "url", "link", "href", "item_url", "tradera_url"):
+        value = str((item or {}).get(key) or "").strip()
+        if value.startswith(("http://", "https://")):
+            return value
+    return None
+
+
 def build_market_gap_map(items):
     """Group analyzed active candidates by structured player name."""
     groups=defaultdict(list)
@@ -39,6 +47,17 @@ def build_market_gap_map(items):
         )
         sold=max((int(_n(i.get("sold_comparable_count"))) for i in group), default=0)
         safe_value=any(i.get("valuation_display_safe") is True for i in group)
+        listings=[]
+        seen_urls=set()
+        for item in group:
+            url=_listing_url(item)
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            listings.append({
+                "title": item.get("titel") or item.get("title") or player,
+                "url": url,
+            })
 
         # "Thin" is deliberately descriptive and pool-relative: 1-2 active
         # candidates for this structured player in the current analyzed pool.
@@ -71,6 +90,7 @@ def build_market_gap_map(items):
             "candidate":candidate,
             "status":status,
             "blockers":blockers,
+            "listings":listings,
             "can_create_buy_decision":False,
             "can_create_market_value":False,
             "can_create_max_price":False,

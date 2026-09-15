@@ -19,7 +19,7 @@ def _listing_url(item: dict) -> str | None:
     Bad Listing Hunter is specifically a manual-review queue, so dropping the
     source link makes the queue much less useful.
     """
-    for key in ("url", "link", "href", "item_url", "tradera_url"):
+    for key in ("lank", "url", "link", "href", "item_url", "tradera_url"):
         value = str(item.get(key) or "").strip()
         if value.startswith(("http://", "https://")):
             return value

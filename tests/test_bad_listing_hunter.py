@@ -65,3 +65,13 @@ def test_queue_preserves_link_field_for_manual_review():
         },
     ])
     assert q["rows"][0]["url"] == "https://www.tradera.com/item/123/456"
+
+
+def test_queue_preserves_swedish_lank_field_for_manual_review():
+    q=build_bad_listing_queue([{
+        "titel":"Svag annons",
+        "lank":"https://www.tradera.com/item/123/789",
+        "listing_quality_score":40,
+        "listing_quality_warnings":["kortnummer saknas","set/program saknas eller är otydligt"],
+    }])
+    assert q["rows"][0]["url"] == "https://www.tradera.com/item/123/789"

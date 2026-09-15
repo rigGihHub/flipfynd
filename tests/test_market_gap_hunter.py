@@ -33,3 +33,15 @@ def test_queue_only_surfaces_candidates():
     ]
     q=build_market_gap_queue(items)
     assert [r["player_name"] for r in q["rows"]]==["A"]
+
+def test_market_gap_preserves_listing_links_for_manual_review():
+    q=build_market_gap_queue([{
+        "player_name":"A",
+        "player_card_demand_score":20,
+        "titel":"A rookie",
+        "lank":"https://www.tradera.com/item/123/456",
+    }])
+    assert q["rows"][0]["listings"] == [{
+        "title":"A rookie",
+        "url":"https://www.tradera.com/item/123/456",
+    }]

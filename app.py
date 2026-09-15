@@ -119,6 +119,7 @@ from src.tradera_seller_inventory import discover_active_seller_inventory
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.fast_analysis_pool import select_fast_analysis_pool
+from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.seller_live_full_analysis import full_analyze_live_seller_item
@@ -304,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.17"
+APP_VERSION = "v0.14.18"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1268,9 +1269,15 @@ def analyze_data(
 
     debug["cheap_filtered_candidates"] = len(fast_pool_source)
     debug["filter_seconds"] = round(time.perf_counter() - analysis_started, 3)
+    integrity_eligible = [
+        item for item in fast_pool_source
+        if assess_listing_integrity(item)["eligible_physical_single_card"]
+    ]
+    debug["integrity_eligible_candidates"] = len(integrity_eligible)
+    debug["integrity_rejected_candidates"] = len(fast_pool_source) - len(integrity_eligible)
     fast_pool_budget = fast_analysis_budget(len(fast_pool_source), context="ordinary")
     fast_pool_source = select_fast_analysis_pool(
-        fast_pool_source,
+        integrity_eligible,
         cap=fast_pool_budget,
         exploration_fraction=0.25,
     )
@@ -1468,6 +1475,7 @@ def analyze_data(
     ] = len(
         results
     )
+    debug["deep_analysed_candidates"] = len(full_by_index)
     debug["full_analysis_seconds"] = round(time.perf_counter() - full_started, 3)
     debug["total_analysis_seconds"] = round(time.perf_counter() - analysis_started, 3)
 
@@ -2033,7 +2041,9 @@ def render_search_pipeline(debug, sport_label, max_price, search):
         ("Matchar sökning", int(debug.get("after_search", 0) or 0)),
         ("Rätt annonsform", int(debug.get("after_sale_type", 0) or 0)),
         ("Efter specialfilter", int(debug.get("after_feature_filters", 0) or 0)),
-        ("Analyserade kandidater", int(debug.get("final_results", 0) or 0)),
+        ("Fysiska kortannonser", int(debug.get("integrity_eligible_candidates", debug.get("after_feature_filters", 0)) or 0)),
+        ("Snabbanalyserade", int(debug.get("fast_pool_selected", debug.get("final_results", 0)) or 0)),
+        ("Djupanalyserade", int(debug.get("deep_analysed_candidates", debug.get("full_analysis", 0)) or 0)),
     ]
     st.markdown("### 🔎 Sållning – var försvinner annonserna?")
     st.caption("Varje steg visar hur många annonser som återstår. Då ser du om problemet är data, budget, sökning eller ett filter.")
@@ -3238,6 +3248,8 @@ if st.session_state.get("results") is not None:
                             st.caption("Researchsignal: tunt internt utbud, men marknadsunderlaget räcker inte för slutsats.")
                         if grow.get("blockers"):
                             st.caption("Kontrollera först: " + " · ".join(grow["blockers"]))
+                        for listing in grow.get("listings") or []:
+                            st.markdown(f"[Öppna annonsen – {listing['title']}]({listing['url']})")
                         creds = _resolve_tradera_api_credentials()
                         if creds and st.button(
                             f"Kontrollera aktivt Tradera-utbud – {grow['player_name']}",
@@ -3448,6 +3460,28 @@ if st.session_state.get("results") is not None:
                         "Annonser når analysen, men inget klarar den verifierade KÖP-gränsen. "
                         "Det hindrar inte FlipFynd från att visa de fem bästa UNDERSÖK-kandidaterna ovan."
                     )
+
+            hidden_analysed = [
+                item for item in (st.session_state.get("results") or [])
+                if item not in visible
+            ]
+            if hidden_analysed:
+                with st.expander(f"Visa fler analyserade kort ({len(hidden_analysed)})", expanded=False):
+                    st.caption(
+                        "Dessa kort har analyserats men ligger utanför huvudlistan, oftast eftersom de är SKIP "
+                        "eller har lägre analyssäkerhet. De är inte fynd bara för att de visas här."
+                    )
+                    for extra_idx, candidate in enumerate(hidden_analysed[:50], start=1):
+                        title = candidate.get("titel") or candidate.get("title") or "Okänd annons"
+                        decision = candidate.get("beslut") or candidate.get("decision") or "Ej bedömd"
+                        st.write(f"**#{extra_idx} · {title}** · {decision}")
+                        url = candidate.get("lank") or candidate.get("url") or candidate.get("link")
+                        if url:
+                            st.markdown(f"[Öppna annonsen på Tradera ↗]({url})")
+                        reason = candidate.get("reason") or candidate.get("decision_reason")
+                        if reason:
+                            st.caption(str(reason))
+                        st.divider()
 
         st.caption("Behöver du alla interna mått? Slå på ‘Visa fördjupad analys’ ovan.")
         st.stop()
