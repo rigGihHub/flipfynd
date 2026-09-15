@@ -23,3 +23,19 @@ def test_nonphysical_rows_do_not_consume_analysis_budget():
         {"titel": "Gretzky Young Guns rookie", "lank": "real"},
     ]
     assert [x["lank"] for x in select_fast_analysis_pool(rows, cap=10)] == ["real"]
+
+
+def test_equal_priority_inventory_cannot_starve_late_pages():
+    rows = [{"titel": f"Parallel card #{i}", "pris": 100, "lank": f"u{i}"} for i in range(2500)]
+    selected = select_fast_analysis_pool(rows, cap=300, exploration_fraction=0.25)
+    positions = {int(row["lank"][1:]) for row in selected}
+    assert len(selected) == 300
+    assert any(position >= 2000 for position in positions)
+    assert any(1000 <= position < 1500 for position in positions)
+
+
+def test_each_late_segment_contributes_its_strongest_local_candidate():
+    rows = [{"titel": f"Ordinary listing {i}", "pris": 100, "lank": f"u{i}"} for i in range(1000)]
+    rows[950] = {"titel": "Late page rookie patch", "pris": 100, "lank": "late-strong"}
+    selected = select_fast_analysis_pool(rows, cap=100, exploration_fraction=0.25)
+    assert any(row["lank"] == "late-strong" for row in selected)

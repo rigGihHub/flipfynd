@@ -37,7 +37,13 @@ def _priority(item):
 
 
 def select_fast_analysis_pool(items, *, cap=480, exploration_fraction=0.20):
-    """Use merit plus deterministic blind exploration for a bounded pool."""
+    """Use global merit plus position coverage and blind exploration.
+
+    Seller profiles are normally ordered by Tradera. A stable global sort lets
+    early listings win ties, so equally promising cards on late pages could be
+    starved. The bounded exploration budget therefore covers evenly spaced
+    inventory segments as well as deterministic blind samples.
+    """
     valid = [
         item for item in (items or [])
         if isinstance(item, dict)
@@ -48,9 +54,23 @@ def select_fast_analysis_pool(items, *, cap=480, exploration_fraction=0.20):
         return valid
     exploration_count = max(1, min(cap // 3, round(cap * float(exploration_fraction))))
     merit_count = cap - exploration_count
-    ranked = sorted(valid, key=_priority, reverse=True)
+    priorities = {id(item): _priority(item) for item in valid}
+    ranked = sorted(valid, key=lambda item: priorities[id(item)], reverse=True)
     selected = ranked[:merit_count]
     selected_ids = {id(x) for x in selected}
     remainder = [x for x in valid if id(x) not in selected_ids]
-    exploration = sorted(remainder, key=_stable_key)[:exploration_count]
-    return selected + exploration
+
+    coverage_count = min(len(remainder), max(1, round(exploration_count * 0.67)))
+    coverage = []
+    for segment_index in range(coverage_count):
+        start = segment_index * len(remainder) // coverage_count
+        end = (segment_index + 1) * len(remainder) // coverage_count
+        segment = remainder[start:end]
+        if segment:
+            coverage.append(max(segment, key=lambda item: (priorities[id(item)], _stable_key(item))))
+
+    coverage_ids = {id(x) for x in coverage}
+    blind_count = exploration_count - len(coverage)
+    blind_remainder = [x for x in remainder if id(x) not in coverage_ids]
+    blind = sorted(blind_remainder, key=_stable_key)[:blind_count]
+    return selected + coverage + blind
