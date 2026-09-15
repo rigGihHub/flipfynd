@@ -116,6 +116,7 @@ def _decision_readiness(results):
     already-computed fields from the analyzer and therefore cannot upgrade a card.
     """
     total = len(results)
+    research_identity = 0
     exact_identity = 0
     any_sold = 0
     valuation_safe = 0
@@ -123,6 +124,12 @@ def _decision_readiness(results):
     buy = 0
 
     for item in results:
+        if bool(
+            item.get("exact_identity_gate_supports_comp_research")
+            or item.get("exact_identity_gate_supports_exact_comp_search")
+            or item.get("exact_identity_gate_status") == "SÖKBAR_TITEL"
+        ):
+            research_identity += 1
         if bool(item.get("exact_identity_gate_supports_exact_comp_search")):
             exact_identity += 1
 
@@ -153,7 +160,8 @@ def _decision_readiness(results):
 
     return [
         row("analysed", "Analyserade", total),
-        row("exact_identity", "Sökbar exakt identitet", exact_identity),
+        row("research_identity", "Sökbar identitet för comp-research", research_identity),
+        row("exact_identity", "Beslutsstark exakt identitet", exact_identity),
         row("sold", "Minst 1 användbar SOLD", any_sold),
         row("valuation", "Säker värdering", valuation_safe),
         row("confidence", "Analyssäkerhet ≥28 %", confidence_ready),

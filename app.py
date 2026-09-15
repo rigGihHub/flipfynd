@@ -302,7 +302,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.10"
+APP_VERSION = "v0.14.11"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2522,10 +2522,11 @@ if st.session_state.get("results") is not None:
                 st.info("**KÖP INGET JUST NU.** Inget kort har tillräckligt starkt underlag för ett säkert förstaval.")
                 st.caption(simple_buy.get("note") or "")
 
-            # Evidence-aware Top 3: separate opportunity potential from certainty.
-            decision_tiers = build_decision_tiers_compat(build_decision_tiers, st.session_state.get("results") or [], total_limit=3, require_verified_economic_edge=True)
+            # Evidence-aware dynamic Top 5: always surface the strongest review
+            # candidates, while keeping the stricter BUY gate completely separate.
+            decision_tiers = build_decision_tiers_compat(build_decision_tiers, st.session_state.get("results") or [], total_limit=5, require_verified_economic_edge=True)
             if not decision_tiers.get("rows"):
-                st.info("**Inga verifierade fynd för Top 3 just nu.** Det betyder inte att 12 inlästa sidor saknar fynd – det betyder att inget kort ännu har tillräckligt marknadsunderlag för att kallas verifierat fynd.")
+                st.info("**Inga verifierade fynd eller tydliga kontrollkandidater just nu.** Det betyder inte att de inlästa sidorna saknar fynd – det betyder att inget analyserat kort ännu har tillräckligt underlag för att visas ansvarsfullt.")
                 coverage = evidence_coverage(st.session_state.get("results") or [])
                 if coverage.get("total"):
                     st.caption(
@@ -2687,10 +2688,11 @@ if st.session_state.get("results") is not None:
                             if rr.get('url'):
                                 st.link_button("Öppna annonsen ↗", rr['url'], key=f"research_open_{idx}")
             if decision_tiers.get("rows"):
-                st.markdown("### 🏆 Bästa alternativen i den här sökningen")
+                st.markdown("### 🏆 Dynamisk topp 5 i den här sökningen")
                 st.caption(
                     "FlipFynd skiljer nu på **fyndpotential** och **beslutssäkerhet**. "
-                    "Topplistan försöker visa olika spelare när jämförbara alternativ finns, så en enda superstjärna inte tar plats 1–3 bara genom stark spelarefterfrågan."
+                    "Listan uppdateras från hela den analyserade poolen och försöker visa olika spelare. "
+                    "UNDERSÖK är en kontrollprioritering – bara verifierade KÖP är en köprekommendation."
                 )
                 tier_labels = {
                     "VERIFIED": "✅ Bästa verifierade fynd",
@@ -3354,10 +3356,11 @@ if st.session_state.get("results") is not None:
                             st.markdown(f"[Öppna annonsen]({mrow['url']})")
                         st.divider()
 
-            with st.expander("🔎 Varför hittar FlipFynd så få kort?", expanded=no_buy):
+            with st.expander("🔎 Varför blir inget ett verifierat KÖP?", expanded=False):
                 st.caption(
                     "Här ser du exakt hur många annonser som finns kvar efter varje steg. "
-                    "Detta är diagnostik – inga köpbeslut eller gränser ändras."
+                    "Detta är diagnostik för den hårda KÖP-gränsen. Den dynamiska topp 5-listan ovan "
+                    "visar fortfarande de bästa kontrollkandidaterna."
                 )
                 stages = funnel.get("stages") or []
                 st.write(" → ".join(f"**{row['count']}** {row['label'].lower()}" for row in stages))
@@ -3428,8 +3431,8 @@ if st.session_state.get("results") is not None:
                     )
                 elif no_buy and stages and stages[-1]["count"] > 0:
                     st.info(
-                        "Annonser når analysen, men inget klarar KÖP. Då är problemet inte att FlipFynd "
-                        "saknar annonser, utan att underlaget eller ekonomin inte räcker för ett köpbeslut."
+                        "Annonser når analysen, men inget klarar den verifierade KÖP-gränsen. "
+                        "Det hindrar inte FlipFynd från att visa de fem bästa UNDERSÖK-kandidaterna ovan."
                     )
 
         st.caption("Behöver du alla interna mått? Slå på ‘Visa fördjupad analys’ ovan.")
