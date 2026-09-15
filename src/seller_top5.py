@@ -18,6 +18,7 @@ from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
 from src.seller_card_merit import assess_seller_card_merit
 from src.fast_analysis_pool import select_fast_analysis_pool
+from src.deal_readiness import assess_deal_readiness
 
 
 def _emit(callback, **payload):
@@ -191,8 +192,11 @@ def _seller_presentation_label(row: dict) -> dict:
 def seller_result_tier(row: dict) -> str:
     """Separate actual finds from research candidates and weak filler."""
     decision = str(row.get("decision") or "SKIP").upper()
-    if decision.startswith("KÖP"):
+    readiness = assess_deal_readiness(row)
+    if decision.startswith("KÖP") and readiness["ready_for_find"]:
         return "FIND"
+    if decision.startswith("KÖP"):
+        return "RESEARCH"
     merit = assess_seller_card_merit(row)
     if merit["eligible"] and (
         decision.startswith("UNDERSÖK")
@@ -364,6 +368,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["sport"] = item_sport
             row["analysis_level"] = "full"
             row["seller_card_merit"] = assess_seller_card_merit(row)
+            row["deal_readiness"] = assess_deal_readiness(row)
             full_rows.append(_seller_presentation_label(row))
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 

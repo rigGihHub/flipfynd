@@ -267,7 +267,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.0"
+APP_VERSION = "v0.14.1"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6764,6 +6764,9 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
                     f"Exact SOLD {int(row.get('sold_comps') or 0)} · "
                     f"riskjusterad vinst {float(row.get('risk_adjusted_profit') or 0):.0f} kr"
                 )
+                _readiness = row.get("deal_readiness") or {}
+                if _readiness.get("blockers"):
+                    st.caption("Inte köpklar: " + " · ".join(_readiness["blockers"][:3]))
                 if row.get("analysis_level") == "quick_fallback":
                     st.caption("Preliminär analys – djupanalys återstår.")
             if row.get("url"):

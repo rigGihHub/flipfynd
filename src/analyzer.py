@@ -3,6 +3,7 @@ import statistics
 
 from src.card_parser import build_card_identity, detect_lot_info, parse_card_features
 from src.card_listing_integrity import assess_listing_integrity
+from src.deal_readiness import assess_deal_readiness
 from src.card_market_knowledge import detect_market_knowledge_signals
 from src.card_intelligence import build_card_intelligence
 from src.card_knowledge_library import explain_library_match
@@ -3348,6 +3349,18 @@ def analyze_core(
         sold_comparable_count=sold_comparable_count,
     )
     decision = decision_conflict_audit["audited_decision"]
+    deal_readiness = assess_deal_readiness({
+        **item,
+        "beslut": decision,
+        "exact_identity_gate_supports_exact_comp_search": exact_identity_gate.get("supports_exact_comp_search", False),
+        "exact_identity_gate_supports_dynamic_max_bid": exact_identity_gate.get("supports_dynamic_max_bid", False),
+        "sold_comparable_count": sold_comparable_count,
+        "valuation_confidence_score": valuation_confidence_score,
+        "risk_score": risk_analysis["score"],
+    })
+    if decision in {"KÖP", "KÖP (starkt fynd)"} and not deal_readiness["ready_for_find"]:
+        decision = "KANSKE"
+        risks.append("köpsignalen stoppades av slutlig evidenskontroll")
     if decision != pre_conflict_audit_decision:
         deal_score = compute_deal_score_100(
             profits=profits,
@@ -3729,6 +3742,9 @@ def analyze_core(
         "deal_confidence_strengths": deal_confidence["strengths"],
         "deal_confidence_weaknesses": deal_confidence["weaknesses"],
         "deal_confidence_components": deal_confidence["components"],
+        "deal_readiness_status": deal_readiness["status"],
+        "deal_readiness_ready": deal_readiness["ready_for_find"],
+        "deal_readiness_blockers": deal_readiness["blockers"],
         "comp_confidence": comp_confidence,
         "comp_valuation_basis": comp_valuation_basis,
         "valuation_confidence_score": valuation_confidence_score,
