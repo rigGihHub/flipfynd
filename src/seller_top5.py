@@ -22,6 +22,9 @@ from src.analysis_budget import fast_analysis_budget
 from src.deal_readiness import assess_deal_readiness
 
 
+HIDDEN_FIND_EXPLORATION_SLOTS = 4
+
+
 def _emit(callback, **payload):
     if not callable(callback):
         return
@@ -317,6 +320,58 @@ def _fallback_row(qrow: dict, alias: str) -> dict:
     }
 
 
+def _select_hidden_find_exploration(rows: list[dict], *, exclude_keys=None, slots: int = 4) -> list[dict]:
+    """Reserve a few deep-analysis slots for weakly described listings.
+
+    These rows cannot earn merit, value or BUY from being selected. The route
+    only prevents a generic/misspelled bargain from being starved before the
+    ordinary full analyser gets a chance to inspect it.
+    """
+    exclude_keys = set(exclude_keys or set())
+    candidates = []
+    for position, row in enumerate(rows or []):
+        key = _identity_key(row.get("source_item") or row)
+        if not key or key in exclude_keys or assess_seller_card_merit(row)["eligible"]:
+            continue
+        source = row.get("source_item") or row
+        if not assess_seller_card_merit(row)["integrity"]["eligible_physical_single_card"]:
+            continue
+        if _explicit_condition_risk(row):
+            continue
+        title = str(source.get("titel") or source.get("title") or row.get("title") or "").strip()
+        warnings = list(source.get("listing_quality_warnings") or [])
+        blockers = list(source.get("listing_quality_blockers") or [])
+        quality = source.get("listing_quality_score")
+        try:
+            quality = float(quality) if quality is not None else None
+        except (TypeError, ValueError):
+            quality = None
+        underdescribed = bool(warnings or blockers or (quality is not None and quality < 55) or len(title) < 36)
+        if not underdescribed:
+            continue
+        candidates.append((
+            len(warnings) + len(blockers) + (2 if quality is not None and quality < 55 else 0) + (1 if len(title) < 36 else 0),
+            -_num(row.get("price"), 10**12),
+            position,
+            row,
+        ))
+
+    candidates.sort(key=lambda value: (value[0], value[1], value[2]), reverse=True)
+    selected = []
+    seen_opportunities = set()
+    for _quality_clues, _price, _position, raw in candidates:
+        marked = dict(raw)
+        marked["seller_deep_route"] = "HIDDEN_FIND_EXPLORATION"
+        opportunity = _card_opportunity_key(marked)
+        if opportunity in seen_opportunities:
+            continue
+        selected.append(marked)
+        seen_opportunities.add(opportunity)
+        if len(selected) >= max(0, int(slots or 0)):
+            break
+    return selected
+
+
 def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyze_fn: Callable,
                       sport: str = "all", quick_limit: int = 60, full_limit: int = 10,
                       progress_callback=None) -> dict:
@@ -351,15 +406,24 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         quick_limit=quick_limit, progress_callback=progress_callback,
     )
 
+    all_quick_rows = list(quick.get("rows") or [])
     qualified_quick_rows = [
         row for row in (quick.get("rows") or [])
         if assess_seller_card_merit(row)["eligible"]
     ]
-    candidates = select_dynamic_seller_deep_rows(
+    merit_candidates = select_dynamic_seller_deep_rows(
         qualified_quick_rows,
         base_limit=max(int(full_limit or 8), 8),
         max_cap=20,
     )
+    merit_keys = {_identity_key(row.get("source_item") or row) for row in merit_candidates}
+    exploration_candidates = _select_hidden_find_exploration(
+        all_quick_rows,
+        exclude_keys=merit_keys,
+        slots=HIDDEN_FIND_EXPLORATION_SLOTS,
+    )
+    merit_keep = max(0, 20 - len(exploration_candidates))
+    candidates = merit_candidates[:merit_keep] + exploration_candidates
     candidate_limit = len(candidates)
     full_rows = []
     failed = 0
@@ -386,13 +450,15 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["seller"] = alias
             row["sport"] = item_sport
             row["analysis_level"] = "full"
+            row["seller_deep_route"] = qrow.get("seller_deep_route") or "MERIT"
             row["seller_card_merit"] = assess_seller_card_merit(row)
             row["deal_readiness"] = assess_deal_readiness(row)
             full_rows.append(_seller_presentation_label(row))
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
     full_rows.sort(key=_seller_opportunity_rank_key, reverse=True)
-    selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(full_rows, 5)
+    presentable_full_rows = [row for row in full_rows if seller_result_tier(row) != "WEAK"]
+    selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(presentable_full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     selected_opportunities = {_card_opportunity_key(row) for row in selected}
     for qrow in qualified_quick_rows:
@@ -423,6 +489,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "quick_batches": int(quick.get("batch_count") or 0),
         "coverage_complete": bool(quick.get("coverage_complete")),
         "full_candidate_limit": candidate_limit,
+        "hidden_find_exploration_count": len(exploration_candidates),
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
         "seller_analysis_contract": "v3-ordinary-evidence-opportunity-overlay",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",

@@ -305,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.20"
+APP_VERSION = "v0.14.21"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6956,8 +6956,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                 _readiness = row.get("deal_readiness") or {}
                 if _readiness.get("blockers"):
                     st.caption("Inte köpklar: " + " · ".join(_readiness["blockers"][:3]))
-                if row.get("analysis_level") == "quick_fallback":
-                    st.caption("Preliminär analys – djupanalys återstår.")
+            if row.get("analysis_level") == "quick_fallback":
+                st.caption("Preliminär analys – djupanalys återstår.")
+            elif row.get("seller_deep_route") == "HIDDEN_FIND_EXPLORATION":
+                st.caption("Dolt fynd-urval: annonsen djupanalyserades trots svag rubrik. Detta är inte i sig en köpsignal.")
             if row.get("url"):
                 st.link_button("Öppna annonsen ↗", row.get("url"), use_container_width=True)
             st.divider()
