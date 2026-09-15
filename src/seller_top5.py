@@ -358,7 +358,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     candidates = select_dynamic_seller_deep_rows(
         qualified_quick_rows,
         base_limit=max(int(full_limit or 8), 8),
-        max_cap=15,
+        max_cap=20,
     )
     candidate_limit = len(candidates)
     full_rows = []

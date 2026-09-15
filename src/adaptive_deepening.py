@@ -20,7 +20,7 @@ def dynamic_deep_analysis_cap(candidates, base_limit=12, floor=48, max_cap=96):
     return min(total, max(int(base_limit or 1), min(int(max_cap or target), target)))
 
 
-def select_dynamic_seller_deep_rows(rows, base_limit=8, max_cap=15):
+def select_dynamic_seller_deep_rows(rows, base_limit=8, max_cap=20):
     """Build a small adaptive pool for a final Top 5.
 
     The quick pass still scans the complete seller inventory. Full analysis is

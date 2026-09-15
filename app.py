@@ -305,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.19"
+APP_VERSION = "v0.14.20"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",

@@ -24,7 +24,8 @@ def test_seller_deep_pool_adds_credible_late_rows_but_stops_at_cap():
     for i in range(20, 40):
         rows[i]["collector_signal_score"] = 18
     selected = select_dynamic_seller_deep_rows(rows)
-    assert len(selected) == 15
+    assert len(selected) == 20
     assert rows[20] in selected
     assert rows[26] in selected
-    assert rows[27] not in selected
+    assert rows[31] in selected
+    assert rows[32] not in selected
