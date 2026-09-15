@@ -14,8 +14,20 @@ _FALSE_AUTO = re.compile(r"\b(signature\s*style|silver\s*script|facsimile|facsim
 def _has_serial_numbering(text: str) -> bool:
     if "numbered" in text or "numrerad" in text:
         return True
+    # Remove explicit seasons before looking for print-run fractions. Without
+    # this, e.g. 2024/25 was interpreted as a card numbered to /25.
+    serial_text = re.sub(
+        r"\b(?:19|20)\d{2}\s*[-/]\s*(?:(?:19|20)?\d{2})\b",
+        " ",
+        text,
+    )
+    serial_text = re.sub(
+        r"(?<!\d)(\d{2})\s*[-/]\s*(\d{2})(?!\d)",
+        lambda match: " " if (int(match.group(2)) - int(match.group(1))) % 100 == 1 else match.group(0),
+        serial_text,
+    )
     pattern = re.compile(r"(?<![#\d])(\d{1,4})\s*/\s*(5|10|15|20|25|49|50|75|99|100|199|299|499)\b")
-    for match in pattern.finditer(text):
+    for match in pattern.finditer(serial_text):
         numerator, denominator = int(match.group(1)), int(match.group(2))
         # 2024/2025 and 24/25 are seasons, not print runs. A leading # also
         # denotes a checklist card number and is excluded by the regex.
