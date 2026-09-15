@@ -305,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.18"
+APP_VERSION = "v0.14.19"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6610,7 +6610,11 @@ def _clear_seller_top5_ui():
         pass
 
 
-with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
+_seller_existing_result = st.session_state.get("seller_top5_result") or {}
+_seller_existing_status = str(_seller_existing_result.get("status") or "")
+_seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
+
+with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search_needs_attention):
     st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
     seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
     seller_top5_profile_url = st.text_input(
@@ -6635,7 +6639,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
         if "/profile/items/" in _profile_clean and _profile_clean.rsplit("/", 1)[-1].isdigit():
             _profile_base = _profile_clean + "/" + _profile_alias.replace(" ", "%20")
             seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
-    _seller_previous_result = st.session_state.get("seller_top5_result") or {}
+    _seller_previous_result = _seller_existing_result
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
     _seller_button_label = "Fortsätt söka" if _seller_continue_inventory else "🔎 Hitta säljarens bästa kort"
     if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
@@ -6798,9 +6802,9 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
         else:
             _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
         if seller_top5_result.get("resume_required"):
-            st.caption(f"Sökningen pausades · {_inventory_line}.")
+            st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
         else:
-            st.caption(f"Sökning pågår · {_inventory_line}.")
+            st.info(f"Delstopp efter tre profilsidor · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
     if seller_top5_result and not (seller_top5_result.get("rows") or []):
