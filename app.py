@@ -267,7 +267,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.1"
+APP_VERSION = "v0.14.2"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -3907,7 +3907,7 @@ if st.session_state.get("results") is not None:
         with st.expander(f"👁️ Visual Edge ({len(visual_candidates)})", expanded=False):
             st.caption(
                 "Här prioriteras annonser där bilderna kan vara extra viktiga för att verifiera exakt kort. "
-                "Bildgranskaren analyserar nu upp till fyra annonsfoton tillsammans och använder fram-/baksida och närbilder för säkrare kortidentitet. "
+                "Bildgranskaren analyserar nu upp till åtta annonsfoton tillsammans, redovisar varje bild och använder fram-/baksida, närbilder och slab-etikett för säkrare kortidentitet. "
                 "Den rapporterar bara visuella hypoteser; de påverkar aldrig värdering eller maxbud automatiskt."
             )
             for candidate in visual_candidates[:8]:
@@ -3941,6 +3941,7 @@ if st.session_state.get("results") is not None:
                             comp = detective.get("comparison", {})
                             findings = detective.get("findings", {})
                             identity = detective.get("identity", comp.get("identity", {}))
+                            purchase_safety = detective.get("purchase_safety") or {}
                             st.markdown(
                                 f"**Visual Card Detective:** {comp.get('status', 'Granskad')} · "
                                 f"säkerhet {comp.get('confidence', 0):.0f}/100 · "
@@ -3952,6 +3953,23 @@ if st.session_state.get("results") is not None:
                                 f"fram: {findings.get('front_visible', 'unknown')} · "
                                 f"baksida: {findings.get('back_visible', 'unknown')}"
                             )
+                            if purchase_safety:
+                                if purchase_safety.get("safe_for_purchase_review"):
+                                    st.success(purchase_safety.get("status"))
+                                else:
+                                    st.error(purchase_safety.get("status"))
+                                for blocker in purchase_safety.get("blockers", [])[:4]:
+                                    st.caption("⛔ " + blocker)
+                                for warning in purchase_safety.get("warnings", [])[:3]:
+                                    st.caption("⚠️ " + warning)
+                            per_image = findings.get("per_image_observations") or []
+                            if per_image:
+                                with st.expander("Granskning bild för bild", expanded=False):
+                                    for image_row in per_image:
+                                        st.caption(
+                                            f"Bild {image_row.get('image_index')} · {image_row.get('view')} · "
+                                            f"{image_row.get('quality')} — {image_row.get('observation')}"
+                                        )
                             visual_bits = []
                             for label, key_name in [
                                 ("Spelare", "player_name"), ("Lag/klubb", "team_or_club"),

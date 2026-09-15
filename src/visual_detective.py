@@ -32,6 +32,9 @@ Arbeta som en erfaren samlarkortsgranskare:
    Markera bara sådant som syns; avgör inte att det är en värdefull variant.
 8. Skilj dokumenterbar variant från vanligt skick/produktionsfel. Slumpmässig print line, dålig centrering,
    repa, färgfläck eller annan skada är inte automatiskt en samlarvariant.
+9. Redovisa varje bild separat: fram/baksida/närbild/okänd, läsbarhet och om bilden tillför identitetsbevis.
+10. Läs om möjligt graderingsföretagets certifikatnummer, men gissa aldrig en oläslig siffra.
+11. Leta efter tydliga tecken på manipulerad slab, ometikettering, beskuren kant eller digitalt ändrad bild.
 
 Absoluta regler:
 - Gissa aldrig kortnummer, serienummer, parallel, rookie-status, autograf, patch/relic,
@@ -68,6 +71,9 @@ def response_schema() -> dict[str, Any]:
             "relic_or_patch_visible": {"type": "string", "enum": ["yes", "no", "unknown"]},
             "grading_company": nullable_string,
             "grade": nullable_string,
+            "slab_cert_number": nullable_string,
+            "manufacturer_logo": nullable_string,
+            "possible_tampering": {"type": "string", "enum": ["yes", "no", "unknown"]},
             "front_visible": {"type": "string", "enum": ["yes", "no", "unknown"]},
             "back_visible": {"type": "string", "enum": ["yes", "no", "unknown"]},
             "back_text_readable": {"type": "string", "enum": ["yes", "no", "unknown"]},
@@ -91,18 +97,35 @@ def response_schema() -> dict[str, Any]:
             "ordinary_damage_only": {"type": "boolean"},
             "oddity_observations": {"type": "array", "items": {"type": "string"}},
             "uncertainties": {"type": "array", "items": {"type": "string"}},
+            "per_image_observations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "image_index": {"type": "integer", "minimum": 1},
+                        "view": {"type": "string", "enum": ["front", "back", "closeup", "slab_label", "multiple_cards", "unknown"]},
+                        "quality": {"type": "string", "enum": ["poor", "fair", "good", "excellent", "unknown"]},
+                        "text_readable": {"type": "boolean"},
+                        "adds_identity_evidence": {"type": "boolean"},
+                        "observation": {"type": "string"},
+                    },
+                    "required": ["image_index", "view", "quality", "text_readable", "adds_identity_evidence", "observation"],
+                },
+            },
         },
         "required": [
             "player_name", "team_or_club", "set_or_product", "season_or_year", "card_number",
             "serial_numerator", "serial_denominator", "parallel_or_variant",
             "rookie_marker_visible", "autograph_visible", "autograph_type", "relic_or_patch_visible",
-            "grading_company", "grade", "front_visible", "back_visible", "back_text_readable",
+            "grading_company", "grade", "slab_cert_number", "manufacturer_logo", "possible_tampering",
+            "front_visible", "back_visible", "back_text_readable",
             "foil_or_holo_visible", "photo_quality", "identity_confidence", "variant_confidence",
             "condition_confidence", "overall_confidence", "needs_back_image", "needs_closeup",
             "recommended_next_photo", "condition_clues", "visual_clues",
             "possible_missing_print", "possible_image_orientation_issue", "possible_censorship_or_edit",
             "possible_background_story", "possible_factory_or_promo_marker", "oddity_confidence",
-            "ordinary_damage_only", "oddity_observations", "uncertainties",
+            "ordinary_damage_only", "oddity_observations", "uncertainties", "per_image_observations",
         ],
     }
 
@@ -230,7 +253,7 @@ def compare_visual_to_listing(result: dict, title: str = "", raw_text: str = "")
     }
 
 
-def analyze_listing_images(item: dict, *, model: str = "gpt-5.4-mini", max_images: int = 4) -> dict:
+def analyze_listing_images(item: dict, *, model: str = "gpt-5.4-mini", max_images: int = 8) -> dict:
     """Call OpenAI vision only when explicitly requested by the user.
 
     Analyses multiple listing photos together so front/back and close-ups can
@@ -279,6 +302,8 @@ def analyze_listing_images(item: dict, *, model: str = "gpt-5.4-mini", max_image
             return {"success": False, "error": "Bildmodellen returnerade inget tolkningsbart svar."}
         parsed = json.loads(response.output_text)
         comparison = compare_visual_to_listing(parsed, item.get("titel", ""), item.get("raw_text", ""))
+        from src.visual_purchase_safety import assess_visual_purchase_safety
+        purchase_safety = assess_visual_purchase_safety(parsed, comparison)
         return {
             "success": True,
             "model": model,
@@ -286,6 +311,7 @@ def analyze_listing_images(item: dict, *, model: str = "gpt-5.4-mini", max_image
             "findings": parsed,
             "comparison": comparison,
             "identity": comparison.get("identity", visual_identity_completeness(parsed)),
+            "purchase_safety": purchase_safety,
         }
     except Exception as exc:
         return {"success": False, "error": f"Bildanalysen misslyckades: {exc}"}
