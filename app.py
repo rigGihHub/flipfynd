@@ -304,7 +304,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.15"
+APP_VERSION = "v0.14.16"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6902,6 +6902,18 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
                     f"Exact SOLD {int(row.get('sold_comps') or 0)} · "
                     f"riskjusterad vinst {float(row.get('risk_adjusted_profit') or 0):.0f} kr"
                 )
+                _ebay = row.get("ebay_active_context") or {}
+                if _ebay.get("ok"):
+                    _median = _ebay.get("median_usd")
+                    _range = ""
+                    if _ebay.get("min_usd") is not None and _ebay.get("max_usd") is not None:
+                        _range = f" · spann ${_ebay['min_usd']:.2f}–${_ebay['max_usd']:.2f}"
+                    st.caption(
+                        f"eBay aktiva annonser: {int(_ebay.get('listing_count') or 0)} träffar"
+                        + (f" · median ${_median:.2f}" if _median is not None else "")
+                        + _range
+                    )
+                    st.caption("Marknadskontext från aktiva annonser – inte SOLD och inte köpbevis.")
                 _readiness = row.get("deal_readiness") or {}
                 if _readiness.get("blockers"):
                     st.caption("Inte köpklar: " + " · ".join(_readiness["blockers"][:3]))

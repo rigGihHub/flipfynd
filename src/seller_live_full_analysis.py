@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Callable, Iterable
 
 from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
+from src.comp_source_intelligence import exact_identity_query
+from src.ebay_browse_context import configured_credentials, fetch_configured_ebay_active_context
 
 
 def _num(value, default=0.0):
@@ -87,6 +89,16 @@ def full_analyze_live_seller_item(
     if total_cost is None:
         total_cost = _price(merged)
 
+    ebay_context = None
+    try:
+        client_id, client_secret = configured_credentials()
+        identity = merged.get("exact_identity_gate_research_identity_fields") or {}
+        query = exact_identity_query(identity) or _title(merged)
+        if client_id and client_secret:
+            ebay_context = fetch_configured_ebay_active_context(query)
+    except Exception as exc:
+        ebay_context = {"ok": False, "status": "FETCH_FAILED", "error": str(exc)}
+
     if decision_upper.startswith("KÖP"):
         label = "KÖP-KANDIDAT"
         reason = "Fullanalysen gav köpsignal. Kontrollera annonsen och samfrakten innan du agerar."
@@ -123,6 +135,7 @@ def full_analyze_live_seller_item(
         "player_market_score": player_market_score,
         "risk_adjusted_profit": risk_adjusted_profit,
         "ranking_confidence": ranking_confidence,
+        "ebay_active_context": ebay_context,
         "seller_alias": seller_alias(merged),
         "seller_id": seller_id(merged),
         "seller_url": seller_url(merged),
