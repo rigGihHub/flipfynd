@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 
 from src.seller_collector_signals import collector_signals
+from src.card_listing_integrity import assess_listing_integrity
 
 _MASS_MARKET = re.compile(r"\b(match\s*attax|adrenalyn(?:\s*xl)?|sticker)\b", re.I)
 _FAUX_PREMIUM = re.compile(
@@ -17,6 +18,7 @@ _STRONG_SIGNALS = {
     "one_of_one", "serial_numbered", "autograph", "patch_relic",
     "case_hit_ssp", "premium_insert", "premium_parallel",
     "error_variation", "short_print",
+    "printing_plate", "buyback", "photo_variation",
 }
 
 
@@ -38,6 +40,7 @@ def assess_seller_card_merit(row: dict) -> dict:
     decision = str(row.get("decision") or row.get("beslut") or "SKIP").upper()
     mass_market_base = bool(_MASS_MARKET.search(title)) and not strong
     faux_premium = bool(_FAUX_PREMIUM.search(title))
+    integrity = assess_listing_integrity(title)
 
     score = _num(collector.get("score"))
     score += min(24, sold * 8)
@@ -47,9 +50,13 @@ def assess_seller_card_merit(row: dict) -> dict:
         score -= 30
     if faux_premium:
         score -= 20
+    if integrity["hard_exclusion_reasons"]:
+        score = 0
+    elif integrity["reprint_risk"] and not (identity_ok and sold >= 1):
+        score -= 25
     score = max(0.0, min(100.0, score))
 
-    eligible = (
+    eligible = integrity["eligible_physical_single_card"] and (
         decision.startswith(("KÖP", "UNDERSÖK"))
         or (bool(strong) and score >= 18 and not faux_premium)
         or (score >= 25 and not mass_market_base and not faux_premium)
@@ -60,6 +67,10 @@ def assess_seller_card_merit(row: dict) -> dict:
         reasons.append("massproducerad lågprisprodukt utan verifierad variant")
     if faux_premium:
         reasons.append("produktnamn/tryckt signatur är inte autograf")
+    if integrity["hard_exclusion_reasons"]:
+        reasons.append("inte ett verifierbart, fysiskt singelkort")
+    if integrity["reprint_risk"]:
+        reasons.append("nytryck/reproduktion kräver egna exakta jämförelseförsäljningar")
     if strong:
         reasons.append("kortspecifik signal: " + ", ".join(strong))
     if sold:
@@ -70,5 +81,6 @@ def assess_seller_card_merit(row: dict) -> dict:
         "mass_market_base": mass_market_base,
         "faux_premium": faux_premium,
         "strong_signals": strong,
+        "integrity": integrity,
         "reasons": reasons,
     }

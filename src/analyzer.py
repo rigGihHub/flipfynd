@@ -2,6 +2,7 @@ import re
 import statistics
 
 from src.card_parser import build_card_identity, detect_lot_info, parse_card_features
+from src.card_listing_integrity import assess_listing_integrity
 from src.card_market_knowledge import detect_market_knowledge_signals
 from src.card_intelligence import build_card_intelligence
 from src.card_knowledge_library import explain_library_match
@@ -3237,6 +3238,15 @@ def analyze_core(
         total_cost=analysis_total_cost,
     )
 
+    listing_integrity = assess_listing_integrity(title)
+    if listing_integrity["hard_exclusion_reasons"]:
+        decision = "SKIP"
+        risks.append("annonsen avser inte ett verifierbart, fysiskt singelkort")
+    elif listing_integrity["reprint_risk"]:
+        risks.append("nytryck/reproduktion – jämför bara med exakt samma version")
+        if decision in {"KÖP", "KÖP (starkt fynd)"}:
+            decision = "KANSKE"
+
     # The current valuation model estimates one card. A multi-card listing must
     # therefore never surface as a clear buy from a misleading lot price.
     if features.get("is_lot") and decision in {"KÖP", "KÖP (starkt fynd)"}:
@@ -3617,6 +3627,7 @@ def analyze_core(
         "value_source": value_source,
         "comparable_count": comparable_count,
         "risk_flags": risks,
+        "listing_integrity": listing_integrity,
         "risk_score": risk_analysis["score"],
         "risk_level": risk_analysis["level"],
     })

@@ -46,6 +46,11 @@ def collector_signals(item: dict) -> dict:
     add("premium_parallel", 11, bool(re.search(r"\b(?:parallel|refractor|prizm|x-fractor|atomic|gold\s+vinyl|cracked\s+ice|red\s+outburst|exclusives?)\b", text)))
     add("error_variation", 14, bool(re.search(r"\b(?:error|misprint|printing\s+error|variation|variant|wrong\s+back|blank\s+back)\b", text)))
     add("short_print", 10, bool(re.search(r"\bshort\s+print\b", text)))
+    add("printing_plate", 20, bool(re.search(r"\b(?:printing|tryck)\s+plate\b", text)))
+    add("buyback", 16, bool(re.search(r"\bbuyback\b", text)))
+    add("photo_variation", 14, bool(re.search(r"\b(?:photo|image|bild)\s+variation\b", text)))
+    add("acetate", 10, bool(re.search(r"\bacetate\b", text)))
+    add("die_cut", 8, bool(re.search(r"\bdie[- ]?cut\b", text)))
 
     penalty = 0
     if re.search(r"\b(?:base\s+card|basekort|common|bas\s*kort)\b", text):

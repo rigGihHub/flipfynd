@@ -24,6 +24,11 @@ _BLOCK_PATTERNS = (
     r"\bcoin\b",
     r"\bhacke\s+hackspett\b",
     r"\bkalle\s+anka\b",
+    r"\b(?:digital\s+card|digitalt\s+kort|e[- ]?card|nft)\b",
+    r"\b(?:custom(?:\s+made)?|fan[- ]?made|proxy\s+card|replica|counterfeit|kopiakort)\b",
+    r"\b(?:mystery\s+(?:pack|box)|repack(?:ed)?)\b",
+    r"\b(?:hobby|retail|blaster|booster|mega)\s+(?:box|pack)\b",
+    r"\b(?:sealed|ooppnad|oöppnad)\s+(?:box|pack|paket)\b",
 )
 _CARD_HINTS = (
     "card", "kort", "rookie", "rc", "upper deck", "topps", "panini", "o-pee-chee",
