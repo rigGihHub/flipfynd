@@ -95,7 +95,7 @@ def full_analyze_live_seller_item(
         identity = merged.get("exact_identity_gate_research_identity_fields") or {}
         query = exact_identity_query(identity) or _title(merged)
         if client_id and client_secret:
-            ebay_context = fetch_configured_ebay_active_context(query)
+            ebay_context = fetch_configured_ebay_active_context(query, identity)
     except Exception as exc:
         ebay_context = {"ok": False, "status": "FETCH_FAILED", "error": str(exc)}
 
