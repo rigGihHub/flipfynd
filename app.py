@@ -116,6 +116,7 @@ from src.tradera_api_search import run_search_plan, save_expansion_items
 from src.tradera_seller_inventory import discover_active_seller_inventory
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
+from src.fast_analysis_pool import select_fast_analysis_pool
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.seller_top5_controller import resolve_seller_top5
@@ -266,7 +267,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.13.9"
+APP_VERSION = "v0.14.0"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1103,6 +1104,7 @@ def analyze_data(
     }
 
     candidates = []
+    fast_pool_source = []
 
     data_version = (
         get_data_version()
@@ -1224,6 +1226,18 @@ def analyze_data(
 
         debug["after_feature_filters"] += 1
 
+        fast_pool_source.append(item)
+
+    debug["cheap_filtered_candidates"] = len(fast_pool_source)
+    fast_pool_source = select_fast_analysis_pool(
+        fast_pool_source,
+        cap=480,
+        exploration_fraction=0.20,
+    )
+    debug["fast_pool_selected"] = len(fast_pool_source)
+    debug["fast_pool_skipped"] = max(0, debug["cheap_filtered_candidates"] - len(fast_pool_source))
+
+    for item in fast_pool_source:
         fast = _cached_fast_analysis(
             _fast_signature(item, sport, strategy),
             item,
@@ -1265,7 +1279,7 @@ def analyze_data(
     )
 
     results = []
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=48, max_cap=72)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=18, max_cap=30)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     full_indices = diversify_full_analysis_indices(
         candidates,

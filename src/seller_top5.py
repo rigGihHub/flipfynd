@@ -17,6 +17,7 @@ from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
 from src.seller_card_merit import assess_seller_card_merit
+from src.fast_analysis_pool import select_fast_analysis_pool
 
 
 def _emit(callback, **payload):
@@ -211,8 +212,9 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
         if key:
             unique[key] = row
     unique_inventory = list(unique.values())
+    fast_pool = select_fast_analysis_pool(unique_inventory, cap=300, exploration_fraction=0.25)
     groups = {"hockey": [], "football": []}
-    for row in unique_inventory:
+    for row in fast_pool:
         groups[_supported_sport(row, fallback=sport)].append(row)
 
     all_rows: dict[str, dict] = {}
@@ -220,7 +222,7 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
     batches = 0
     domain_rejected = 0
     analysed_so_far = 0
-    total = len(unique_inventory)
+    total = len(fast_pool)
     _emit(progress_callback, phase="quick_start", done=0, total=total, percent=28)
 
     for group_sport in ("hockey", "football"):
@@ -260,7 +262,9 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
         "batch_count": batches,
         "domain_rejected_count": domain_rejected,
         "inventory_unique_count": len(unique_inventory),
-        "coverage_complete": len(rows) + failed + domain_rejected >= len(unique_inventory),
+        "cheap_coverage_complete": True,
+        "fast_pool_count": len(fast_pool),
+        "coverage_complete": len(rows) + failed + domain_rejected >= len(fast_pool),
         "sport_counts": {key: len(value) for key, value in groups.items()},
     }
 
