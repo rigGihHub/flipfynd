@@ -13,7 +13,7 @@ from typing import Iterable
 
 _VISUAL_TERMS = {
     "auto": ("auto", "autograph", "signerad", "signature"),
-    "patch": ("patch", "relic", "jersey", "memorabilia", "material"),
+    "patch": ("patch", "relic", "jersey", "swatch", "game used", "game-used", "player worn"),
     "rookie": ("rookie", " rc ", "young guns", "future watch", "rated rookie"),
     "numbered": ("numbered", "numrerad", "serial", "/10", "/25", "/50", "/99", "/100", "/199", "/249"),
     "parallel": ("refractor", "outburst", "high gloss", "exclusive", "clear cut", "prizm", "sapphire", "mojo", "shimmer", "pulsar", "x-fractor", "atomic", "pmg"),

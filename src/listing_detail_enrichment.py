@@ -12,7 +12,7 @@ INTEREST_PATTERNS = {
         r"\bprizm rookie\b", r"\btopps chrome rookie\b", r"\bmerlin rookie\b",
     ],
     "autograph": [r"\bauto(?:graph)?\b", r"\bsigned\b", r"\bsignature\b", r"\bautograf\b"],
-    "relic_patch": [r"\bpatch\b", r"\brelic\b", r"\bmemorabilia\b", r"\bjersey\b"],
+    "relic_patch": [r"\bpatch\b", r"\brelic\b", r"\bjersey\b", r"\bswatch\b", r"\bgame[- ]?used\b", r"\bplayer[- ]?worn\b"],
     "chase": [r"\bssp\b", r"\bcase hit\b", r"\bgenesis\b", r"\bcolor blast\b", r"\bwhite tiger\b"],
     "serial": [r"\b\d{1,4}\s*/\s*\d{1,4}\b", r"\b1\s*/\s*1\b", r"\bone of one\b"],
     "parallel": [r"\bparallel\b", r"\bhigh gloss\b", r"\bexclusives?\b", r"\boutburst\b", r"\bpmg\b"],

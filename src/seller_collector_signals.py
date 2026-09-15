@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+from src.card_parser import has_relic_material_evidence
+
 _FALSE_AUTO = re.compile(r"\b(signature\s*style|silver\s*script|facsimile|facsimile\s*signature|printed\s*signature|pre[- ]?printed\s*signature)\b", re.I)
 
 
@@ -51,7 +53,7 @@ def collector_signals(item: dict) -> dict:
 
     explicit_auto = bool(re.search(r"\b(?:autograph(?:ed)?|auto|on[- ]card\s+auto|hard[- ]signed)\b", text))
     add("autograph", 17, explicit_auto and not _FALSE_AUTO.search(text))
-    add("patch_relic", 15, bool(re.search(r"\b(?:patch|relic|memorabilia|jersey|game[- ]used|game[- ]worn)\b", text)))
+    add("patch_relic", 15, has_relic_material_evidence(text))
     add("case_hit_ssp", 17, bool(re.search(r"\b(?:ssp|super\s+short\s+print|case\s+hit)\b", text)))
     add("premium_insert", 15, bool(re.search(r"\b(?:downtown|kaboom|color\s+blast|colour\s+blast|stained\s+glass|blank\s+slate)\b", text)))
     add("rookie", 11, bool(re.search(r"\b(?:rookie|rc|young\s+guns?|future\s+watch)\b", text)))

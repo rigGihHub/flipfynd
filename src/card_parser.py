@@ -8,6 +8,8 @@ KNOWN_PLAYERS = [name.casefold() for name in get_all_player_names()]
 
 
 SET_PATTERNS = [
+    ("in the game between the pipes", "In The Game Between The Pipes"),
+    ("between the pipes", "In The Game Between The Pipes"),
     ("topps ucl super-stars", "Topps UCL Super-Stars"),
     ("topps ucl super stars", "Topps UCL Super-Stars"),
     ("ucl super-stars", "Topps UCL Super-Stars"),
@@ -74,6 +76,19 @@ SET_PATTERNS = [
     ("upper deck", "Upper Deck"),
     ("topps", "Topps"),
 ]
+
+
+def has_relic_material_evidence(text: str) -> bool:
+    """Require an explicit material claim; 'memorabilia' alone is ambiguous.
+
+    Several products print *Memorabilia* as branding or a set descriptor on
+    ordinary cards. It must not create a jersey/patch premium by itself.
+    """
+    norm = normalize_text(text)
+    return bool(re.search(
+        r"\b(?:patch|relic|jersey|swatch|material\s+piece|game[- ]?used|game[- ]?worn|player[- ]?worn|event[- ]?worn|match[- ]?worn)\b",
+        norm,
+    ))
 
 
 CARD_STOPWORDS = {
@@ -613,8 +628,9 @@ def parse_card_features(title: str) -> dict:
         norm,
     ))
     is_auto = bool(auto_positive and not auto_negative)
-    is_patch = "patch" in norm
-    is_jersey = "jersey" in norm or "memorabilia" in norm
+    relic_evidence = has_relic_material_evidence(norm)
+    is_patch = bool(re.search(r"\b(?:patch|relic)\b", norm))
+    is_jersey = relic_evidence
     is_game_worn = "game worn" in norm or "game-used" in norm or "game used" in norm
     is_graded = grade is not None or any(x in norm for x in ["psa", "bgs", "sgc"])
     lot_info = detect_lot_info(title)

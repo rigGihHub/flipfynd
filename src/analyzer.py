@@ -1,7 +1,7 @@
 import re
 import statistics
 
-from src.card_parser import build_card_identity, detect_lot_info, parse_card_features
+from src.card_parser import build_card_identity, detect_lot_info, has_relic_material_evidence, parse_card_features
 from src.card_listing_integrity import assess_listing_integrity
 from src.deal_readiness import assess_deal_readiness
 from src.card_market_knowledge import detect_market_knowledge_signals
@@ -310,16 +310,14 @@ def get_features(
         features.get(
             "is_patch"
         )
-        or "patch" in text
-        or "relic" in text
+        or bool(re.search(r"\b(?:patch|relic)\b", text))
     )
 
     features["is_jersey"] = bool(
         features.get(
             "is_jersey"
         )
-        or "jersey" in text
-        or "memorabilia" in text
+        or has_relic_material_evidence(text)
     )
 
     features["is_game_worn"] = bool(

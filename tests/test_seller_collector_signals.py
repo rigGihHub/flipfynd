@@ -60,3 +60,10 @@ def test_value_driver_listing_is_selected_before_plain_base_when_limit_is_tight(
     assert out["analysed_count"] == 1
     assert out["rows"][0]["title"] == "2024 Rookie Patch Auto 7/25"
     assert out["rows"][0]["collector_signal_score"] > 0
+
+
+def test_memorabilia_product_word_alone_is_not_a_relic_signal():
+    plain = collector_signals({"titel": "2003-04 Between the Pipes Memorabilia Curtis Sanford"})
+    assert "patch_relic" not in plain["signals"]
+    actual = collector_signals({"titel": "2003-04 Between the Pipes Curtis Sanford Game-Used Jersey"})
+    assert "patch_relic" in actual["signals"]
