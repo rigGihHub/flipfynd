@@ -26,7 +26,7 @@ def test_readiness_separates_research_identity_from_decision_grade_identity():
 
 def test_main_search_renders_dynamic_top_five():
     app = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "v0.14.14"' in app
+    assert 'APP_VERSION = "v0.14.15"' in app
     assert "total_limit=5, require_verified_economic_edge=True" in app
     assert "Dynamisk topp 5 i den här sökningen" in app
     assert "verifierade fynd · {review_top_count} värda fortsatt kontroll" in app

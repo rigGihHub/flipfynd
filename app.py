@@ -304,7 +304,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.14"
+APP_VERSION = "v0.14.15"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6833,17 +6833,31 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=False):
             st.info("Inget kort klarade kvalitetsgränsen ännu. Top 5 uppdateras när fler sidor läses.")
         elif len(rows) < 5:
             st.caption(f"Topplistan innehåller {len(rows)} kort eftersom färre än fem giltiga, unika kortannonser kunde läsas.")
-        for idx, row in enumerate(rows[:5], start=1):
+        _find_rank = 0
+        _research_rank = 0
+        _research_heading_shown = False
+        for row in rows[:5]:
             title = row.get("title") or "Kortannons"
             price = row.get("price")
             decision = str(row.get("decision") or "SKIP").upper()
+            _row_tier = seller_result_tier(row)
             if decision.startswith("KÖP"):
                 badge = "🟢 KÖP"
             elif decision.startswith("UNDERSÖK"):
                 badge = "🟡 Värt att undersöka"
             else:
                 badge = "⚪ Kandidat · ej verifierad"
-            st.markdown(f"#### #{idx} {title}")
+            if _row_tier == "FIND":
+                _find_rank += 1
+                _position_label = f"Fynd #{_find_rank}"
+            else:
+                _research_rank += 1
+                _position_label = f"Research #{_research_rank}"
+                if _find_rows and not _research_heading_shown:
+                    st.markdown("### 🔎 Researchkandidater – inte fynd")
+                    st.caption("Kortspecifika signaler gör dem värda kontroll, men ekonomin är inte verifierad.")
+                    _research_heading_shown = True
+            st.markdown(f"#### {_position_label} · {title}")
             _rank_score = float(row.get("rank_score") or 0)
             if price is not None:
                 try:

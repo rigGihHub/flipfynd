@@ -71,6 +71,7 @@ def full_analyze_live_seller_item(
     identity_score = _num(merged.get("exact_identity_gate_score"))
     valuation = _num(merged.get("valuation_confidence_score"))
     edge = _num(merged.get("market_edge_score"))
+    deal_score = _num(merged.get("deal_score"))
     rank_score = _num(merged.get("rank_score"))
     player_market_score = _num(merged.get("player_market_score"))
     risk_adjusted_profit = _num(merged.get("risk_adjusted_profit"))
@@ -117,6 +118,7 @@ def full_analyze_live_seller_item(
         "sold_comps": sold,
         "valuation_confidence": valuation,
         "market_edge": edge,
+        "deal_score": deal_score,
         "rank_score": rank_score,
         "player_market_score": player_market_score,
         "risk_adjusted_profit": risk_adjusted_profit,

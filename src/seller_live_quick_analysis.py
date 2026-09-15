@@ -166,6 +166,7 @@ def quick_analyze_seller_inventory(
             "sold_comps": int(_num(merged.get("sold_comparable_count") or merged.get("sold_comps"))),
             "valuation_confidence": _num(merged.get("valuation_confidence_score")),
             "market_edge": _num(merged.get("market_edge_score")),
+            "deal_score": _num(merged.get("deal_score")),
             "rank_score": _num(merged.get("rank_score")),
             "player_market_score": _num(merged.get("player_market_score")),
             "risk_adjusted_profit": _num(merged.get("risk_adjusted_profit")),

@@ -183,4 +183,6 @@ def test_card_specific_rarity_beats_common_star_base_when_evidence_tier_is_equal
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze)
 
     assert out["rows"][0]["title"].startswith("2021 Donruss Elite Rookie Orange 7/75")
-    assert out["rows"][0]["seller_opportunity_score"] > out["rows"][0]["rank_score"]
+    # Rarity keeps this ahead of a common base card for research, but cannot
+    # inflate it into strong economic opportunity without comps or margin.
+    assert out["rows"][0]["seller_opportunity_score"] <= 25

@@ -138,22 +138,35 @@ def _seller_opportunity_rank_key(row: dict):
     evidence_tier = 1 if row.get("identity_ok") and sold > 0 else 0
     collector = min(40.0, _num(row.get("collector_signal_score")))
     merit = assess_seller_card_merit(row)
-    opportunity_score = _num(row.get("rank_score")) + collector * 1.5
+    deal = _num(row.get("deal_score"))
+    profit = _num(row.get("risk_adjusted_profit"))
+    economic_tier = 2 if deal >= 30 and profit > 0 else 1 if deal > 0 and profit >= 0 else 0
+    opportunity_score = _seller_opportunity_score(row)
     return (
         decision_tier,
         evidence_tier,
-        merit["score"],
+        economic_tier,
         opportunity_score,
+        deal,
+        profit,
+        merit["score"],
         _num(row.get("rank_score")),
         _num(row.get("player_market_score")),
-        _num(row.get("risk_adjusted_profit")),
     )
 
 
 def _seller_opportunity_score(row: dict) -> float:
     collector = min(40.0, _num(row.get("collector_signal_score")))
     merit = assess_seller_card_merit(row)
-    return round(max(0.0, min(100.0, merit["score"] * 1.4 + _num(row.get("rank_score")) * 0.45 + collector * 0.35)), 1)
+    deal = _num(row.get("deal_score"))
+    profit = _num(row.get("risk_adjusted_profit"))
+    sold = int(_num(row.get("sold_comps")))
+    score = deal * 0.55 + _num(row.get("rank_score")) * 0.25 + merit["score"] * 0.15 + collector * 0.05
+    # Scarcity can route a card into research, but cannot manufacture economic
+    # promise when full analysis found no SOLD evidence and negative margin.
+    if deal <= 10 and profit <= 0 and sold == 0:
+        score = min(score, 25.0)
+    return round(max(0.0, min(100.0, score)), 1)
 
 
 def _quick_rank_key(row: dict):
@@ -294,6 +307,7 @@ def _fallback_row(qrow: dict, alias: str) -> dict:
         "identity_ok": qrow.get("identity_ok"), "sold_comps": qrow.get("sold_comps", 0),
         "valuation_confidence": qrow.get("valuation_confidence", 0),
         "market_edge": qrow.get("market_edge", 0), "quick_score": qrow.get("quick_score", 0),
+        "deal_score": qrow.get("deal_score", 0),
         "rank_score": qrow.get("rank_score", 0),
         "player_market_score": qrow.get("player_market_score", 0),
         "risk_adjusted_profit": qrow.get("risk_adjusted_profit", 0),
