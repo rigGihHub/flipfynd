@@ -119,6 +119,7 @@ from src.tradera_seller_inventory import discover_active_seller_inventory
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.fast_analysis_pool import select_fast_analysis_pool
+from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
@@ -302,7 +303,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.11"
+APP_VERSION = "v0.14.12"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1266,11 +1267,13 @@ def analyze_data(
 
     debug["cheap_filtered_candidates"] = len(fast_pool_source)
     debug["filter_seconds"] = round(time.perf_counter() - analysis_started, 3)
+    fast_pool_budget = fast_analysis_budget(len(fast_pool_source), context="ordinary")
     fast_pool_source = select_fast_analysis_pool(
         fast_pool_source,
-        cap=480,
-        exploration_fraction=0.20,
+        cap=fast_pool_budget,
+        exploration_fraction=0.25,
     )
+    debug["fast_pool_budget"] = fast_pool_budget
     debug["fast_pool_selected"] = len(fast_pool_source)
     debug["fast_pool_skipped"] = max(0, debug["cheap_filtered_candidates"] - len(fast_pool_source))
 

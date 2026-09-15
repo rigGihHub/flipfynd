@@ -18,6 +18,7 @@ from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
 from src.seller_card_merit import assess_seller_card_merit
 from src.fast_analysis_pool import select_fast_analysis_pool
+from src.analysis_budget import fast_analysis_budget
 from src.deal_readiness import assess_deal_readiness
 
 
@@ -216,7 +217,11 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
         if key:
             unique[key] = row
     unique_inventory = list(unique.values())
-    fast_pool = select_fast_analysis_pool(unique_inventory, cap=300, exploration_fraction=0.25)
+    fast_pool = select_fast_analysis_pool(
+        unique_inventory,
+        cap=fast_analysis_budget(len(unique_inventory), context="seller"),
+        exploration_fraction=0.30,
+    )
     groups = {"hockey": [], "football": []}
     for row in fast_pool:
         groups[_supported_sport(row, fallback=sport)].append(row)
@@ -399,6 +404,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "domain_rejected_count": len(rejected) + int(quick.get("domain_rejected_count") or 0),
         "inventory_unique_count": int(quick.get("inventory_unique_count") or 0),
         "quick_analysed": int(quick.get("analysed_count") or 0),
+        "fast_pool_count": int(quick.get("fast_pool_count") or 0),
         "quick_failed": int(quick.get("failed_count") or 0),
         "quick_batches": int(quick.get("batch_count") or 0),
         "coverage_complete": bool(quick.get("coverage_complete")),

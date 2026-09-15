@@ -61,16 +61,22 @@ def select_fast_analysis_pool(items, *, cap=480, exploration_fraction=0.20):
     remainder = [x for x in valid if id(x) not in selected_ids]
 
     coverage_count = min(len(remainder), max(1, round(exploration_count * 0.67)))
-    coverage = []
-    for segment_index in range(coverage_count):
-        start = segment_index * len(remainder) // coverage_count
-        end = (segment_index + 1) * len(remainder) // coverage_count
+    # Keep one unconditional tail sample. Old/later seller pages can contain a
+    # hidden card whose title has no cheap merit signal; segment winners alone
+    # could otherwise favour a cheaper neighbour in that final segment.
+    coverage = [remainder[-1]] if remainder else []
+    segment_slots = max(0, coverage_count - len(coverage))
+    for segment_index in range(segment_slots):
+        start = segment_index * len(remainder) // max(1, segment_slots)
+        end = (segment_index + 1) * len(remainder) // max(1, segment_slots)
         segment = remainder[start:end]
         if segment:
-            coverage.append(max(segment, key=lambda item: (priorities[id(item)], _stable_key(item))))
+            winner = max(segment, key=lambda item: (priorities[id(item)], _stable_key(item)))
+            if id(winner) not in {id(x) for x in coverage}:
+                coverage.append(winner)
 
     coverage_ids = {id(x) for x in coverage}
-    blind_count = exploration_count - len(coverage)
+    blind_count = max(0, exploration_count - len(coverage))
     blind_remainder = [x for x in remainder if id(x) not in coverage_ids]
     blind = sorted(blind_remainder, key=_stable_key)[:blind_count]
     return selected + coverage + blind

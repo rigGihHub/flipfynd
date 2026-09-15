@@ -39,3 +39,9 @@ def test_each_late_segment_contributes_its_strongest_local_candidate():
     rows[950] = {"titel": "Late page rookie patch", "pris": 100, "lank": "late-strong"}
     selected = select_fast_analysis_pool(rows, cap=100, exploration_fraction=0.25)
     assert any(row["lank"] == "late-strong" for row in selected)
+
+
+def test_last_listing_is_always_represented_when_pool_is_bounded():
+    rows = [{"titel": f"Plain card {i}", "lank": f"u{i}", "pris": 20 + i} for i in range(1000)]
+    selected = select_fast_analysis_pool(rows, cap=100, exploration_fraction=0.25)
+    assert rows[-1] in selected

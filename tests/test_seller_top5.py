@@ -115,8 +115,11 @@ def test_large_inventory_scans_beyond_first_batch():
 
     assert out["status"] == "READY"
     assert out["rows"][0]["title"] == "Late hidden deal"
-    assert out["quick_batches"] >= 4
-    assert out["quick_analysed"] == 130
+    # The bounded performance pass no longer needs to analyse all 130 rows, but
+    # it must cross the first batch and retain the late hidden opportunity.
+    assert out["quick_batches"] >= 2
+    assert out["fast_pool_count"] < out["card_inventory_count"]
+    assert out["quick_analysed"] == out["fast_pool_count"]
     assert out["coverage_complete"] is True
     assert 1 <= out["full_candidate_limit"] <= 15
 
