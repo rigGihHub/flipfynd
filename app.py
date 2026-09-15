@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import os
+import time
 from pathlib import Path
 from src.player_knowledge import knowledge_coverage
 from src.card_explanation import build_card_explanation, build_card_identity_summary
@@ -117,6 +118,7 @@ from src.tradera_seller_inventory import discover_active_seller_inventory
 from src.public_seller_inventory import fetch_public_seller_inventory_batch
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.fast_analysis_pool import select_fast_analysis_pool
+from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.seller_top5_controller import resolve_seller_top5
@@ -267,7 +269,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.2"
+APP_VERSION = "v0.14.3"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1079,6 +1081,7 @@ def analyze_data(
     patch_only,
     auto_only,
 ):
+    analysis_started = time.perf_counter()
     raw_total_items = len(data)
     # Keep interactive analysis bounded even if an older cloud runtime still
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
@@ -1229,6 +1232,7 @@ def analyze_data(
         fast_pool_source.append(item)
 
     debug["cheap_filtered_candidates"] = len(fast_pool_source)
+    debug["filter_seconds"] = round(time.perf_counter() - analysis_started, 3)
     fast_pool_source = select_fast_analysis_pool(
         fast_pool_source,
         cap=480,
@@ -1237,6 +1241,7 @@ def analyze_data(
     debug["fast_pool_selected"] = len(fast_pool_source)
     debug["fast_pool_skipped"] = max(0, debug["cheap_filtered_candidates"] - len(fast_pool_source))
 
+    fast_started = time.perf_counter()
     for item in fast_pool_source:
         fast = _cached_fast_analysis(
             _fast_signature(item, sport, strategy),
@@ -1256,6 +1261,7 @@ def analyze_data(
                 attention,
             )
         )
+    debug["fast_analysis_seconds"] = round(time.perf_counter() - fast_started, 3)
 
     # Full-analysis preselection may prioritize known scarce/chase structures so
     # they are not missed by the cheap fast pass. This boost does NOT change
@@ -1347,6 +1353,7 @@ def analyze_data(
         debug["full_analysis"] += 1
         return full
 
+    full_started = time.perf_counter()
     full_by_index = {}
     for idx in full_indices:
         full_by_index[idx] = _run_full_analysis(idx)
@@ -1417,6 +1424,8 @@ def analyze_data(
     ] = len(
         results
     )
+    debug["full_analysis_seconds"] = round(time.perf_counter() - full_started, 3)
+    debug["total_analysis_seconds"] = round(time.perf_counter() - analysis_started, 3)
 
     return (
         results,
@@ -2139,21 +2148,38 @@ if run:
     progress = st.progress(12, text="Förbereder annonser…")
     status.write("2/3 • Analyserar kort, efterfrågan, risk, comps och möjlig vinst. Det kan ta en stund om många annonser ska bedömas.")
     progress.progress(35, text="Analyserar och rankar fynd…")
+    current_run_signature = build_search_run_signature(
+        data_version=get_data_version(), app_version=APP_VERSION, sport=sport,
+        search=effective_search, max_price=max_price, sale_type=sale_type,
+        strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
+        auto_only=auto_only,
+    )
+    reusable = get_reusable_search(st.session_state.get("result_cache"), current_run_signature)
     try:
-        results, debug = analyze_data(
-            data=data,
-            sport=sport,
-            search=effective_search,
-            max_price=max_price,
-            sale_type=sale_type,
-            full_limit=full_limit,
-            strategy=strategy,
-            numbered_only=numbered_only,
-            patch_only=patch_only,
-            auto_only=auto_only,
-        )
+        if reusable:
+            results, debug = reusable
+            debug = dict(debug)
+            debug["reused_completed_search"] = True
+            progress.progress(90, text="Återanvänder färdig analys…")
+            status.write("2/3 • Samma annonser och filter är redan analyserade. Återanvänder det färdiga resultatet.")
+        else:
+            results, debug = analyze_data(
+                data=data,
+                sport=sport,
+                search=effective_search,
+                max_price=max_price,
+                sale_type=sale_type,
+                full_limit=full_limit,
+                strategy=strategy,
+                numbered_only=numbered_only,
+                patch_only=patch_only,
+                auto_only=auto_only,
+            )
+            debug["reused_completed_search"] = False
+            st.session_state["result_cache"] = store_reusable_search(current_run_signature, results, debug)
         progress.progress(90, text="Sorterar de bästa kandidaterna…")
-        status.write(f"3/3 • Klart. {int((debug or {}).get('final_results', len(results)) or 0)} annonser nådde analyssteget.")
+        elapsed_text = "direkt från cache" if debug.get("reused_completed_search") else f"{debug.get('total_analysis_seconds', 0):.1f} s"
+        status.write(f"3/3 • Klart på {elapsed_text}. {int((debug or {}).get('final_results', len(results)) or 0)} annonser nådde analyssteget.")
         progress.progress(100, text="Klar")
         status.update(label="✅ Analysen är klar – resultaten visas nedan", state="complete", expanded=False)
     except Exception as exc:
