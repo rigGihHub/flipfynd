@@ -261,8 +261,9 @@ def _postprocess_fallback_result(result, total_limit):
         reverse=True,
     )
     limit = max(0, int(total_limit or 0))
-    # Fill remaining places with the best of the weak pool. They stay clearly
-    # marked UNDERSÖK and never gain SOLD evidence, market value or BUY status.
+    # Do not restore weak filler merely to keep five rows visible. A card with
+    # negligible deal potential must not become a high-ranked "best" result
+    # because every other listing was equally weak.
     suppressed.sort(
         key=lambda r: (
             _n(r.get("investigate_score"), 0),
@@ -273,16 +274,11 @@ def _postprocess_fallback_result(result, total_limit):
         ),
         reverse=True,
     )
-    # Preserve the quality gate whenever at least one meaningful row survives.
-    # The recovery path exists specifically for the all-suppressed regression.
-    fill_count = min(limit, len(suppressed)) if not kept else 0
-    restored = suppressed[:fill_count]
-    still_suppressed = suppressed[fill_count:]
-    out["rows"] = (kept + restored)[:limit]
-    out["suppressed_weak_ordinary_count"] = len(still_suppressed)
-    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in still_suppressed[:10]]
-    out["fallback_weak_fill_count"] = len(restored)
-    if still_suppressed:
+    out["rows"] = kept[:limit]
+    out["suppressed_weak_ordinary_count"] = len(suppressed)
+    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in suppressed[:10]]
+    out["fallback_weak_fill_count"] = 0
+    if suppressed:
         note = str(out.get("note") or "").strip()
         out["note"] = (note + " Ordinära lågpotentialkort utan tydlig kortspecifik edge döljs från 'Bästa alternativen'.").strip()
     return out

@@ -60,7 +60,7 @@ def test_special_signal_survives_quality_gate_even_with_low_potential():
     assert [row["title"] for row in result["rows"]] == ["Low-score but misclassified oddity"]
 
 
-def test_dynamic_top_five_never_disappears_when_every_candidate_is_weak():
+def test_dynamic_top_five_does_not_restore_zero_merit_filler():
     candidates = [
         {
             "titel": f"Ordinary card {idx}",
@@ -83,10 +83,6 @@ def test_dynamic_top_five_never_disappears_when_every_candidate_is_weak():
         require_verified_economic_edge=True,
     )
 
-    assert len(result["rows"]) == 5
-    assert all(row["decision"] == "UNDERSÖK" for row in result["rows"])
-    assert all(row["tier"] == "PROMISING" for row in result["rows"])
-    assert result["fallback_weak_fill_count"] == 5
-    # The decision builder hands its selected Top 5 to the compatibility gate;
-    # all five are restored because otherwise the visible list would be empty.
-    assert result["suppressed_weak_ordinary_count"] == 0
+    assert result["rows"] == []
+    assert result["fallback_weak_fill_count"] == 0
+    assert result["suppressed_weak_ordinary_count"] == 5

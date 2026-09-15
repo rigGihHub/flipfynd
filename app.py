@@ -123,6 +123,7 @@ from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
+from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
 from src.search_yield_learning import build_yield_report, route_budget_guidance
@@ -303,7 +304,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.13"
+APP_VERSION = "v0.14.14"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1323,6 +1324,12 @@ def analyze_data(
     results = []
     dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=18, max_cap=30)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
+    adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
+        candidates,
+        adaptive_indices,
+        extra_slots=6,
+        hard_cap=dynamic_deep_cap,
+    )
     full_indices = diversify_full_analysis_indices(
         candidates,
         adaptive_indices,
@@ -1349,6 +1356,7 @@ def analyze_data(
     )
     full_index_set = set(full_indices)
     debug["adaptive_full_selected"] = len(adaptive_indices)
+    debug["collector_signal_coverage_added"] = len(collector_coverage_added)
     debug["dynamic_deep_cap"] = dynamic_deep_cap
     debug["adaptive_extra_full"] = max(0, len(adaptive_indices) - min(full_limit, len(candidates)))
     debug["coverage_full_selected"] = len(full_indices)

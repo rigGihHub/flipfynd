@@ -56,7 +56,29 @@ def select_fast_analysis_pool(items, *, cap=480, exploration_fraction=0.20):
     merit_count = cap - exploration_count
     priorities = {id(item): _priority(item) for item in valid}
     ranked = sorted(valid, key=lambda item: priorities[id(item)], reverse=True)
-    selected = ranked[:merit_count]
+    # Reserve representation for the most important card-specific value
+    # drivers.  Without this, a broad search can crowd every autograph out of
+    # the bounded pass even though the same cards appear with an autograph-only
+    # filter.  This is discovery coverage only; it creates no value or BUY.
+    protected = []
+    protected_ids = set()
+    signal_names = ("autograph", "one_of_one", "serial_numbered", "patch_relic", "case_hit_ssp")
+    per_signal = max(1, min(8, cap // 20))
+    protected_budget = min(merit_count, max(1, cap // 4)) if merit_count else 0
+    for signal_name in signal_names:
+        if len(protected) >= protected_budget:
+            break
+        matches = [
+            item for item in ranked
+            if signal_name in set(collector_signals(item).get("signals") or [])
+            and id(item) not in protected_ids
+        ]
+        for item in matches[:min(per_signal, protected_budget - len(protected))]:
+            protected.append(item)
+            protected_ids.add(id(item))
+
+    merit_slots = max(0, merit_count - len(protected))
+    selected = protected + [item for item in ranked if id(item) not in protected_ids][:merit_slots]
     selected_ids = {id(x) for x in selected}
     remainder = [x for x in valid if id(x) not in selected_ids]
 
