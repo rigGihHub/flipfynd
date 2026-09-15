@@ -20,6 +20,7 @@ _STRONG_SIGNALS = {
     "case_hit_ssp", "premium_insert", "premium_parallel",
     "error_variation", "short_print",
     "printing_plate", "buyback", "photo_variation",
+    "flagship_rookie_variant",
     "named_chase_insert", "elite_parallel", "premium_autograph_structure",
     "premium_relic_structure", "premium_issue_variant",
 }

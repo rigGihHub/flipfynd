@@ -10,6 +10,19 @@ import re
 
 SIGNAL_FAMILIES = (
     {
+        "name": "flagship_rookie_variant",
+        "weight": 16,
+        "all_patterns": (
+            re.compile(r"\byoung\s+guns?\b", re.I),
+            re.compile(
+                r"\b(?:ud\s+canvas|canvas|exclusives?|high\s+gloss|clear\s+cut|"
+                r"outburst(?:\s+(?:silver|red|gold))?|retro)\b",
+                re.I,
+            ),
+        ),
+        "verify": "Young Guns-program, variant, kortnummer och eventuell serialisering mot officiell Upper Deck-checklista",
+    },
+    {
         "name": "named_chase_insert",
         "weight": 16,
         "pattern": re.compile(
@@ -72,13 +85,20 @@ def match_sports_card_signals(text: str) -> list[dict]:
     hay = str(text or "")
     matches = []
     for family in SIGNAL_FAMILIES:
-        found = family["pattern"].search(hay)
-        if not found:
-            continue
+        if family.get("all_patterns"):
+            found_parts = [pattern.search(hay) for pattern in family["all_patterns"]]
+            if not all(found_parts):
+                continue
+            matched_text = " + ".join(match.group(0) for match in found_parts)
+        else:
+            found = family["pattern"].search(hay)
+            if not found:
+                continue
+            matched_text = found.group(0)
         matches.append({
             "name": family["name"],
             "weight": int(family["weight"]),
-            "matched_text": found.group(0),
+            "matched_text": matched_text,
             "verify": family["verify"],
             "research_only": True,
             "creates_value": False,
