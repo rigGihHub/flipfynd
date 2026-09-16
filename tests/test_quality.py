@@ -1029,7 +1029,7 @@ class SoldCompImportV065Tests(unittest.TestCase):
 
     def test_csv_parser_handles_swedish_aliases(self):
         from src.sold_comp_import import import_sold_comp_rows, parse_import_bytes
-        raw = "titel,pris,frakt,sport\nBedard Young Guns #451,180,19,hockey\n".encode("utf-8")
+        raw = "titel,pris,frakt,sport,status\nBedard Young Guns #451,180,19,hockey,såld\n".encode("utf-8")
         rows = parse_import_bytes(raw, "sold.csv")
         result = import_sold_comp_rows(rows)
         self.assertEqual(result["added_count"], 1)

@@ -99,13 +99,46 @@ def _serial_bucket(features: dict) -> str:
 
 
 
+def _grading_evidence(item: dict, parsed: dict) -> dict:
+    """Keep structured grading evidence even when the listing title omits it.
+
+    No grading evidence means unknown, not proven raw. Unknown cannot provide
+    direct price support for an explicitly graded card (or vice versa).
+    """
+    companies = set()
+    grades = set()
+    for source in (parsed, item):
+        company = str(source.get("grading_company") or "").strip().upper()
+        grade = str(source.get("grade") or "").strip().upper()
+        if company:
+            companies.add(company)
+        match = re.fullmatch(r"(?:([A-Z]+)\s+)?(\d+(?:[.,]\d+)?)", grade)
+        if match:
+            if match.group(1):
+                companies.add(match.group(1))
+            # 9, 9.0 and PSA 9 must not become conflicting grades.
+            grades.add(str(float(match.group(2).replace(",", "."))))
+        elif grade:
+            grades.add(grade)
+    flag = str(item.get("is_graded", "")).strip().casefold()
+    explicit_raw = flag in {"false", "0", "no", "nej"}
+    graded = bool(companies or grades or parsed.get("is_graded") or flag in {"true", "1", "yes", "ja"})
+    conflicts = []
+    if len(companies) > 1:
+        conflicts.append("motstridiga gradingbolag i titel/strukturerad identitet")
+    if len(grades) > 1:
+        conflicts.append("motstridiga grades i titel/strukturerad identitet")
+    if explicit_raw and graded:
+        conflicts.append("motstridig raw/graded-status")
+    return {"graded": graded, "companies": companies, "grades": grades, "conflicts": conflicts}
+
+
 def assess_comp_compatibility(base_item: dict, other_item: dict) -> dict:
     """Hard guardrails for fields that define the exact card variant.
 
-    A comp is rejected only when both listings explicitly identify a field and
-    those values conflict. Missing information stays uncertain rather than being
-    invented. This keeps near-comps available while preventing clearly different
-    cards from contaminating the valuation.
+    Explicit variant conflicts reject comps. Graded prices additionally require
+    matching grading evidence on both sides; absent evidence is never proof of
+    raw condition or of a matching grade.
     """
     base = _normalize_features(base_item)
     other = _normalize_features(other_item)
@@ -124,11 +157,19 @@ def assess_comp_compatibility(base_item: dict, other_item: dict) -> dict:
     # Serial denominator (/25, /99 etc.) materially changes scarcity/value.
     explicit_conflict("serial_number", "serial numbering")
 
-    # Graded cards with explicitly different grades are not direct price comps.
-    base_grade = str(base.get("grade") or "").strip().upper()
-    other_grade = str(other.get("grade") or "").strip().upper()
-    if base_grade and other_grade and base_grade != other_grade:
-        blockers.append(f"grade: {base_grade} ≠ {other_grade}")
+    base_grading = _grading_evidence(base_item, base)
+    other_grading = _grading_evidence(other_item, other)
+    blockers.extend(base_grading["conflicts"])
+    blockers.extend(other_grading["conflicts"])
+    if base_grading["graded"] != other_grading["graded"]:
+        blockers.append("gradingstatus: graderat kort kan inte prisjämföras med raw/okänd grading")
+    elif base_grading["graded"]:
+        for field, label in (("companies", "gradingbolag"), ("grades", "grade")):
+            a, b = base_grading[field], other_grading[field]
+            if not a or not b:
+                blockers.append(f"{label}: saknas för säker graderad prisjämförelse")
+            elif a != b:
+                blockers.append(f"{label}: {' / '.join(sorted(a))} ≠ {' / '.join(sorted(b))}")
 
     # Named parallels are variant-defining. Only reject when both are explicitly
     # identified; absence on one side is uncertainty, not evidence of base version.

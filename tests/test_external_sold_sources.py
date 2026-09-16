@@ -9,12 +9,12 @@ def test_ended_is_not_sold_without_explicit_sold_marker():
     assert result["rejected_count"] == 1
 
 
-def test_ebay_completed_status_is_accepted_then_strictly_normalized():
+def test_ebay_explicit_completed_sold_status_is_accepted_then_strictly_normalized():
     result = import_external_sold_rows([{
         "title": "2024 Topps Chrome Player Auto /99",
         "price": 250,
         "currency": "SEK",
-        "status": "completed",
+        "status": "completed sold",
         "url": "https://example.test/item/1",
     }], "ebay")
     assert result["added_count"] == 1

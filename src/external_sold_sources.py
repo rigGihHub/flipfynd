@@ -41,7 +41,7 @@ def _norm(value) -> str:
 _UNSOLD_MARKERS = (
     "unsold", "not sold", "osåld", "ej såld", "completed unsold",
     "ended unsold", "not completed sale", "cancelled", "canceled",
-    "withdrawn", "expired",
+    "withdrawn", "expired", "active", "live", "open",
 )
 _NEGATIVE_SOLD_FLAGS = {"false", "0", "no", "nej", "unsold", "osåld"}
 _POSITIVE_SOLD_FLAGS = {"true", "1", "yes", "ja", "sold", "såld"}
@@ -88,7 +88,9 @@ ADAPTERS = {
     ),
     "ebay": SourceAdapter(
         "ebay", "eBay avslutade försäljningar",
-        ("sold", "completed", "completed sold"),
+        # Generic exports are not a typed Trading API response: completed alone
+        # does not establish an explicit realised sale.
+        ("sold", "completed sold"),
         COMMON_MAP,
     ),
     "tradera": SourceAdapter(
@@ -113,10 +115,12 @@ def _explicitly_unsold(row: dict, adapter: SourceAdapter) -> bool:
     # Inspect every provided SOLD flag. One explicit negative flag makes the
     # evidence contradictory and therefore unsafe, even if another field says sold.
     for raw_flag in _sold_flag_values(row, adapter):
-        if raw_flag is False or _norm(raw_flag) in _NEGATIVE_SOLD_FLAGS:
+        if raw_flag is False or raw_flag == 0 or _norm(raw_flag) in _NEGATIVE_SOLD_FLAGS:
             return True
-    status = _norm(_first(row, adapter.field_map["status"]))
-    return bool(status and any(marker in status for marker in _UNSOLD_MARKERS))
+    return any(
+        any(marker in _norm(row.get(name)) for marker in _UNSOLD_MARKERS)
+        for name in adapter.field_map["status"]
+    )
 
 
 def _explicitly_sold(row: dict, adapter: SourceAdapter) -> tuple[bool, str | None]:
@@ -127,9 +131,8 @@ def _explicitly_sold(row: dict, adapter: SourceAdapter) -> tuple[bool, str | Non
     for raw_flag in _sold_flag_values(row, adapter):
         if raw_flag is True or _norm(raw_flag) in _POSITIVE_SOLD_FLAGS:
             return True, "explicit_sold_flag"
-    status = _norm(_first(row, adapter.field_map["status"]))
     markers = {_norm(marker) for marker in adapter.sold_markers}
-    if status and status in markers:
+    if any(_norm(row.get(name)) in markers for name in adapter.field_map["status"]):
         return True, "explicit_sold_status"
     return False, None
 

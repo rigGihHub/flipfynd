@@ -42,15 +42,29 @@ def _status_text(value) -> str:
 
 
 def _contradicts_realised_sale(row: dict) -> bool:
-    sold_flag = _first(row, "sold", "is_sold", "was_sold", "completed_sale")
-    flag_text = _status_text(sold_flag)
-    if sold_flag is False or flag_text in {"false", "0", "no", "nej", "unsold", "osåld"}:
-        return True
+    # A later alias must not be hidden by an earlier positive flag.
+    for key in ("sold", "is_sold", "was_sold", "completed_sale"):
+        sold_flag = row.get(key)
+        flag_text = _status_text(sold_flag)
+        if sold_flag is False or sold_flag == 0 or flag_text in {"false", "0", "no", "nej", "unsold", "osåld"}:
+            return True
     for key in ("sale_status", "status", "listing_status", "state", "market_state"):
         status = _status_text(row.get(key))
         if status and any(marker in status for marker in _NEGATIVE_SALE_STATUSES):
             return True
     return False
+
+
+def _has_explicit_sold_state(row: dict) -> bool:
+    for key in ("sold", "is_sold", "was_sold", "completed_sale"):
+        if _status_text(row.get(key)) in {"true", "1", "yes", "ja", "sold", "såld"}:
+            return True
+    return any(
+        _status_text(row.get(key)) in {
+            "sold", "såld", "completed sold", "ended sold", "avslutad såld", "realized", "realised",
+        }
+        for key in ("sale_status", "status", "listing_status", "state", "market_state")
+    )
 
 
 def _float(value):
@@ -129,7 +143,10 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
     if len(title) < 4:
         raise ValueError("titel saknas eller är för kort")
 
-    sold_price = _float(_first(row, "sold_price", "soldprice", "pris", "price"))
+    explicit_sold_price = _first(row, "sold_price", "soldprice")
+    if explicit_sold_price is None and not _has_explicit_sold_state(row):
+        raise ValueError("price/pris kräver explicit såld-status eller såld-flagga; avslutad räcker inte")
+    sold_price = _float(explicit_sold_price if explicit_sold_price is not None else _first(row, "pris", "price"))
     if not sold_price or sold_price <= 0:
         raise ValueError("positivt sold_price saknas")
 
@@ -156,7 +173,7 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
         "source_platform": platform,
         "provenance": provenance,
         "sold_verification_status": "verified",
-        "sale_evidence_type": "explicit_sold_price",
+        "sale_evidence_type": "explicit_sold_price" if explicit_sold_price is not None else "explicit_sold_state_and_price",
         "acquisition_source": provenance,
         "imported_at": datetime.now(timezone.utc).isoformat(),
     }

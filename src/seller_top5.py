@@ -426,6 +426,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     candidates = merit_candidates[:merit_keep] + exploration_candidates
     candidate_limit = len(candidates)
     full_rows = []
+    completed_full_keys = set()
     failed = 0
     _emit(progress_callback, phase="full_start", done=0, total=len(candidates), percent=66)
     for idx, qrow in enumerate(candidates, start=1):
@@ -442,6 +443,11 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             failed += 1
             row = None
         if row is not None:
+            # A successful full result supersedes the fast result, even when
+            # it is too weak to display. Retain the original listing key too:
+            # full analysis can enrich the source with a higher-priority ID.
+            completed_full_keys.add(_identity_key(source_item))
+            completed_full_keys.add(_identity_key(row.get("source_item") or row))
             row = dict(row)
             row["quick_score"] = qrow.get("quick_score")
             row["collector_signal_score"] = qrow.get("collector_signal_score", 0)
@@ -470,7 +476,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         key = _identity_key(source or qrow)
         fallback = _fallback_row(qrow, alias)
         opportunity_key = _card_opportunity_key(fallback)
-        if key in selected_keys or opportunity_key in selected_opportunities or _explicit_condition_risk(fallback):
+        if key in completed_full_keys or key in selected_keys or opportunity_key in selected_opportunities or _explicit_condition_risk(fallback):
             continue
         selected.append(fallback)
         selected_keys.add(key)

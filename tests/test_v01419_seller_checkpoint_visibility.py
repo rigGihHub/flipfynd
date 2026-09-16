@@ -5,7 +5,7 @@ APP = Path("app.py").read_text(encoding="utf-8")
 
 
 def test_release_version_and_partial_seller_search_reopens_panel():
-    assert 'APP_VERSION = "v0.14.29"' in APP
+    assert 'APP_VERSION = "v0.14.30"' in APP
     assert '_seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}' in APP
     assert 'expanded=_seller_search_needs_attention' in APP
 
