@@ -2,9 +2,9 @@ import re
 from pathlib import Path
 
 
-def test_app_uses_compat_wrapper():
+def test_app_no_longer_calls_coverage_autopilot():
     app = Path("app.py").read_text(encoding="utf-8")
-    assert "build_autopilot_plan_compat(" in app
+    assert "build_autopilot_plan_compat(" not in app
 
     match = re.search(r'APP_VERSION = "v(\d+)\.(\d+)\.(\d+)"', app)
     assert match, "app.py ska deklarera APP_VERSION"

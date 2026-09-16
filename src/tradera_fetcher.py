@@ -675,6 +675,8 @@ def reconcile_market_state_with_items(items):
     for item in items or []:
         if not isinstance(item, dict):
             continue
+        if item.get("discovery_sort") == "AddedOn":
+            continue
         category = infer_category_from_item_url(item.get("lank"), None)
         if category not in observed:
             continue
@@ -806,6 +808,10 @@ def merge_items(
 
         if key in merged:
             old_item = merged[key]
+            # An archive refresh must not erase membership in the latest scan.
+            for field in ("discovery_sort", "latest_scan_at"):
+                if field not in item and field in old_item:
+                    item[field] = old_item[field]
 
             if (
                 item.get("frakt")
@@ -1092,6 +1098,7 @@ def fetch_tradera_category(
     page_callback=None,
     detail_limit=6,
     smart_max_pages=SMART_MAX_PAGES,
+    newest_first=False,
 ):
     """Fetch a Tradera category page-by-page.
 
@@ -1108,6 +1115,10 @@ def fetch_tradera_category(
         raise RuntimeError("Playwright saknas.") from exc
 
     base_url = CATEGORY_URLS[category_name]
+    scan_started_at = _utc_now_iso()
+    if newest_first:
+        from src.latest_market import newest_first_url
+        base_url = newest_first_url(base_url)
     all_items = []
     logs = []
     known_links = {str(link) for link in (known_links or set()) if link}
@@ -1148,6 +1159,9 @@ def fetch_tradera_category(
                     item = extract_item(anchors.nth(index), category_name, page_number)
                     if not item:
                         continue
+                    if newest_first:
+                        item["discovery_sort"] = "AddedOn"
+                        item["latest_scan_at"] = scan_started_at
                     if item.get("source_category") != category_name:
                         # Never silently ingest another sport through a redirect
                         # or malformed category page. This also makes sport counts
@@ -1182,7 +1196,10 @@ def fetch_tradera_category(
                 page_signatures.add(signature)
 
                 all_items.extend(page_items)
-                mark_page_loaded(category_name, page_number)
+                # Newest-first pages have a different ordering from legacy
+                # coverage. Do not advance or rewrite its archive checkpoint.
+                if not newest_first:
+                    mark_page_loaded(category_name, page_number)
 
                 unseen_on_page = sum(1 for link in page_links if link not in known_links)
                 if known_links and unseen_on_page == 0:

@@ -1,21 +1,22 @@
+"""The former per-sport buttons now share a single sport selector."""
 from pathlib import Path
 
 
-def test_advanced_fetch_has_direct_refresh_buttons_for_both_sports():
-    app = Path('app.py').read_text(encoding='utf-8')
-    assert '🏒 Uppdatera gamla sidor – Hockey' in app
-    assert '⚽ Uppdatera gamla sidor – Fotboll' in app
-    assert 'start_fetch("Hockey - NHL", True, "scheduled_refresh")' in app
-    assert 'start_fetch("Fotboll", True, "scheduled_refresh")' in app
+def test_refresh_has_one_shared_sport_selector():
+    app = Path("app.py").read_text(encoding="utf-8")
+    assert app.count('key="onboarding_fetch_scope"') == 1
+    assert 'start_fetch(fetch_category, True, "latest")' in app
 
 
-def test_advanced_fetch_radio_removed_but_onboarding_radio_preserved():
-    app = Path('app.py').read_text(encoding='utf-8')
-    assert 'key="main_fetch_scope"' not in app
-    assert 'key="onboarding_fetch_scope"' in app
+def test_older_fetch_modes_share_one_advanced_action():
+    app = Path("app.py").read_text(encoding="utf-8")
+    assert 'start_fetch(fetch_category, True, extra_modes[extra_mode])' in app
+    assert "Uppdatera gamla sidor – Hockey" not in app
+    assert "Uppdatera gamla sidor – Fotboll" not in app
 
 
-def test_each_refresh_button_uses_its_own_due_state():
-    app = Path('app.py').read_text(encoding='utf-8')
-    assert 'not refresh_h.get("due")' in app
-    assert 'not refresh_f.get("due")' in app
+def test_admin_has_no_duplicate_refresh_actions():
+    app = Path("app.py").read_text(encoding="utf-8")
+    admin = app[app.index('with st.expander("⚙️ Administration & data"):'):]
+    assert "start_fetch(" not in admin
+    assert "stop_fetch(" not in admin

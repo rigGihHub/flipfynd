@@ -8,7 +8,7 @@ SEARCH_RESULT_SCHEMA_VERSION = 1
 def build_search_run_signature(
     *, data_version: str, app_version: str, sport: str, search: str,
     max_price: float, sale_type: str, strategy: str, numbered_only: bool,
-    patch_only: bool, auto_only: bool,
+    patch_only: bool, auto_only: bool, include_older: bool = False,
 ) -> str:
     """Identify a completed search that is safe to reuse."""
     payload = {
@@ -23,6 +23,7 @@ def build_search_run_signature(
         "numbered_only": bool(numbered_only),
         "patch_only": bool(patch_only),
         "auto_only": bool(auto_only),
+        "include_older": bool(include_older),
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from src.latest_market import LATEST_MAX_PAGES
 
 from src.tradera_fetcher import (
     CATEGORY_URLS,
@@ -27,8 +28,11 @@ def fetch_one_category(category, mode, headed, output_path, safety_max_pages, de
     old_items = load_items(output_path)
     known_links = {item.get("lank") for item in old_items if item.get("lank")}
 
-    stop_after_known_pages = SMART_STOP_AFTER_KNOWN_PAGES if mode == "incremental" else 0
-    if mode == "scheduled_refresh":
+    stop_after_known_pages = SMART_STOP_AFTER_KNOWN_PAGES if mode in {"incremental", "latest"} else 0
+    if mode == "latest":
+        start_page, end_page = 1, None
+        print(f"Senaste annonser: {category}, högst {LATEST_MAX_PAGES} sidor, sparade annonser återanvänds.", flush=True)
+    elif mode == "scheduled_refresh":
         plan = get_smart_refresh_plan(category)
         if not plan.get("due"):
             print(f"Smart refresh: inget behöver uppdateras för {category}.", flush=True)
@@ -85,8 +89,9 @@ def fetch_one_category(category, mode, headed, output_path, safety_max_pages, de
         stop_after_known_pages=stop_after_known_pages,
         safety_max_pages=max(10, safety_max_pages),
         page_callback=persist_page,
-        detail_limit=(0 if mode == "scheduled_refresh" else min(detail_limit, 2) if mode == "market_batch" else detail_limit),
-        smart_max_pages=(smart_max_pages if mode == "incremental" else None),
+        detail_limit=(0 if mode in {"scheduled_refresh", "latest"} else min(detail_limit, 2) if mode == "market_batch" else detail_limit),
+        smart_max_pages=(LATEST_MAX_PAGES if mode == "latest" else smart_max_pages if mode == "incremental" else None),
+        newest_first=(mode == "latest"),
     )
 
     merged_items = merge_items(load_items(output_path), new_items)
@@ -109,7 +114,6 @@ def fetch_one_category(category, mode, headed, output_path, safety_max_pages, de
     print(f"Totalt sparade objekt: {len(merged_items)}", flush=True)
     state_stop_reason = "klar"
     try:
-        from src.tradera_fetcher import load_fetch_state
         state_stop_reason = (
             load_fetch_state().get("categories", {}).get(category, {}).get("last_stop_reason")
             or "klar"
@@ -131,7 +135,7 @@ def main():
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--category", choices=list(CATEGORY_URLS.keys()))
     scope.add_argument("--all-categories", action="store_true")
-    parser.add_argument("--mode", choices=["incremental", "scheduled_refresh", "market_batch", "full"], default="incremental")
+    parser.add_argument("--mode", choices=["latest", "incremental", "scheduled_refresh", "market_batch", "full"], default="latest")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--output", default="tradera_data.json")
     parser.add_argument("--safety-max-pages", type=int, default=250)
