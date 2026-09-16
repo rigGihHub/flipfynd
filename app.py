@@ -305,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.28"
+APP_VERSION = "v0.14.29"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6920,7 +6920,8 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                 "football_named_chase": "Checklistad fotbolls-chase",
                 "flagship_rookie_variant": "Young Guns-variant",
                 "upper_deck_day_with_cup": "Day With The Cup",
-                "upper_deck_population_count": "Population Count",\n                "upper_deck_program_of_excellence": "Program of Excellence",
+                "upper_deck_population_count": "Population Count",
+                "upper_deck_program_of_excellence": "Program of Excellence",
                 "named_chase_insert": "Checklistad chase-insert",
                 "elite_parallel": "Extrem parallel",
                 "premium_autograph_structure": "Premiumautografstruktur",
