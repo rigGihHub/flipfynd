@@ -23,6 +23,7 @@ _STRONG_SIGNALS = {
     "football_named_chase",
     "flagship_rookie_variant",
     "upper_deck_day_with_cup",
+    "upper_deck_population_count",
     "named_chase_insert", "elite_parallel", "premium_autograph_structure",
     "premium_relic_structure", "premium_issue_variant",
 }

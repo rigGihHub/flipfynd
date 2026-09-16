@@ -44,6 +44,15 @@ SIGNAL_FAMILIES = (
         "verify": "Day With The Cup-program, år, DC-kortnummer och spelare mot officiell Upper Deck-checklista",
     },
     {
+        "name": "upper_deck_population_count",
+        "weight": 18,
+        "pattern": re.compile(
+            r"\bpopulation\s+count(?:\s+(?:1000|500|100|50|25|10|5|1))?\b",
+            re.I,
+        ),
+        "verify": "Population Count-program, tier, PC-kortnummer, år och spelare mot officiell Upper Deck-checklista",
+    },
+    {
         "name": "named_chase_insert",
         "weight": 16,
         "pattern": re.compile(
