@@ -8,7 +8,7 @@ def _names(text):
 
 def test_named_chase_inserts_are_routed_for_checklist_verification():
     assert "named_chase_insert" in _names("Panini Prizm World Cup Manga")
-    assert "named_chase_insert" in _names("Upper Deck Day With The Cup")
+    assert "upper_deck_day_with_cup" in _names("Upper Deck Day With The Cup")
     out = collector_signals({"titel": "Topps Golden Mirror variation"})
     assert "named_chase_insert" in out["signals"]
     assert out["verify_first"]

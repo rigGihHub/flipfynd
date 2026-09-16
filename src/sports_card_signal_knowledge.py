@@ -38,13 +38,19 @@ SIGNAL_FAMILIES = (
         "verify": "Young Guns-program, variant, kortnummer och eventuell serialisering mot officiell Upper Deck-checklista",
     },
     {
+        "name": "upper_deck_day_with_cup",
+        "weight": 18,
+        "pattern": re.compile(r"\bday\s+with\s+(?:the\s+)?cup(?:\s+flashbacks?)?\b", re.I),
+        "verify": "Day With The Cup-program, år, DC-kortnummer och spelare mot officiell Upper Deck-checklista",
+    },
+    {
         "name": "named_chase_insert",
         "weight": 16,
         "pattern": re.compile(
             r"\b(?:manga|genesis|color\s*wheel|colour\s*wheel|night\s*moves|"
             r"home\s*field\s*advantage|downtown|kaboom|color\s*blast|colour\s*blast|"
             r"blank\s*slate|stained\s*glass|aurora|storm\s*chasers?|on\s*campus|"
-            r"permit\s+to\s+dominate|day\s+with\s+the\s+cup|golden\s+mirror)\b",
+            r"permit\s+to\s+dominate|golden\s+mirror)\b",
             re.I,
         ),
         "verify": "exakt insertnamn mot officiell checklista för rätt år och produkt",

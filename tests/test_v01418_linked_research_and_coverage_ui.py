@@ -5,7 +5,7 @@ APP = Path("app.py").read_text(encoding="utf-8")
 
 
 def test_release_version_and_analysis_coverage_stages_are_visible():
-    assert 'APP_VERSION = "v0.14.24"' in APP
+    assert 'APP_VERSION = "v0.14.25"' in APP
     assert '"Fysiska kortannonser"' in APP
     assert '"Snabbanalyserade"' in APP
     assert '"Djupanalyserade"' in APP
