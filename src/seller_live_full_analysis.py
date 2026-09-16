@@ -90,12 +90,14 @@ def full_analyze_live_seller_item(
     if total_cost is None:
         total_cost = _price(merged)
 
-    ebay_context = None
+    ebay_context = merged.get("ebay_active_context")
     try:
         client_id, client_secret = configured_credentials()
         identity = merged.get("exact_identity_gate_research_identity_fields") or {}
         query = exact_identity_query(identity) or _title(merged)
-        if client_id and client_secret:
+        if (ebay_context is None and not merged.get("asking_price_opportunity")
+                and client_id and client_secret
+                and all(identity.get(key) for key in ("player_name", "season", "set_name", "card_number"))):
             ebay_context = fetch_configured_ebay_active_context(query, identity)
     except Exception as exc:
         ebay_context = {"ok": False, "status": "FETCH_FAILED", "error": str(exc)}
@@ -120,6 +122,11 @@ def full_analyze_live_seller_item(
         label = "OTILLRÄCKLIGT UNDERLAG"
         reason = "Fullanalysen kan ännu inte verifiera tillräcklig identitet och marknadsevidens för köp."
 
+    asking = merged.get("asking_price_opportunity") or {}
+    if asking.get("possible_find") and not readiness["ready_for_find"]:
+        label = "MÖJLIGT FYND · BEGÄRDA PRISER"
+        reason = "Positiv möjlig marginal mot jämförbara annonserade priser. Försäljningspriset är inte verifierat med avslut."
+
     return {
         "ok": True,
         "label": label,
@@ -143,6 +150,7 @@ def full_analyze_live_seller_item(
         "deal_readiness": readiness,
         "ranking_confidence": ranking_confidence,
         "ebay_active_context": ebay_context,
+        "asking_price_opportunity": merged.get("asking_price_opportunity"),
         "seller_alias": seller_alias(merged),
         "seller_id": seller_id(merged),
         "seller_url": seller_url(merged),

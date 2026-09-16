@@ -36,6 +36,17 @@ def get_reusable_search(cache: dict | None, signature: str):
     debug = entry.get("debug")
     if not isinstance(results, list) or not isinstance(debug, dict):
         return None
+    from datetime import datetime, timezone
+    for result in results:
+        context = result.get("ebay_active_context") or {}
+        if not context:
+            continue
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(context["fetched_at"])).total_seconds()
+            if not 0 <= age < 900:
+                return None
+        except (KeyError, ValueError, TypeError):
+            return None
     return results, debug
 
 

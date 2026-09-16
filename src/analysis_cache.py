@@ -1,6 +1,7 @@
 import hashlib
 import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -8,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CACHE_PATH = BASE_DIR / "analysis_cache.json"
 
 CACHE_SCHEMA_VERSION = 2
-CACHE_MODEL_VERSION = "flip_v26_exact_premium_valuation"
+CACHE_MODEL_VERSION = "flip_v33_asking_price_opportunity"
 
 _memory_cache: Optional[Dict[str, Any]] = None
 
@@ -170,8 +171,18 @@ def get_cached_analysis(signature: str):
     if not entry:
         return None
 
+    result = entry.get("result")
+    context = (result or {}).get("ebay_active_context")
+    if context:
+        try:
+            fetched_at = datetime.fromisoformat(context["fetched_at"])
+            age = (datetime.now(timezone.utc) - fetched_at).total_seconds()
+            if not 0 <= age < 900:
+                return None
+        except (KeyError, ValueError, TypeError):
+            return None
     entry["last_accessed"] = _now_ts()
-    return entry.get("result")
+    return result
 
 
 def set_cached_analysis(signature: str, result: dict) -> None:

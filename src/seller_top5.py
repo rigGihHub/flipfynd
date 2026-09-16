@@ -146,6 +146,8 @@ def _seller_opportunity_rank_key(row: dict):
     economic_tier = 2 if deal >= 30 and profit > 0 else 1 if deal > 0 and profit >= 0 else 0
     opportunity_score = _seller_opportunity_score(row)
     return (
+        2 if seller_result_tier(row) == "FIND" else 1 if (row.get("asking_price_opportunity") or {}).get("possible_find") else 0,
+        _num((row.get("asking_price_opportunity") or {}).get("net_margin")),
         decision_tier,
         evidence_tier,
         economic_tier,
@@ -199,6 +201,8 @@ def _seller_presentation_label(row: dict) -> dict:
     decision = str(out.get("decision") or "SKIP").upper()
     if decision.startswith("KÖP") and assess_deal_readiness(out)["ready_for_find"]:
         out["label"] = "KÖP-KANDIDAT"
+    elif (out.get("asking_price_opportunity") or {}).get("possible_find"):
+        out["label"] = "MÖJLIGT FYND · BEGÄRDA PRISER"
     elif decision.startswith(("KÖP", "UNDERSÖK")):
         out["label"] = "VÄRT ATT UNDERSÖKA"
     else:
@@ -213,6 +217,8 @@ def seller_result_tier(row: dict) -> str:
     if decision.startswith("KÖP") and readiness["ready_for_find"]:
         return "FIND"
     if decision.startswith("KÖP"):
+        return "RESEARCH"
+    if (row.get("asking_price_opportunity") or {}).get("possible_find"):
         return "RESEARCH"
     merit = assess_seller_card_merit(row)
     if merit["eligible"] and (
@@ -416,23 +422,26 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     )
 
     all_quick_rows = list(quick.get("rows") or [])
+    from src.asking_price_opportunity import select_asking_price_research
+    asking_candidates = select_asking_price_research(all_quick_rows)
+    asking_keys = {_identity_key(row.get("source_item") or row) for row in asking_candidates}
     qualified_quick_rows = [
         row for row in (quick.get("rows") or [])
         if assess_seller_card_merit(row)["eligible"]
     ]
     merit_candidates = select_dynamic_seller_deep_rows(
-        qualified_quick_rows,
+        [row for row in qualified_quick_rows if _identity_key(row.get("source_item") or row) not in asking_keys],
         base_limit=max(int(full_limit or 8), 8),
         max_cap=20,
     )
     merit_keys = {_identity_key(row.get("source_item") or row) for row in merit_candidates}
     exploration_candidates = _select_hidden_find_exploration(
         all_quick_rows,
-        exclude_keys=merit_keys,
+        exclude_keys=merit_keys | asking_keys,
         slots=HIDDEN_FIND_EXPLORATION_SLOTS,
     )
-    merit_keep = max(0, 20 - len(exploration_candidates))
-    candidates = merit_candidates[:merit_keep] + exploration_candidates
+    merit_keep = max(0, 20 - len(exploration_candidates) - len(asking_candidates))
+    candidates = asking_candidates + merit_candidates[:merit_keep] + exploration_candidates
     candidate_limit = len(candidates)
     full_rows = []
     completed_full_keys = set()

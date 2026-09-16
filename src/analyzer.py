@@ -4209,7 +4209,7 @@ def analyze_item_full(
     strategy_mode="quick_flip",
     sport="hockey",
 ):
-    return analyze_core(
+    result = analyze_core(
         item,
         sport=sport,
         strategy_mode=strategy_mode,
@@ -4219,6 +4219,8 @@ def analyze_item_full(
         ),
         full=True,
     )
+    from src.asking_price_opportunity import attach_asking_price_opportunity
+    return attach_asking_price_opportunity({**item, **result})
 
 
 
