@@ -10,6 +10,21 @@ import re
 
 SIGNAL_FAMILIES = (
     {
+        "name": "football_named_chase",
+        "weight": 18,
+        "all_patterns": (
+            re.compile(r"\b(?:topps|uefa|ucl|ucc|premier\s+league)\b", re.I),
+            re.compile(
+                r"\b(?:helix|chrome\s+anime|european\s+tour|"
+                r"(?:berlin|munich|budapest)\s+at\s+night|triple\s+platinum|"
+                r"locked\s+in|ultra[- ]violet|veni\s+vidi\s+vici|"
+                r"radiating\s+rookies|mindgame|hype|mojo)\b",
+                re.I,
+            ),
+        ),
+        "verify": "exakt fotbollsinsert, år, produkt och odds/checklista mot officiell Topps-dokumentation",
+    },
+    {
         "name": "flagship_rookie_variant",
         "weight": 16,
         "all_patterns": (
