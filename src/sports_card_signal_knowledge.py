@@ -31,7 +31,8 @@ SIGNAL_FAMILIES = (
             re.compile(r"\byoung\s+guns?\b", re.I),
             re.compile(
                 r"\b(?:ud\s+canvas|canvas|exclusives?|high\s+gloss|clear\s+cut|"
-                r"outburst(?:\s+(?:silver|red|gold))?|retro)\b",
+                r"outburst(?:\s+(?:silver|red|gold))?|retro|"
+                r"french(?:\s+(?:variation|variant|parallel))?)\b",
                 re.I,
             ),
         ),
