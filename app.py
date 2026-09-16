@@ -123,7 +123,7 @@ from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.seller_live_full_analysis import full_analyze_live_seller_item
-from src.seller_top5 import build_seller_top5, seller_result_tier, seller_result_badge
+from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
@@ -305,7 +305,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.31"
+APP_VERSION = "v0.14.32"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6879,7 +6879,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             price = row.get("price")
             decision = str(row.get("decision") or "SKIP").upper()
             _row_tier = seller_result_tier(row)
-            badge = seller_result_badge(row)
+            # Reuse the final tier already computed above. A new named import
+            # can crash a hot deployment with an older loaded seller module.
+            if _row_tier == "FIND":
+                badge = "🟢 KÖP"
+            elif decision.startswith(("KÖP", "UNDERSÖK")):
+                badge = "🟡 Värt att undersöka"
+            else:
+                badge = "⚪ Kandidat · ej verifierad"
             if _row_tier == "FIND":
                 _find_rank += 1
                 _position_label = f"Fynd #{_find_rank}"
