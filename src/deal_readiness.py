@@ -1,6 +1,8 @@
 """Final evidence gate for presenting a card as an actionable find."""
 from __future__ import annotations
 
+from math import isfinite
+
 from src.card_listing_integrity import assess_listing_integrity
 
 
@@ -20,7 +22,17 @@ def assess_deal_readiness(row: dict) -> dict:
     )
     sold = int(_num(row.get("sold_comparable_count") or row.get("sold_comps")))
     valuation = _num(row.get("valuation_confidence_score") or row.get("valuation_confidence"))
-    risk = _num(row.get("risk_score"), 50)
+    # Older compact seller rows omitted risk. Recover it from the original
+    # analysis, but never turn absent/invalid evidence into a passing default.
+    source = row.get("source_item") or {}
+    risk_values = [item.get("risk_score") for item in (row, source)
+                   if item.get("risk_score") not in (None, "")]
+    parsed_risks = [_num(value, float("nan")) for value in risk_values]
+    risk_verified = bool(parsed_risks) and all(
+        not isinstance(value, bool) and isfinite(parsed) and 0 <= parsed <= 100
+        for value, parsed in zip(risk_values, parsed_risks)
+    )
+    risk = max(parsed_risks) if risk_verified else None
     integrity = assess_listing_integrity(row.get("source_item") or row)
     blockers = []
     if not decision.startswith("KÖP"):
@@ -31,8 +43,12 @@ def assess_deal_readiness(row: dict) -> dict:
         blockers.append("verifierade SOLD-comps saknas")
     if valuation < 55:
         blockers.append("värderingssäkerheten är under 55/100")
-    if risk > 65:
+    if not risk_verified:
+        blockers.append("köprisken är inte verifierad")
+    elif risk > 65:
         blockers.append("köprisken är för hög")
+    if row.get("analysis_level") == "quick_fallback":
+        blockers.append("djupanalys återstår")
     if not integrity["eligible_physical_single_card"]:
         blockers.append("annonsen är inte ett verifierbart fysiskt singelkort")
     if integrity["reprint_risk"]:

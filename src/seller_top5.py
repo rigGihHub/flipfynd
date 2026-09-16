@@ -197,9 +197,9 @@ def _quick_rank_key(row: dict):
 def _seller_presentation_label(row: dict) -> dict:
     out = dict(row)
     decision = str(out.get("decision") or "SKIP").upper()
-    if decision.startswith("KÖP"):
+    if decision.startswith("KÖP") and assess_deal_readiness(out)["ready_for_find"]:
         out["label"] = "KÖP-KANDIDAT"
-    elif decision.startswith("UNDERSÖK"):
+    elif decision.startswith(("KÖP", "UNDERSÖK")):
         out["label"] = "VÄRT ATT UNDERSÖKA"
     else:
         out["label"] = "BÄST AV RESTEN"
@@ -222,6 +222,15 @@ def seller_result_tier(row: dict) -> str:
     ):
         return "RESEARCH"
     return "WEAK"
+
+
+def seller_result_badge(row: dict) -> str:
+    """Use the same final evidence gate for the badge and the find section."""
+    if seller_result_tier(row) == "FIND":
+        return "🟢 KÖP"
+    if str(row.get("decision") or "").upper().startswith(("KÖP", "UNDERSÖK")):
+        return "🟡 Värt att undersöka"
+    return "⚪ Kandidat · ej verifierad"
 
 
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str, quick_limit: int, progress_callback=None) -> dict:

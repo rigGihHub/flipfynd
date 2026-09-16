@@ -8,6 +8,7 @@ def test_full_analysis_uses_normal_full_pipeline_and_preserves_buy():
         calls.append(kwargs)
         return {
             "beslut": "KÖP",
+            "risk_score": 35,
             "exact_identity_gate_supports_exact_comp_search": True,
             "exact_identity_gate_score": 91,
             "sold_comparable_count": 3,

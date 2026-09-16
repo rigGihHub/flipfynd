@@ -28,7 +28,7 @@ def test_numbered_match_attax_can_be_researched_but_is_not_automatically_a_find(
 
 
 def test_verified_buy_remains_a_find():
-    row = {"title": "Connor McDavid Young Guns Rookie", "decision": "KÖP", "identity_ok": True, "sold_comps": 3, "valuation_confidence": 72}
+    row = {"title": "Connor McDavid Young Guns Rookie", "decision": "KÖP", "identity_ok": True, "sold_comps": 3, "valuation_confidence": 72, "risk_score": 35}
     assert seller_result_tier(row) == "FIND"
 
 

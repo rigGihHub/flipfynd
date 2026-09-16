@@ -12,6 +12,7 @@ from typing import Callable, Iterable
 from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
 from src.comp_source_intelligence import exact_identity_query
 from src.ebay_browse_context import configured_credentials, fetch_configured_ebay_active_context
+from src.deal_readiness import assess_deal_readiness
 
 
 def _num(value, default=0.0):
@@ -99,9 +100,13 @@ def full_analyze_live_seller_item(
     except Exception as exc:
         ebay_context = {"ok": False, "status": "FETCH_FAILED", "error": str(exc)}
 
-    if decision_upper.startswith("KÖP"):
+    readiness = assess_deal_readiness(merged)
+    if decision_upper.startswith("KÖP") and readiness["ready_for_find"]:
         label = "KÖP-KANDIDAT"
         reason = "Fullanalysen gav köpsignal. Kontrollera annonsen och samfrakten innan du agerar."
+    elif decision_upper.startswith("KÖP"):
+        label = "VÄRT ATT UNDERSÖKA"
+        reason = "Inte köpklar: " + " · ".join(readiness["blockers"])
     elif decision_upper.startswith("UNDERSÖK"):
         label = "VÄRT ATT UNDERSÖKA"
         reason = "Den ordinarie analysmotorn prioriterar kortet för vidare kontroll, men köpkraven är inte verifierade."
@@ -134,6 +139,8 @@ def full_analyze_live_seller_item(
         "rank_score": rank_score,
         "player_market_score": player_market_score,
         "risk_adjusted_profit": risk_adjusted_profit,
+        "risk_score": merged.get("risk_score"),
+        "deal_readiness": readiness,
         "ranking_confidence": ranking_confidence,
         "ebay_active_context": ebay_context,
         "seller_alias": seller_alias(merged),
