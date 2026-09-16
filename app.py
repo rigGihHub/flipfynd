@@ -304,7 +304,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.34"
+APP_VERSION = "v0.14.35"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -2045,15 +2045,21 @@ if run:
     progress = st.progress(12, text="Förbereder annonser…")
     status.write("2/3 • Analyserar kort, efterfrågan, risk, comps och möjlig vinst. Det kan ta en stund om många annonser ska bedömas.")
     progress.progress(35, text="Analyserar och rankar fynd…")
-    current_run_signature = build_search_run_signature(
-        data_version=get_data_version(), app_version=APP_VERSION, sport=sport,
-        search=effective_search, max_price=max_price, sale_type=sale_type,
-        strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
-        auto_only=auto_only,
-        include_older=include_older,
-    )
-    reusable = get_reusable_search(st.session_state.get("result_cache"), current_run_signature)
     try:
+        # A running Streamlit process may retain the pre-v0.14.34 helper.
+        # Encode scope in an existing argument, so both signatures work and
+        # latest-only results can never be reused for an archive search.
+        scoped_data_version = json.dumps(
+            [get_data_version(), "archive" if include_older else "latest"],
+            separators=(",", ":"),
+        )
+        current_run_signature = build_search_run_signature(
+            data_version=scoped_data_version, app_version=APP_VERSION, sport=sport,
+            search=effective_search, max_price=max_price, sale_type=sale_type,
+            strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
+            auto_only=auto_only,
+        )
+        reusable = get_reusable_search(st.session_state.get("result_cache"), current_run_signature)
         if reusable:
             results, debug = reusable
             debug = dict(debug)

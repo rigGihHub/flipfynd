@@ -11,5 +11,5 @@ def test_seller_deep_analysis_can_select_twenty_credible_candidates():
 def test_app_and_seller_workflow_use_release_limit():
     app = Path("app.py").read_text(encoding="utf-8")
     seller = Path("src/seller_top5.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "v0.14.34"' in app
+    assert 'APP_VERSION = "v0.14.35"' in app
     assert "max_cap=20" in seller
