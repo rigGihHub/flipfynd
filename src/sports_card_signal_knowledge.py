@@ -54,6 +54,18 @@ SIGNAL_FAMILIES = (
         "verify": "Population Count-program, tier, PC-kortnummer, år och spelare mot officiell Upper Deck-checklista",
     },
     {
+        "name": "upper_deck_program_of_excellence",
+        "weight": 18,
+        "all_patterns": (
+            re.compile(r"\bprogram\s+of\s+excellence\b", re.I),
+            re.compile(
+                r"\b(?:upper\s+deck|ud\s+canvas|canvas|c-?\s*(?:25[6-9]|26\d|270))\b",
+                re.I,
+            ),
+        ),
+        "verify": "UD Canvas Program of Excellence, år, C-kortnummer, spelare och eventuell Black & White-variant mot officiell Upper Deck-checklista",
+    },
+    {
         "name": "named_chase_insert",
         "weight": 16,
         "pattern": re.compile(
