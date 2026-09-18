@@ -1676,8 +1676,9 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-20260918-1"
         scoped_data_version = json.dumps(
-            [get_data_version(), "archive" if include_older else "latest"],
+            [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
         )
         current_run_signature = build_search_run_signature(
@@ -1743,17 +1744,18 @@ if run:
                 except Exception:
                     active_job = None
             if active_job:
-                st.session_state["active_search_job_id"] = active_job["job_id"]
-                status.update(
-                    label="⏳ Analysen fortsätter i bakgrunden",
-                    state="running", expanded=False,
-                )
-                progress.progress(
-                    int(active_job.get("progress") or 1),
-                    text="Bakgrundsanalys köad – du kan lämna appen.",
-                )
-                st.info("Sökningen är sparad som bakgrundsjobb. Du kan byta app och komma tillbaka senare utan att starta om sökningen.")
-                st.stop()
+                # Until a separate worker is deployed, QUEUED jobs would make
+                # the user wait forever and show no result. Only hand off when
+                # a worker has actually claimed the job.
+                if str(active_job.get("status") or "") == "RUNNING":
+                    st.session_state["active_search_job_id"] = active_job["job_id"]
+                    status.update(label="⏳ Analysen fortsätter i bakgrunden", state="running", expanded=False)
+                    progress.progress(int(active_job.get("progress") or 1), text="Bakgrundsanalys pågår – du kan lämna appen.")
+                    st.info("Bakgrundsanalysen är aktiv. Du kan byta app och komma tillbaka senare.")
+                    st.stop()
+                # No worker has claimed it: run synchronously now so Hitta fynd
+                # always produces a result instead of silently parking in QUEUED.
+                active_job = None
             results, debug = analyze_data(
                 data=data, sport=sport, search=effective_search,
                 max_price=max_price, sale_type=sale_type, full_limit=full_limit,
