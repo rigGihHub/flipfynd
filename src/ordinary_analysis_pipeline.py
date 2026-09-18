@@ -1,7 +1,7 @@
 """Shared ordinary analysis pipeline used by UI and background worker."""
 from __future__ import annotations
 import time
-from src.ordinary_analysis_engine import prepare_market_data, sport_market_items, item_matches_search, get_seller, detect_sale_type, is_numbered, is_patch, is_auto, fast_analysis
+import src.ordinary_analysis_engine as ordinary_engine
 from src.analyzer import analyze_item
 from src.analysis_cache import build_analysis_signature, get_cached_analysis, set_cached_analysis
 from src.fast_analysis_pool import select_fast_analysis_pool
@@ -38,7 +38,7 @@ def analyze_data(
     raw_total_items = len(data)
     # Keep interactive analysis bounded even if an older cloud runtime still
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
-    market_data, data = prepare_market_data(data, include_older=include_older)
+    market_data, data = ordinary_engine.prepare_market_data(data, include_older=include_older)
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -65,7 +65,7 @@ def analyze_data(
     data_version = str(data_version or "worker")
 
     # Comps ska alltid komma från samma sport som objektet som analyseras.
-    sport_items, market_items = sport_market_items(
+    sport_items, market_items = ordinary_engine.sport_market_items(
         market_data, sold_comp_data or [], sport
     )
 
@@ -74,7 +74,7 @@ def analyze_data(
     # informed buyers may find more easily than the wider market.
     seller_rows = {}
     for row in sport_items:
-        seller = get_seller(row)
+        seller = ordinary_engine.get_seller(row)
         if seller == "Okänd":
             continue
         title = str(row.get("titel") or row.get("title") or "").strip().lower()
@@ -84,7 +84,7 @@ def analyze_data(
         bucket["count"] += 1
         bucket["generic"] += int(generic)
     for row in sport_items + data:
-        seller = get_seller(row)
+        seller = ordinary_engine.get_seller(row)
         stats = seller_rows.get(seller)
         if stats:
             row["seller_listing_count"] = stats["count"]
@@ -138,7 +138,7 @@ def analyze_data(
 
         debug["within_budget"] += 1
 
-        if not item_matches_search(item, search):
+        if not ordinary_engine.item_matches_search(item, search):
             debug["search_miss"] += 1
             continue
 
@@ -147,7 +147,7 @@ def analyze_data(
         # Cheap filters must run before any card analysis. This makes a changed
         # checkbox/filter almost instant instead of re-analysing hundreds of
         # listings that will be discarded anyway.
-        direct_sale_type = detect_sale_type(item)
+        direct_sale_type = ordinary_engine.detect_sale_type(item)
 
         if (
             sale_type == "Endast auktioner" and direct_sale_type != "Auktion"
@@ -160,9 +160,9 @@ def analyze_data(
         debug["after_sale_type"] += 1
 
         if (
-            (numbered_only and not is_numbered(item))
-            or (patch_only and not is_patch(item))
-            or (auto_only and not is_auto(item))
+            (numbered_only and not ordinary_engine.is_numbered(item))
+            or (patch_only and not ordinary_engine.is_patch(item))
+            or (auto_only and not ordinary_engine.is_auto(item))
         ):
             debug["feature_filter_miss"] += 1
             continue
@@ -191,7 +191,7 @@ def analyze_data(
 
     fast_started = time.perf_counter()
     for item in fast_pool_source:
-        fast = _cached_fast_analysis(
+        fast = _cached_ordinary_engine.fast_analysis(
             _fast_signature(item, sport, strategy),
             item,
             sport,
