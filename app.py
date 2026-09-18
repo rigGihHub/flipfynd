@@ -1659,10 +1659,22 @@ with st.form("analysis_form"):
 if clear_main_search:
     st.session_state["results"] = None
     st.session_state["debug"] = None
-    st.session_state["result_cache"] = None
+    st.session_state["result_cache"] = {}
     st.session_state.pop("active_search_job_id", None)
     st.session_state.pop("results_data_version", None)
-    st.success("Huvudsökningen är rensad. Nästa Hitta fynd körs med aktuell version.")
+    # "Rensa huvudsökning" means a genuinely fresh market search, not merely
+    # hiding the old result cards. Remove the loaded listing snapshot as well.
+    try:
+        clear_all_loaded_data()
+    except Exception:
+        pass
+    try:
+        get_data.clear()
+    except Exception:
+        pass
+    st.session_state["fetch_status"] = "idle"
+    st.session_state["fetch_last_message"] = ""
+    st.success("Huvudsökningen och inlästa annonser är rensade. Hämta nya annonser innan nästa Hitta fynd.")
     st.rerun()
 
 
