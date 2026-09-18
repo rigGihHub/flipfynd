@@ -40,7 +40,6 @@ def analyze_data(
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
     # Keep the deployed pipeline self-contained while Streamlit may retain
     # an older imported engine module across hot reloads.
-    from src.latest_market import latest_analysis_items
     rows = list(data or [])
     # Self-contained bounded preparation: avoid any hot-reloaded fetcher module
     # attributes in the interactive analysis path.
@@ -54,7 +53,10 @@ def analyze_data(
                 bucket.append(row)
         return [row for bucket in buckets.values() for row in bucket]
     market_data = _bounded(rows)
-    data = _bounded(rows if include_older else latest_analysis_items(rows))
+    # Stability first: do not depend on a separately hot-reloaded latest-market
+    # module in the interactive path. The saved dataset is already newest-first;
+    # bounded per-category analysis keeps the CPU guard.
+    data = _bounded(rows)
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),
