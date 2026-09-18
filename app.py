@@ -1631,7 +1631,9 @@ with st.form("analysis_form"):
             auto_only = st.checkbox("Endast autograf", value=False)
 
     # Intern prestandaparameter: användaren ska inte behöva förstå den.
-    full_limit = 12
+    # Keep the interactive Streamlit request bounded. The background worker
+    # can use a wider deep pass once deployed.
+    full_limit = 8
 
     _find_disabled = (not _has_data) or _flow_fetching
     if _flow_fetching:
@@ -2271,6 +2273,30 @@ if st.session_state.get("results") is not None:
             if decision_tiers.get("rows"):
                 st.markdown("### 🏆 Topp 5 i den här sökningen")
                 top_rows = list(decision_tiers.get("rows") or [])[:5]
+                # Presentation fallback: SOLD evidence controls confidence/BUY,
+                # not whether an analysed candidate is allowed to appear.
+                if len(top_rows) < 5:
+                    seen = {str(r.get("url") or r.get("title") or "") for r in top_rows}
+                    for source in list(results or []):
+                        if len(top_rows) >= 5:
+                            break
+                        key = str(source.get("lank") or source.get("url") or source.get("titel") or source.get("title") or "")
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        top_rows.append({
+                            "title": source.get("titel") or source.get("title") or "Okänt kort",
+                            "url": source.get("lank") or source.get("url"),
+                            "tier": "REMAINDER",
+                            "decision": "UNDERSÖK",
+                            "total_cost": source.get("analysis_total_cost") or source.get("total_cost"),
+                            "market_value": None,
+                            "potential": source.get("deal_score") or source.get("rank_score") or 0,
+                            "certainty": source.get("ranking_confidence_score") or source.get("deal_confidence_score") or 0,
+                            "sold_comps": source.get("sold_comparable_count") or 0,
+                            "primary_blocker": "Marknadsvärde/SOLD ännu inte verifierat",
+                            "_source_item": source,
+                        })
                 tier_labels = {
                     "VERIFIED": "Verifierat fynd",
                     "PROMISING": "Lovande · kontrollera",
