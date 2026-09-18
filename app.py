@@ -702,7 +702,7 @@ def matches_search(
     )
 
 
-def ordinary_engine.item_matches_search(item, search):
+def item_matches_search(item, search):
     return (
         matches_search(
             item.get(
@@ -731,7 +731,7 @@ def normalize_sport_category_search(search, sport):
     return "" if normalized in aliases.get(str(sport or "").casefold(), set()) else search
 
 
-def ordinary_engine.infer_item_sport(item):
+def infer_item_sport(item):
     source = (
         str(
             item.get(
