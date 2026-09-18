@@ -145,15 +145,24 @@ def _seller_opportunity_rank_key(row: dict):
     profit = _num(row.get("risk_adjusted_profit"))
     economic_tier = 2 if deal >= 30 and profit > 0 else 1 if deal > 0 and profit >= 0 else 0
     opportunity_score = _seller_opportunity_score(row)
+    asking = row.get("asking_price_opportunity") or {}
+    asking_find = bool(asking.get("possible_find"))
+    readiness = assess_deal_readiness(row)
+    verified_find = decision.startswith("KÖP") and readiness["ready_for_find"]
+    verified_economics = bool(row.get("identity_ok")) and sold > 0 and profit > 0
+    research = seller_result_tier(row) == "RESEARCH"
+    # Active asking prices are discovery evidence. They may surface a candidate,
+    # but they must not outrank SOLD-backed positive economics.
+    tier = 4 if verified_find else 3 if verified_economics else 2 if asking_find else 1 if research else 0
     return (
-        2 if seller_result_tier(row) == "FIND" else 1 if (row.get("asking_price_opportunity") or {}).get("possible_find") else 0,
-        _num((row.get("asking_price_opportunity") or {}).get("net_margin")),
-        decision_tier,
+        tier,
+        profit if verified_economics else 0.0,
         evidence_tier,
         economic_tier,
+        decision_tier,
+        _num(asking.get("net_margin")) if asking_find else 0.0,
         opportunity_score,
         deal,
-        profit,
         merit["score"],
         _num(row.get("rank_score")),
         _num(row.get("player_market_score")),
@@ -485,7 +494,12 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(presentable_full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     selected_opportunities = {_card_opportunity_key(row) for row in selected}
-    for qrow in qualified_quick_rows:
+    # Fill from all valid quick-analysis rows when fewer than five stronger
+    # candidates survive. Fillers remain explicitly non-verified.
+    fallback_pool = qualified_quick_rows + [
+        row for row in all_quick_rows if row not in qualified_quick_rows
+    ]
+    for qrow in fallback_pool:
         if len(selected) >= 5:
             break
         source = qrow.get("source_item") or {}
