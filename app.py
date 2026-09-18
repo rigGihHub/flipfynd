@@ -705,10 +705,7 @@ def matches_search(
     )
 
 
-def item_matches_search(
-    item,
-    search,
-):
+def shared_item_matches_search(item, search):
     return (
         matches_search(
             item.get(
@@ -737,7 +734,7 @@ def normalize_sport_category_search(search, sport):
     return "" if normalized in aliases.get(str(sport or "").casefold(), set()) else search
 
 
-def infer_item_sport(item):
+def shared_infer_item_sport(item):
     source = (
         str(
             item.get(
@@ -1145,12 +1142,12 @@ def analyze_data(
     sport_items = [
         item for item in market_data
         if isinstance(item, dict)
-        and (infer_item_sport(item) in {None, sport})
+        and (shared_infer_item_sport(item) in {None, sport})
     ]
     sold_comp_items = [
         item for item in get_sold_comp_data()
         if isinstance(item, dict)
-        and (infer_item_sport(item) in {None, sport})
+        and (shared_infer_item_sport(item) in {None, sport})
     ]
     market_items = sport_items + sold_comp_items
 
@@ -1159,7 +1156,7 @@ def analyze_data(
     # informed buyers may find more easily than the wider market.
     seller_rows = {}
     for row in sport_items:
-        seller = get_seller(row)
+        seller = shared_get_seller(row)
         if seller == "Okänd":
             continue
         title = str(row.get("titel") or row.get("title") or "").strip().lower()
@@ -1169,7 +1166,7 @@ def analyze_data(
         bucket["count"] += 1
         bucket["generic"] += int(generic)
     for row in sport_items + data:
-        seller = get_seller(row)
+        seller = shared_get_seller(row)
         stats = seller_rows.get(seller)
         if stats:
             row["seller_listing_count"] = stats["count"]
@@ -2140,7 +2137,7 @@ def render_same_seller_button(item: dict, key: str) -> None:
 
                 quick_key = f"seller_inventory_quick_{key}_{seller}"
                 if st.button("⚡ Snabbanalysera säljarens livekort", key=quick_key, use_container_width=True):
-                    anchor_sport = infer_item_sport(item) or "hockey"
+                    anchor_sport = shared_infer_item_sport(item) or "hockey"
                     with st.spinner("Snabbanalyserar säljarens mest lovande kort…"):
                         quick = quick_analyze_seller_inventory(
                             item,
@@ -2173,7 +2170,7 @@ def render_same_seller_button(item: dict, key: str) -> None:
                         with action_cols[0]:
                             full_key = f"seller_quick_full_{key}_{qidx}"
                             if st.button("🔬 Fullanalysera", key=full_key, use_container_width=True):
-                                anchor_sport = infer_item_sport(item) or "hockey"
+                                anchor_sport = shared_infer_item_sport(item) or "hockey"
                                 with st.spinner("Kör full FlipFynd-analys av kortet…"):
                                     try:
                                         full_result = full_analyze_live_seller_item(
