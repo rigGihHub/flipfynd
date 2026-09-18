@@ -51,6 +51,41 @@ def get_seller(item):
     return "Okänd"
 
 
+def detect_sale_type(item):
+    text=" ".join(str(item.get(k) or "") for k in ("sale_type","raw_text","titel","title")).casefold()
+    explicit=str(item.get("sale_type") or "").casefold()
+    if "auktion" in explicit:
+        return "Auktion"
+    if "köp nu" in explicit or "buy it now" in explicit:
+        return "Köp nu"
+    if "köp nu" in text:
+        return "Köp nu"
+    if "utropspris" in text or "ledande bud" in text or " bud" in text:
+        return "Auktion"
+    return "Okänd"
+
+
+def _feature_text(item):
+    return " ".join(str(item.get(k) or "") for k in ("titel","title","raw_text","full_description")).casefold()
+
+
+def is_numbered(item):
+    text=_feature_text(item)
+    return bool(re.search(r"(?<!\d)\d{1,4}\s*/\s*\d{1,4}(?!\d)|\b(?:numbered|numrerad)\b",text))
+
+
+def is_patch(item):
+    text=_feature_text(item)
+    return bool(re.search(r"\b(?:patch|relic|memorabilia|jersey|game[- ]used|player[- ]worn)\b",text))
+
+
+def is_auto(item):
+    text=_feature_text(item)
+    if re.search(r"\b(?:facsimile|printed|pre[- ]?printed|signature style)\b",text):
+        return False
+    return bool(re.search(r"\b(?:auto|autograph|autographed|hard[- ]signed|on[- ]card)\b",text))
+
+
 def fast_signature(item, sport, strategy):
     payload={
         "url":item.get("url") or item.get("link"),
@@ -66,4 +101,4 @@ def fast_analysis(item, sport, strategy):
     return analyze_item(item,mode="fast",strategy_mode=strategy,sport=sport)
 
 
-__all__=["normalize_text","matches_search","item_matches_search","infer_item_sport","get_seller","fast_signature","fast_analysis"]
+__all__=["normalize_text","matches_search","item_matches_search","infer_item_sport","get_seller","detect_sale_type","is_numbered","is_patch","is_auto","fast_signature","fast_analysis"]
