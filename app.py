@@ -1649,6 +1649,22 @@ with st.form("analysis_form"):
         ),
     )
 
+    clear_main_search = st.form_submit_button(
+        "🧹 Rensa huvudsökning",
+        use_container_width=True,
+        help="Rensar visade resultat och sessionscache. Nästa Hitta fynd körs med aktuell appversion.",
+    )
+
+
+if clear_main_search:
+    st.session_state["results"] = None
+    st.session_state["debug"] = None
+    st.session_state["result_cache"] = None
+    st.session_state.pop("active_search_job_id", None)
+    st.session_state.pop("results_data_version", None)
+    st.success("Huvudsökningen är rensad. Nästa Hitta fynd körs med aktuell version.")
+    st.rerun()
+
 
 if run:
     status = st.status("🔎 FlipFynd startar analysen…", expanded=True)
