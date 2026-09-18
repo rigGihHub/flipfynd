@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 from functools import lru_cache
+import hashlib
 import json
 import os
 import re
@@ -155,7 +156,61 @@ def _fetch_configured_cached(query, identity_json, cache_period):
     return fetch_ebay_active_context(query, identity=identity, client_id=client_id, client_secret=client_secret)
 
 
+def _persistent_cache_key(query, identity_json):
+    raw = f"{query}\n{identity_json}".encode("utf-8", errors="ignore")
+    return "ebay_active:" + hashlib.sha256(raw).hexdigest()
+
+
+def _persistent_get(key, max_age_seconds=900):
+    """Best-effort cross-session cache when Postgres is configured."""
+    try:
+        import psycopg
+        dsn = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+        if not dsn:
+            return None
+        with psycopg.connect(dsn) as conn:
+            conn.execute("""CREATE TABLE IF NOT EXISTS flipfynd_market_cache (
+                cache_key TEXT PRIMARY KEY, payload JSONB NOT NULL,
+                fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+            row = conn.execute(
+                """SELECT payload FROM flipfynd_market_cache
+                   WHERE cache_key=%s AND fetched_at > NOW() - (%s * INTERVAL '1 second')""",
+                (key, int(max_age_seconds)),
+            ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _persistent_put(key, payload):
+    try:
+        import psycopg
+        dsn = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+        if not dsn:
+            return
+        with psycopg.connect(dsn) as conn:
+            conn.execute("""CREATE TABLE IF NOT EXISTS flipfynd_market_cache (
+                cache_key TEXT PRIMARY KEY, payload JSONB NOT NULL,
+                fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+            conn.execute(
+                """INSERT INTO flipfynd_market_cache(cache_key,payload,fetched_at)
+                   VALUES (%s,%s::jsonb,NOW())
+                   ON CONFLICT(cache_key) DO UPDATE
+                   SET payload=EXCLUDED.payload,fetched_at=NOW()""",
+                (key, json.dumps(payload, ensure_ascii=False, default=str)),
+            )
+    except Exception:
+        pass
+
+
 def fetch_configured_ebay_active_context(query, identity=None):
-    """Cached production entrypoint so one rerun does not repeat API calls."""
+    """Cached entrypoint shared across reruns and, with Postgres, sessions."""
     identity_json = json.dumps(identity or {}, sort_keys=True, ensure_ascii=False, default=str)
-    return _fetch_configured_cached(query, identity_json, int(time.time() // 900))
+    key = _persistent_cache_key(query, identity_json)
+    cached = _persistent_get(key)
+    if cached is not None:
+        return cached
+    result = _fetch_configured_cached(query, identity_json, int(time.time() // 900))
+    if result.get("ok"):
+        _persistent_put(key, result)
+    return result
