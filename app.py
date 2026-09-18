@@ -1707,17 +1707,45 @@ if run:
             progress.progress(90, text="Återanvänder färdig analys…")
             status.write("2/3 • Samma annonser och filter är redan analyserade. Återanvänder det färdiga resultatet.")
         else:
+            # Queue the expensive analysis when durable jobs are available.
+            # A separate worker can then continue after browser disconnect.
+            active_job = None
+            if jobs_available():
+                try:
+                    active_job = latest_active_job(
+                        job_kind="ordinary_search", signature=current_run_signature
+                    )
+                    if not active_job:
+                        payload = build_ordinary_search_job_payload(
+                            sport=sport, search=effective_search, max_price=max_price,
+                            sale_type=sale_type, full_limit=full_limit, strategy=strategy,
+                            numbered_only=numbered_only, patch_only=patch_only,
+                            auto_only=auto_only, include_older=include_older,
+                            data_version=scoped_data_version, app_version=APP_VERSION,
+                        )
+                        active_job = create_job(
+                            job_kind="ordinary_search", payload=payload,
+                            signature=current_run_signature,
+                        )
+                except Exception:
+                    active_job = None
+            if active_job:
+                st.session_state["active_search_job_id"] = active_job["job_id"]
+                status.update(
+                    label="⏳ Analysen fortsätter i bakgrunden",
+                    state="running", expanded=False,
+                )
+                progress.progress(
+                    int(active_job.get("progress") or 1),
+                    text="Bakgrundsanalys köad – du kan lämna appen.",
+                )
+                st.info("Sökningen är sparad som bakgrundsjobb. Du kan byta app och komma tillbaka senare utan att starta om sökningen.")
+                st.stop()
             results, debug = analyze_data(
-                data=data,
-                sport=sport,
-                search=effective_search,
-                max_price=max_price,
-                sale_type=sale_type,
-                full_limit=full_limit,
-                strategy=strategy,
-                numbered_only=numbered_only,
-                patch_only=patch_only,
-                auto_only=auto_only,
+                data=data, sport=sport, search=effective_search,
+                max_price=max_price, sale_type=sale_type, full_limit=full_limit,
+                strategy=strategy, numbered_only=numbered_only,
+                patch_only=patch_only, auto_only=auto_only,
                 include_older=include_older,
             )
             debug["reused_completed_search"] = False
