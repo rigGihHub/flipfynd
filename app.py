@@ -1375,8 +1375,11 @@ else:
     _latest_fetch = format_last_fetch_time(_dataset_timestamp) if _dataset_timestamp else "Aldrig"
     _latest_label = "data senast ändrad" if _dataset_timestamp else "senast hämtat"
 
+# Legacy rows without a source category are not a usable market snapshot.
+# After "Rensa huvudsökning" they must not appear as 2 845 live listings.
+_visible_data = [item for item in data if infer_item_sport(item) in ("hockey", "football")]
 _sport_counts = {"hockey": 0, "football": 0, "unknown": 0}
-for _item in data:
+for _item in _visible_data:
     _sport = infer_item_sport(_item)
     if _sport in ("hockey", "football"):
         _sport_counts[_sport] += 1
@@ -1392,7 +1395,7 @@ if _sport_counts["unknown"]:
 
 st.caption(
     (
-        f"{len(data):,} annonser totalt • "
+        f"{len(_visible_data):,} annonser totalt • "
         + " • ".join(_count_parts)
         + f" • {_latest_label} {_latest_fetch}"
     ).replace(",", " ")
