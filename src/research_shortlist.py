@@ -80,6 +80,11 @@ def _score(item):
 
 
 def build_research_shortlist(items, limit=5):
+    """Always return the best available five when five titled items exist.
+
+    Research quality affects ordering and labels, not whether the user gets an
+    empty/one-card shortlist. Weak rows remain explicitly unverified.
+    """
     rows = []
     for item in items or []:
         title = _txt(item.get("titel") or item.get("title"))
@@ -105,6 +110,7 @@ def build_research_shortlist(items, limit=5):
             reasons.append("har en discovery-signal värd att kontrollera")
         rows.append({
             "title": title,
+            "label": "MÖJLIGT FYND" if (identity_ready and sold > 0 and _n(item.get("risk_adjusted_profit")) > 0) else "BÄST AV RESTEN · EJ VERIFIERAT",
             "url": item.get("lank") or item.get("url"),
             "player_key": _player_key(item),
             "score": _score(item),
