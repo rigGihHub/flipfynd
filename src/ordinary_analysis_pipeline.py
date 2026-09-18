@@ -38,7 +38,14 @@ def analyze_data(
     raw_total_items = len(data)
     # Keep interactive analysis bounded even if an older cloud runtime still
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
-    market_data, data = ordinary_engine.prepare_market_data(data, include_older=include_older)
+    # Compatibility fallback for mixed Streamlit deploys where app.py may
+    # update before ordinary_analysis_engine.py.
+    if hasattr(ordinary_engine, "prepare_market_data"):
+        market_data, data = ordinary_engine.prepare_market_data(data, include_older=include_older)
+    else:
+        rows = list(data or [])
+        market_data = rows
+        data = rows if include_older else rows
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -65,9 +72,16 @@ def analyze_data(
     data_version = str(data_version or "worker")
 
     # Comps ska alltid komma från samma sport som objektet som analyseras.
-    sport_items, market_items = ordinary_engine.sport_market_items(
-        market_data, sold_comp_data or [], sport
-    )
+    if hasattr(ordinary_engine, "sport_market_items"):
+        sport_items, market_items = ordinary_engine.sport_market_items(
+            market_data, sold_comp_data or [], sport
+        )
+    else:
+        sport_items = [item for item in market_data if isinstance(item, dict)
+                       and ordinary_engine.infer_item_sport(item) in {None, sport}]
+        sold_items = [item for item in (sold_comp_data or []) if isinstance(item, dict)
+                      and ordinary_engine.infer_item_sport(item) in {None, sport}]
+        market_items = sport_items + sold_items
 
     # Seller presentation context: only descriptive metadata. It must never
     # create a valuation. A high generic-title ratio can reveal listings that
