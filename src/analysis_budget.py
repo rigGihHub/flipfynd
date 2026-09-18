@@ -27,7 +27,13 @@ def fast_analysis_budget(total_candidates: int, *, context: str = "ordinary") ->
     # Grow gently for larger inventories, then stop.  Candidate selection still
     # sees the entire inventory before this budget is applied.
     scaled = floor + round((total - floor) ** 0.5 * (6.0 if context == "ordinary" else 2.5))
-    return min(total, ceiling, max(floor, scaled))
+    budget = min(total, ceiling, max(floor, scaled))
+    # A broad search must not claim exhaustive "no finds" semantics after
+    # inspecting only a tiny slice. Keep a meaningful minimum coverage ratio
+    # until the hard ceiling is reached.
+    if context == "ordinary":
+        budget = min(total, ceiling, max(budget, round(total * 0.20)))
+    return budget
 
 
 __all__ = ["fast_analysis_budget"]
