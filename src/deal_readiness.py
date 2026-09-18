@@ -43,6 +43,17 @@ def assess_deal_readiness(row: dict) -> dict:
         blockers.append("verifierade SOLD-comps saknas")
     if valuation < 55:
         blockers.append("värderingssäkerheten är under 55/100")
+    # A find must actually make money after the model's risk adjustment.
+    # Famous players, scarcity and a BUY label can never compensate for a
+    # non-positive resale case.
+    profit = _num(
+        row.get("risk_adjusted_profit")
+        if row.get("risk_adjusted_profit") not in (None, "")
+        else row.get("net_profit_estimate") or row.get("net_profit"),
+        0.0,
+    )
+    if profit <= 0:
+        blockers.append("beräknad nettovinst är inte positiv")
     if not risk_verified:
         blockers.append("köprisken är inte verifierad")
     elif risk > 65:
@@ -61,4 +72,5 @@ def assess_deal_readiness(row: dict) -> dict:
         "sold_comparable_count": sold,
         "valuation_confidence_score": valuation,
         "risk_score": risk,
+        "verified_net_profit": profit,
     }
