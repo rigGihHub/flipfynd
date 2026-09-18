@@ -39,17 +39,21 @@ def analyze_data(
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
     # Keep the deployed pipeline self-contained while Streamlit may retain
     # an older imported engine module across hot reloads.
-    from src import tradera_fetcher as _pipeline_fetcher
-    from src.fetcher_compat import build_fetcher_api
     from src.latest_market import latest_analysis_items
-    _api = build_fetcher_api(_pipeline_fetcher)
     rows = list(data or [])
-    cap = _api.MAX_ACTIVE_ITEMS_PER_CATEGORY
-    market_data = _api.prune_active_items(rows, max_per_category=cap)
-    data = _api.prune_active_items(
-        rows if include_older else latest_analysis_items(rows),
-        max_per_category=cap,
-    )
+    # Self-contained bounded preparation: avoid any hot-reloaded fetcher module
+    # attributes in the interactive analysis path.
+    cap = 1500
+    def _bounded(source):
+        buckets = {}
+        for row in source:
+            key = str((row or {}).get("source_category") or "unknown")
+            bucket = buckets.setdefault(key, [])
+            if len(bucket) < cap:
+                bucket.append(row)
+        return [row for bucket in buckets.values() for row in bucket]
+    market_data = _bounded(rows)
+    data = _bounded(rows if include_older else latest_analysis_items(rows))
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),
