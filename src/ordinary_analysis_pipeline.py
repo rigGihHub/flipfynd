@@ -40,12 +40,16 @@ def analyze_data(
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
     # Compatibility fallback for mixed Streamlit deploys where app.py may
     # update before ordinary_analysis_engine.py.
-    if hasattr(ordinary_engine, "prepare_market_data"):
-        market_data, data = ordinary_engine.prepare_market_data(data, include_older=include_older)
+    try:
+        prepare_fn = getattr(ordinary_engine, "prepare_market_data", None)
+    except Exception:
+        prepare_fn = None
+    if callable(prepare_fn):
+        market_data, data = prepare_fn(data, include_older=include_older)
     else:
         rows = list(data or [])
         market_data = rows
-        data = rows if include_older else rows
+        data = rows
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -72,8 +76,12 @@ def analyze_data(
     data_version = str(data_version or "worker")
 
     # Comps ska alltid komma från samma sport som objektet som analyseras.
-    if hasattr(ordinary_engine, "sport_market_items"):
-        sport_items, market_items = ordinary_engine.sport_market_items(
+    try:
+        sport_items_fn = getattr(ordinary_engine, "sport_market_items", None)
+    except Exception:
+        sport_items_fn = None
+    if callable(sport_items_fn):
+        sport_items, market_items = sport_items_fn(
             market_data, sold_comp_data or [], sport
         )
     else:
