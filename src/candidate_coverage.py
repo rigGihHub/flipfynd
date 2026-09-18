@@ -50,6 +50,14 @@ def _coverage_tags(item, fast, attention, price_median, demand_median):
     if _num((attention or {}).get("score")) > 0:
         tags.append("market-attention")
 
+    # Cheap acquisition cost is itself worth coverage: a small resale price can
+    # still produce a valid FlipFynd profit. This tag only earns analysis
+    # coverage; it never creates value or a BUY decision.
+    shipping = _num((item or {}).get("shipping") or (item or {}).get("frakt"), 0)
+    total_cost = price + max(0, shipping) if price >= 0 else -1
+    if total_cost >= 0 and price_median is not None and total_cost <= price_median:
+        tags.append("cheap-economic-probe")
+
     return tags
 
 
@@ -58,8 +66,8 @@ def diversify_full_analysis_indices(
     selected_indices,
     *,
     base_limit=12,
-    hard_cap=30,
-    coverage_slots=6,
+    hard_cap=60,
+    coverage_slots=16,
     max_per_player=3,
 ):
     """Reserve tail slots for distinct evidence profiles.
