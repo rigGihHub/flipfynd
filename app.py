@@ -125,6 +125,10 @@ from src.ordinary_analysis_engine import (
     get_seller as shared_get_seller,
     fast_signature as shared_fast_signature,
     fast_analysis as shared_fast_analysis,
+    detect_sale_type as shared_detect_sale_type,
+    is_numbered as shared_is_numbered,
+    is_patch as shared_is_patch,
+    is_auto as shared_is_auto,
 )
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
@@ -1229,10 +1233,7 @@ def analyze_data(
         # Cheap filters must run before any card analysis. This makes a changed
         # checkbox/filter almost instant instead of re-analysing hundreds of
         # listings that will be discarded anyway.
-        direct_sale_type = _FETCHER.detect_sale_type(item) if hasattr(_FETCHER, "detect_sale_type") else None
-        if not direct_sale_type:
-            text = str(item.get("raw_text") or "").casefold()
-            direct_sale_type = "Köp nu" if "köp nu" in text else ("Auktion" if ("utropspris" in text or "ledande bud" in text or " bud" in text) else "Okänd")
+        direct_sale_type = shared_detect_sale_type(item)
 
         if (
             sale_type == "Endast auktioner" and direct_sale_type != "Auktion"
@@ -1245,9 +1246,9 @@ def analyze_data(
         debug["after_sale_type"] += 1
 
         if (
-            (numbered_only and not is_numbered(item))
-            or (patch_only and not is_patch(item))
-            or (auto_only and not is_auto(item))
+            (numbered_only and not shared_is_numbered(item))
+            or (patch_only and not shared_is_patch(item))
+            or (auto_only and not shared_is_auto(item))
         ):
             debug["feature_filter_miss"] += 1
             continue
