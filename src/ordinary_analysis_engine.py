@@ -10,6 +10,12 @@ import json
 import re
 
 from src.analyzer import analyze_item
+from src import tradera_fetcher as _tradera_fetcher
+from src.fetcher_compat import build_fetcher_api
+from src.latest_market import latest_analysis_items
+
+_FETCHER = build_fetcher_api(_tradera_fetcher)
+MAX_ACTIVE_ITEMS_PER_CATEGORY = _FETCHER.MAX_ACTIVE_ITEMS_PER_CATEGORY
 
 
 def normalize_text(text):
@@ -97,8 +103,29 @@ def fast_signature(item, sport, strategy):
     return hashlib.sha1(json.dumps(payload,sort_keys=True,ensure_ascii=False,default=str).encode("utf-8")).hexdigest()
 
 
+def prepare_market_data(data, *, include_older=False):
+    """Return the same bounded market/archive views for UI and worker."""
+    rows=list(data or [])
+    market_data=_FETCHER.prune_active_items(
+        rows, max_per_category=MAX_ACTIVE_ITEMS_PER_CATEGORY
+    )
+    analysis_rows=_FETCHER.prune_active_items(
+        rows if include_older else latest_analysis_items(rows),
+        max_per_category=MAX_ACTIVE_ITEMS_PER_CATEGORY,
+    )
+    return market_data, analysis_rows
+
+
+def sport_market_items(market_data, sold_comp_data, sport):
+    live=[item for item in (market_data or []) if isinstance(item,dict)
+          and infer_item_sport(item) in {None,sport}]
+    sold=[item for item in (sold_comp_data or []) if isinstance(item,dict)
+          and infer_item_sport(item) in {None,sport}]
+    return live, live+sold
+
+
 def fast_analysis(item, sport, strategy):
     return analyze_item(item,mode="fast",strategy_mode=strategy,sport=sport)
 
 
-__all__=["normalize_text","matches_search","item_matches_search","infer_item_sport","get_seller","detect_sale_type","is_numbered","is_patch","is_auto","fast_signature","fast_analysis"]
+__all__=["normalize_text","matches_search","item_matches_search","infer_item_sport","get_seller","detect_sale_type","is_numbered","is_patch","is_auto","prepare_market_data","sport_market_items","fast_signature","fast_analysis"]
