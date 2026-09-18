@@ -119,7 +119,7 @@ from src.fast_analysis_pool import select_fast_analysis_pool
 from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
-from src.ordinary_analysis_pipeline import analyze_data as shared_analyze_data
+from src.ordinary_analysis_pipeline_v2 import analyze_data as shared_analyze_data
 from src.persistent_search_jobs import available as jobs_available, create_job, latest_active_job, latest_completed_job
 from src.ordinary_search_job_contract import build_ordinary_search_job_payload, unpack_completed_ordinary_job
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
