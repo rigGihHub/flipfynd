@@ -77,10 +77,18 @@ def analyze_data(
     data_version = str(data_version or "worker")
 
     # Comps ska alltid komma från samma sport som objektet som analyseras.
+    def _sport_of(item):
+        source = str((item or {}).get("source_category") or "").casefold()
+        if "fotboll" in source or "football" in source:
+            return "football"
+        if "hockey" in source or "nhl" in source:
+            return "hockey"
+        return None
+
     sport_items = [item for item in market_data if isinstance(item, dict)
-                   and ordinary_engine.infer_item_sport(item) in {None, sport}]
+                   and _sport_of(item) in {None, sport}]
     sold_items = [item for item in (sold_comp_data or []) if isinstance(item, dict)
-                  and ordinary_engine.infer_item_sport(item) in {None, sport}]
+                  and _sport_of(item) in {None, sport}]
     market_items = sport_items + sold_items
 
     # Seller presentation context: only descriptive metadata. It must never
@@ -152,7 +160,7 @@ def analyze_data(
 
         debug["within_budget"] += 1
 
-        if not ordinary_engine.item_matches_search(item, search):
+        if not (not search or all(word in (" ".join(str(item.get(k) or "") for k in ("titel","raw_text")).casefold().replace("-"," ")) for word in str(search).casefold().replace("-"," ").split())):
             debug["search_miss"] += 1
             continue
 
@@ -161,7 +169,7 @@ def analyze_data(
         # Cheap filters must run before any card analysis. This makes a changed
         # checkbox/filter almost instant instead of re-analysing hundreds of
         # listings that will be discarded anyway.
-        direct_sale_type = ordinary_engine.detect_sale_type(item)
+        direct_sale_type = (("Köp nu" if "köp nu" in " ".join(str(item.get(k) or "") for k in ("sale_type","raw_text","titel")).casefold() else ("Auktion" if any(x in " ".join(str(item.get(k) or "") for k in ("sale_type","raw_text","titel")).casefold() for x in ("auktion","utropspris","ledande bud"," bud")) else "Okänd")))
 
         if (
             sale_type == "Endast auktioner" and direct_sale_type != "Auktion"
@@ -174,9 +182,9 @@ def analyze_data(
         debug["after_sale_type"] += 1
 
         if (
-            (numbered_only and not ordinary_engine.is_numbered(item))
-            or (patch_only and not ordinary_engine.is_patch(item))
-            or (auto_only and not ordinary_engine.is_auto(item))
+            (numbered_only and not bool(__import__("re").search(r"(?<!\d)\d{1,4}\s*/\s*\d{1,4}(?!\d)|\b(?:numbered|numrerad)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
+            or (patch_only and not bool(__import__("re").search(r"\b(?:patch|relic|memorabilia|jersey|game[- ]used|player[- ]worn)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
+            or (auto_only and not bool(__import__("re").search(r"\b(?:auto|autograph|autographed|hard[- ]signed|on[- ]card)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
         ):
             debug["feature_filter_miss"] += 1
             continue
