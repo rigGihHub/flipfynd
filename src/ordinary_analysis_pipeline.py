@@ -123,11 +123,7 @@ def analyze_data(
         ):
             continue
 
-        item_sport = (
-            infer_item_sport(
-                item
-            )
-        )
+        item_sport = _sport_of(item)
 
         if (
             item_sport
