@@ -119,6 +119,7 @@ from src.fast_analysis_pool import select_fast_analysis_pool
 from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
+from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
@@ -2059,7 +2060,20 @@ if run:
             strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
             auto_only=auto_only,
         )
+        # Prefer the in-session cache, then recover the same completed search
+        # from durable Postgres storage after navigation/reconnect.
         reusable = get_reusable_search(st.session_state.get("result_cache"), current_run_signature)
+        database_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+        if not reusable and database_url:
+            try:
+                durable_cache = load_persistent_namespace(
+                    database_url, "ordinary_search:" + current_run_signature, {}
+                )
+                reusable = get_reusable_search(durable_cache, current_run_signature)
+                if reusable:
+                    st.session_state["result_cache"] = durable_cache
+            except Exception:
+                reusable = None
         if reusable:
             results, debug = reusable
             debug = dict(debug)
@@ -2082,6 +2096,15 @@ if run:
             )
             debug["reused_completed_search"] = False
             st.session_state["result_cache"] = store_reusable_search(current_run_signature, results, debug)
+            if database_url:
+                try:
+                    save_persistent_namespace(
+                        database_url,
+                        "ordinary_search:" + current_run_signature,
+                        st.session_state["result_cache"],
+                    )
+                except Exception:
+                    pass
         progress.progress(90, text="Sorterar de bästa kandidaterna…")
         elapsed_text = "direkt från cache" if debug.get("reused_completed_search") else f"{debug.get('total_analysis_seconds', 0):.1f} s"
         status.write(f"3/3 • Klart på {elapsed_text}. {int((debug or {}).get('final_results', len(results)) or 0)} annonser nådde analyssteget.")
