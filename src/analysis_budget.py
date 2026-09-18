@@ -16,14 +16,17 @@ def fast_analysis_budget(total_candidates: int, *, context: str = "ordinary") ->
     # Five displayed cards do not justify hundreds of equivalent analyses.
     # Seller scans use a slightly smaller ceiling because they can run beside
     # an ordinary search and commonly contain many near-duplicate listings.
-    ceiling = 160 if context == "ordinary" else 120
-    floor = 80 if context == "ordinary" else 60
+    # Broad ordinary searches need materially more coverage. 160 of ~1,800
+    # eligible listings is too little to support a credible "no finds" result.
+    # Keep seller scans tighter, but let ordinary discovery inspect up to 480.
+    ceiling = 480 if context == "ordinary" else 180
+    floor = 160 if context == "ordinary" else 80
 
     if total <= floor:
         return total
     # Grow gently for larger inventories, then stop.  Candidate selection still
     # sees the entire inventory before this budget is applied.
-    scaled = floor + round((total - floor) ** 0.5 * (2.0 if context == "ordinary" else 1.6))
+    scaled = floor + round((total - floor) ** 0.5 * (6.0 if context == "ordinary" else 2.5))
     return min(total, ceiling, max(floor, scaled))
 
 
