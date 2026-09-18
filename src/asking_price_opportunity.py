@@ -116,8 +116,13 @@ def asking_research_identity(item):
     return fields
 
 
-def select_asking_price_research(rows, *, limit=4):
-    """Reserve inexpensive searchable cards even without collector merit."""
+def select_asking_price_research(rows, *, limit=12):
+    """Reserve a broader cheap, identifiable pool for economic screening.
+
+    This is discovery only. Active asking prices never become SOLD evidence,
+    but a low acquisition cost deserves a chance to be checked before hobby
+    prestige consumes the expensive-analysis budget.
+    """
     if not all(configured_credentials()):
         return []
     eligible = []
@@ -132,9 +137,16 @@ def select_asking_price_research(rows, *, limit=4):
         price = _number(item.get("pris", item.get("price")))
         if price is None:
             continue
-        eligible.append((price + resolve_shipping(item)["shipping"], row))
-    eligible.sort(key=lambda pair: pair[0])
-    return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for _, row in eligible[:limit]]
+        shipping = resolve_shipping(item)
+        freight = _number(shipping.get("shipping"))
+        if freight is None:
+            continue
+        total_cost = price + freight
+        # Cheap exact-identifiable cards get first economic checks. General
+        # player prestige is deliberately not part of this ordering.
+        eligible.append((total_cost, -int(_number(row.get("sold_comps")) or 0), row))
+    eligible.sort(key=lambda pair: (pair[0], pair[1]))
+    return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for _, _, row in eligible[:limit]]
 
 
 def attach_asking_price_opportunity(item):
