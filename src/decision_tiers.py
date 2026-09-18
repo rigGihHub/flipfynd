@@ -264,7 +264,7 @@ def _is_low_value_noise(row):
     """Return True for guide-confirmed cheap cards with weak card-specific merit.
 
     This is presentation triage only. A row is suppressible only when it has no
-    exact SOLD evidence and there are enough better candidates to fill Top 3.
+    exact SOLD evidence and there are enough better candidates to fill Top 5.
     """
     if row.get("guide_status") != "LOW_GUIDE_CONTEXT":
         return False
@@ -280,7 +280,7 @@ def _is_low_value_noise(row):
     return True
 
 
-def build_decision_tiers(candidates, total_limit=3, require_verified_economic_edge=False):
+def build_decision_tiers(candidates, total_limit=5, require_verified_economic_edge=False):
     all_rows=[_base_row(i) for i in (candidates or [])]
     for r in all_rows:
         is_buy=r["decision"].startswith("KÖP") or r["decision"].startswith("KOP")
@@ -311,6 +311,20 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
     else:
         rows.sort(key=lambda r:(tier_order[r["tier"]],r["potential"],r["certainty"],r["sold_comps"]),reverse=True)
     selected=_select_diverse(rows,total_limit)
+    # Top 5 is a presentation contract, not a BUY threshold. If filtering or
+    # diversity leaves fewer than five while analysed candidates exist, fill
+    # from the strongest remaining rows and label them as remainder/research.
+    target=min(max(0,int(total_limit or 0)),len(all_rows))
+    if len(selected) < target:
+        for r in all_rows:
+            if len(selected) >= target:
+                break
+            if r in selected:
+                continue
+            r["tier"]="REMAINDER"
+            if not r["economic_edge_ok"]:
+                r["decision"]="UNDERSÖK"
+            selected.append(r)
     rejected=[r for r in all_rows if not r["economic_edge_ok"]]
     blocker_counts={}
     for r in rejected:
@@ -320,4 +334,4 @@ def build_decision_tiers(candidates, total_limit=3, require_verified_economic_ed
         "suppressed_low_value_count":len(suppressed_low_value),
         "suppressed_low_value_titles":[r.get("title") for r in suppressed_low_value[:10]],
         "rejected_count":len(rejected),"rejection_reasons":blocker_counts,
-        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater. Guidebekräftade lågpriskort med svag kortspecifik merit döljs från Top 3 när det finns tillräckligt många bättre alternativ. Guidevärden skapar aldrig marknadsvärde, SOLD-evidens, maxpris eller KÖP."}
+        "note":"Verifierade KÖP visas först. Om inget klarar den hårda economic-edge-gaten visas i stället tydligt märkta UNDERSÖK-kandidater. Guidebekräftade lågpriskort med svag kortspecifik merit döljs från Top 5 när det finns tillräckligt många bättre alternativ. Guidevärden skapar aldrig marknadsvärde, SOLD-evidens, maxpris eller KÖP."}
