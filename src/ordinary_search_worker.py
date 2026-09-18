@@ -5,7 +5,7 @@ the worker. This keeps UI state out of background execution.
 """
 from __future__ import annotations
 
-from src.loader import load_data
+from src.loader import load_data, load_sold_comps
 
 
 def execute_ordinary_search_job(payload: dict, progress, *, analyze_fn):
@@ -26,6 +26,8 @@ def execute_ordinary_search_job(payload: dict, progress, *, analyze_fn):
         patch_only=bool(payload.get("patch_only")),
         auto_only=bool(payload.get("auto_only")),
         include_older=bool(payload.get("include_older")),
+        data_version=payload.get("data_version") or "worker",
+        sold_comp_data=load_sold_comps(),
     )
     progress(95)
     debug=dict(debug or {})
