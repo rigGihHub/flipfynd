@@ -116,7 +116,7 @@ def asking_research_identity(item):
     return fields
 
 
-def select_asking_price_research(rows, *, limit=12):
+def select_asking_price_research(rows, *, limit=24):
     """Reserve a broader cheap, identifiable pool for economic screening.
 
     This is discovery only. Active asking prices never become SOLD evidence,
@@ -146,7 +146,20 @@ def select_asking_price_research(rows, *, limit=12):
         # player prestige is deliberately not part of this ordering.
         eligible.append((total_cost, -int(_number(row.get("sold_comps")) or 0), row))
     eligible.sort(key=lambda pair: (pair[0], pair[1]))
-    return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for _, _, row in eligible[:limit]]
+    # Do not let one cheap price band consume every slot. Spread the economic
+    # probes across the sorted pool so a 60–150 kr card with a large resale
+    # gap can still be discovered behind many 10–30 kr base cards.
+    if len(eligible) <= limit:
+        chosen = eligible
+    else:
+        cheap_count = max(1, round(limit * 0.60))
+        chosen = eligible[:cheap_count]
+        remainder = eligible[cheap_count:]
+        spread_slots = limit - len(chosen)
+        for i in range(spread_slots):
+            idx = min(len(remainder) - 1, i * len(remainder) // max(1, spread_slots))
+            chosen.append(remainder[idx])
+    return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for _, _, row in chosen]
 
 
 def attach_asking_price_opportunity(item):
