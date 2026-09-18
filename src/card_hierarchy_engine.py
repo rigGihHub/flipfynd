@@ -56,7 +56,22 @@ def build_card_hierarchy_engine(*, sport, signals=None, features=None):
         candidates.append((cat[1],cat[0],cat[2]))
         if cat[1]>=72: reasons.append(f"{label}: {cat[2]}.")
     if not candidates:
-        if features.get("is_rookie") and features.get("is_auto") and features.get("is_patch"):
+        # Verified serial numbering is card-specific scarcity even when the
+        # exact parallel/program name is unknown. It must never be called base.
+        serial_run = features.get("serial_denominator") or features.get("serial_number")
+        try:
+            serial_run = int(serial_run) if serial_run not in (None, "") else None
+        except (TypeError, ValueError):
+            serial_run = None
+        if serial_run and serial_run > 0:
+            if serial_run <= 25:
+                candidates=[(70,"SERIAL_NUMBERED_UNKNOWN_PARALLEL",f"Lågnumrerat kort /{serial_run}")]
+            elif serial_run <= 100:
+                candidates=[(58,"SERIAL_NUMBERED_UNKNOWN_PARALLEL",f"Numrerat kort /{serial_run}")]
+            else:
+                candidates=[(48,"SERIAL_NUMBERED_UNKNOWN_PARALLEL",f"Numrerat kort /{serial_run}")]
+            reasons.append(f"Serienumrering /{serial_run} är verifierad knapphet även om parallellnamnet är okänt.")
+        elif features.get("is_rookie") and features.get("is_auto") and features.get("is_patch"):
             candidates=[(70,"UNVERIFIED_RPA_CLAIM","Rookie patch autograph-anspråk")]
             traps.append("RPA-termer räcker inte; program/set måste verifieras.")
         elif features.get("is_rookie") and features.get("is_auto"):
