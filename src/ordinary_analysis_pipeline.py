@@ -212,11 +212,11 @@ def analyze_data(
 
     fast_started = time.perf_counter()
     for item in fast_pool_source:
-        fast = _cached_ordinary_engine.fast_analysis(
-            _fast_signature(item, sport, strategy),
+        fast = analyze_item(
             item,
-            sport,
-            strategy,
+            mode="fast",
+            strategy_mode=strategy,
+            sport=sport,
         )
 
         attention = detect_market_attention(
