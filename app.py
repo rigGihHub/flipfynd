@@ -119,6 +119,13 @@ from src.fast_analysis_pool import select_fast_analysis_pool
 from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
+from src.ordinary_analysis_engine import (
+    item_matches_search as shared_item_matches_search,
+    infer_item_sport as shared_infer_item_sport,
+    get_seller as shared_get_seller,
+    fast_signature as shared_fast_signature,
+    fast_analysis as shared_fast_analysis,
+)
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
@@ -1047,32 +1054,12 @@ def is_auto(item):
 
 @st.cache_data(show_spinner=False, max_entries=6000)
 def _cached_fast_analysis(item_signature, item, sport, strategy):
-    """Reuse the cheap first-pass analysis across filter-only reruns.
-
-    item_signature is intentionally explicit in the cache key so a changed
-    listing invalidates the cached result while ticking a UI checkbox does not.
-    """
-    return analyze_item(
-        item,
-        mode="fast",
-        strategy_mode=strategy,
-        sport=sport,
-    )
+    """Reuse the shared worker-safe first-pass analysis across reruns."""
+    return shared_fast_analysis(item, sport, strategy)
 
 
 def _fast_signature(item, sport, strategy):
-    payload = {
-        "url": item.get("url") or item.get("link"),
-        "title": item.get("titel") or item.get("title"),
-        "price": item.get("pris"),
-        "shipping": item.get("frakt"),
-        "raw_text": item.get("raw_text"),
-        "full_description": item.get("full_description"),
-        "sport": sport,
-        "strategy": strategy,
-    }
-    return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
-
+    return shared_fast_signature(item, sport, strategy)
 
 def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode="quick_flip", sport="hockey"):
     """Share both analysis caches with the incremental seller workflow."""
