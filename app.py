@@ -131,6 +131,8 @@ from src.ordinary_analysis_engine import (
     is_auto as shared_is_auto,
 )
 from src.ordinary_analysis_pipeline import analyze_data as shared_analyze_data
+from src.persistent_search_jobs import available as jobs_available, create_job, latest_active_job, latest_completed_job
+from src.ordinary_search_job_contract import build_ordinary_search_job_payload, unpack_completed_ordinary_job
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
@@ -1674,6 +1676,19 @@ if run:
         # Prefer the in-session cache, then recover the same completed search
         # from durable Postgres storage after navigation/reconnect.
         reusable = get_reusable_search(st.session_state.get("result_cache"), current_run_signature)
+        # Recover a completed background job for this exact search before
+        # falling back to synchronous analysis.
+        if not reusable and jobs_available():
+            try:
+                completed_job = latest_completed_job(
+                    job_kind="ordinary_search", signature=current_run_signature
+                )
+                completed = unpack_completed_ordinary_job(completed_job)
+                if completed:
+                    results, debug = completed
+                    reusable = (results, debug)
+            except Exception:
+                pass
         database_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
         if not reusable and database_url:
             try:
