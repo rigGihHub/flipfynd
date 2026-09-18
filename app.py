@@ -119,17 +119,7 @@ from src.fast_analysis_pool import select_fast_analysis_pool
 from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
-from src.ordinary_analysis_engine import (
-    item_matches_search as shared_item_matches_search,
-    infer_item_sport as shared_infer_item_sport,
-    get_seller as shared_get_seller,
-    fast_signature as shared_fast_signature,
-    fast_analysis as shared_fast_analysis,
-    detect_sale_type as shared_detect_sale_type,
-    is_numbered as shared_is_numbered,
-    is_patch as shared_is_patch,
-    is_auto as shared_is_auto,
-)
+import src.ordinary_analysis_engine as ordinary_engine
 from src.ordinary_analysis_pipeline import analyze_data as shared_analyze_data
 from src.persistent_search_jobs import available as jobs_available, create_job, latest_active_job, latest_completed_job
 from src.ordinary_search_job_contract import build_ordinary_search_job_payload, unpack_completed_ordinary_job
@@ -712,7 +702,7 @@ def matches_search(
     )
 
 
-def shared_item_matches_search(item, search):
+def ordinary_engine.item_matches_search(item, search):
     return (
         matches_search(
             item.get(
@@ -741,7 +731,7 @@ def normalize_sport_category_search(search, sport):
     return "" if normalized in aliases.get(str(sport or "").casefold(), set()) else search
 
 
-def shared_infer_item_sport(item):
+def ordinary_engine.infer_item_sport(item):
     source = (
         str(
             item.get(
@@ -1059,11 +1049,11 @@ def is_auto(item):
 @st.cache_data(show_spinner=False, max_entries=6000)
 def _cached_fast_analysis(item_signature, item, sport, strategy):
     """Reuse the shared worker-safe first-pass analysis across reruns."""
-    return shared_fast_analysis(item, sport, strategy)
+    return ordinary_engine.fast_analysis(item, sport, strategy)
 
 
 def _fast_signature(item, sport, strategy):
-    return shared_fast_signature(item, sport, strategy)
+    return ordinary_engine.fast_signature(item, sport, strategy)
 
 def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode="quick_flip", sport="hockey"):
     """Share both analysis caches with the incremental seller workflow."""
@@ -1807,7 +1797,7 @@ def render_same_seller_button(item: dict, key: str) -> None:
 
                 quick_key = f"seller_inventory_quick_{key}_{seller}"
                 if st.button("⚡ Snabbanalysera säljarens livekort", key=quick_key, use_container_width=True):
-                    anchor_sport = shared_infer_item_sport(item) or "hockey"
+                    anchor_sport = ordinary_engine.infer_item_sport(item) or "hockey"
                     with st.spinner("Snabbanalyserar säljarens mest lovande kort…"):
                         quick = quick_analyze_seller_inventory(
                             item,
@@ -1840,7 +1830,7 @@ def render_same_seller_button(item: dict, key: str) -> None:
                         with action_cols[0]:
                             full_key = f"seller_quick_full_{key}_{qidx}"
                             if st.button("🔬 Fullanalysera", key=full_key, use_container_width=True):
-                                anchor_sport = shared_infer_item_sport(item) or "hockey"
+                                anchor_sport = ordinary_engine.infer_item_sport(item) or "hockey"
                                 with st.spinner("Kör full FlipFynd-analys av kortet…"):
                                     try:
                                         full_result = full_analyze_live_seller_item(
