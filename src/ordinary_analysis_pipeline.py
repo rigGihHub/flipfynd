@@ -1,7 +1,6 @@
 """Shared ordinary analysis pipeline used by UI and background worker."""
 from __future__ import annotations
 import time
-import src.ordinary_analysis_engine as ordinary_engine
 from src.analyzer import analyze_item
 from src.analysis_cache import build_analysis_signature, get_cached_analysis, set_cached_analysis
 from src.fast_analysis_pool import select_fast_analysis_pool
@@ -96,7 +95,7 @@ def analyze_data(
     # informed buyers may find more easily than the wider market.
     seller_rows = {}
     for row in sport_items:
-        seller = ordinary_engine.get_seller(row)
+        seller = next((str(row.get(k)).strip() for k in ("saljare","säljare","seller","seller_name","username") if row.get(k) and str(row.get(k)).strip()), "Okänd")
         if seller == "Okänd":
             continue
         title = str(row.get("titel") or row.get("title") or "").strip().lower()
@@ -106,7 +105,7 @@ def analyze_data(
         bucket["count"] += 1
         bucket["generic"] += int(generic)
     for row in sport_items + data:
-        seller = ordinary_engine.get_seller(row)
+        seller = next((str(row.get(k)).strip() for k in ("saljare","säljare","seller","seller_name","username") if row.get(k) and str(row.get(k)).strip()), "Okänd")
         stats = seller_rows.get(seller)
         if stats:
             row["seller_listing_count"] = stats["count"]
