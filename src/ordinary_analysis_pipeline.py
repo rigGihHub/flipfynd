@@ -38,18 +38,19 @@ def analyze_data(
     raw_total_items = len(data)
     # Keep interactive analysis bounded even if an older cloud runtime still
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
-    # Compatibility fallback for mixed Streamlit deploys where app.py may
-    # update before ordinary_analysis_engine.py.
-    try:
-        prepare_fn = getattr(ordinary_engine, "prepare_market_data", None)
-    except Exception:
-        prepare_fn = None
-    if callable(prepare_fn):
-        market_data, data = prepare_fn(data, include_older=include_older)
-    else:
-        rows = list(data or [])
-        market_data = rows
-        data = rows
+    # Keep the deployed pipeline self-contained while Streamlit may retain
+    # an older imported engine module across hot reloads.
+    from src import tradera_fetcher as _pipeline_fetcher
+    from src.fetcher_compat import build_fetcher_api
+    from src.latest_market import latest_analysis_items
+    _api = build_fetcher_api(_pipeline_fetcher)
+    rows = list(data or [])
+    cap = _api.MAX_ACTIVE_ITEMS_PER_CATEGORY
+    market_data = _api.prune_active_items(rows, max_per_category=cap)
+    data = _api.prune_active_items(
+        rows if include_older else latest_analysis_items(rows),
+        max_per_category=cap,
+    )
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -76,20 +77,11 @@ def analyze_data(
     data_version = str(data_version or "worker")
 
     # Comps ska alltid komma från samma sport som objektet som analyseras.
-    try:
-        sport_items_fn = getattr(ordinary_engine, "sport_market_items", None)
-    except Exception:
-        sport_items_fn = None
-    if callable(sport_items_fn):
-        sport_items, market_items = sport_items_fn(
-            market_data, sold_comp_data or [], sport
-        )
-    else:
-        sport_items = [item for item in market_data if isinstance(item, dict)
-                       and ordinary_engine.infer_item_sport(item) in {None, sport}]
-        sold_items = [item for item in (sold_comp_data or []) if isinstance(item, dict)
-                      and ordinary_engine.infer_item_sport(item) in {None, sport}]
-        market_items = sport_items + sold_items
+    sport_items = [item for item in market_data if isinstance(item, dict)
+                   and ordinary_engine.infer_item_sport(item) in {None, sport}]
+    sold_items = [item for item in (sold_comp_data or []) if isinstance(item, dict)
+                  and ordinary_engine.infer_item_sport(item) in {None, sport}]
+    market_items = sport_items + sold_items
 
     # Seller presentation context: only descriptive metadata. It must never
     # create a valuation. A high generic-title ratio can reveal listings that
