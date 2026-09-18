@@ -2562,114 +2562,46 @@ if st.session_state.get("results") is not None:
                             if rr.get('url'):
                                 st.link_button("Öppna annonsen ↗", rr['url'], key=f"research_open_{idx}")
             if decision_tiers.get("rows"):
-                st.markdown("### 🏆 Dynamisk topp 5 i den här sökningen")
-                verified_top_count = sum(1 for row in decision_tiers.get("rows") or [] if row.get("tier") == "VERIFIED")
-                review_top_count = len(decision_tiers.get("rows") or []) - verified_top_count
-                st.info(f"**{verified_top_count} verifierade fynd · {review_top_count} värda fortsatt kontroll**")
-                st.caption(
-                    "FlipFynd skiljer nu på **fyndpotential** och **beslutssäkerhet**. "
-                    "Listan uppdateras från hela den analyserade poolen och försöker visa olika spelare. "
-                    "UNDERSÖK är en kontrollprioritering – bara verifierade KÖP är en köprekommendation."
-                )
+                st.markdown("### 🏆 Topp 5 i den här sökningen")
+                top_rows = list(decision_tiers.get("rows") or [])[:5]
                 tier_labels = {
-                    "VERIFIED": "✅ Bästa verifierade fynd",
-                    "PROMISING": "🟡 Lovande – behöver verifieras",
-                    "REMAINDER": "⚪ Bästa av resten",
+                    "VERIFIED": "Verifierat fynd",
+                    "PROMISING": "Lovande · kontrollera",
+                    "REMAINDER": "Bäst av resten",
                 }
-                for rank, row in enumerate(decision_tiers.get("rows") or [], start=1):
-                    with st.container(border=True):
-                        st.markdown(f"**{tier_labels.get(row.get('tier'), 'Alternativ')}**")
-                        top = st.columns([4,1])
-                        top[0].markdown(f"**#{rank} {row['title']}**")
-                        top[1].markdown(f"**{row.get('decision') or 'EJ BESLUT'}**")
-                        m1,m2=st.columns(2)
-                        m1.metric("Fyndpotential", f"{row.get('potential',0):.0f}/100")
-                        m2.metric("Säkerhet", f"{row.get('certainty',0):.0f}/100")
-                        if row.get("certainty_limits"):
-                            st.caption("Beslutssäkerheten är begränsad av: " + "; ".join(row.get("certainty_limits") or []))
+                table_rows = []
+                for rank, row in enumerate(top_rows, start=1):
+                    total = row.get("total_cost")
+                    market = row.get("market_value")
+                    table_rows.append({
+                        "#": rank,
+                        "Kort": row.get("title") or "Okänt kort",
+                        "Status": tier_labels.get(row.get("tier"), "Ej verifierat"),
+                        "Kostnad": f"{float(total):.0f} kr" if total is not None else "–",
+                        "Marknad": f"{float(market):.0f} kr" if market is not None else "–",
+                        "Fynd": f"{float(row.get('potential') or 0):.0f}/100",
+                        "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
+                    })
+                st.dataframe(table_rows, use_container_width=True, hide_index=True)
+                st.caption("Klicka upp ett kort nedan när du vill se detaljer. Tabellen är huvudvyn.")
+                for rank, row in enumerate(top_rows, start=1):
+                    with st.expander(f"#{rank} · {row.get('title') or 'Okänt kort'}", expanded=False):
+                        st.write(f"**{tier_labels.get(row.get('tier'), 'Ej verifierat')}** · {row.get('decision') or 'EJ BESLUT'}")
                         facts=[]
                         if row.get("total_cost") is not None:
                             facts.append(f"kostar {float(row['total_cost']):.0f} kr")
                         if row.get("market_value") is not None:
-                            facts.append(f"verifieringsbart marknadsvärde {float(row['market_value']):.0f} kr")
+                            facts.append(f"marknadsvärde {float(row['market_value']):.0f} kr")
                         else:
                             facts.append("marknadsvärde: otillräckligt underlag")
                         facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
-                        facts.append("exakt identitet redo" if row.get("identity_ok") else "identitet ej tillräckligt säker")
-                        st.write(" · ".join(facts))
-                        if row.get("collector_worth_label"):
-                            st.markdown(
-                                f"**Samlarprofil: {row.get('collector_worth_label')}** "
-                                f"({row.get('collector_worth_score', 0):.0f}/100)"
-                            )
-                            if row.get("card_hierarchy_tier_label"):
-                                st.caption(
-                                    f"Hobbyhierarki: **{row.get('card_hierarchy_tier_label')}** · "
-                                    f"{row.get('card_hierarchy_role_label') or 'okänd roll'} · "
-                                    f"{row.get('card_hierarchy_score', 0):.0f}/100"
-                                )
-                            if row.get("player_card_hierarchy_label"):
-                                st.caption(
-                                    f"Spelare × kort: **{row.get('player_card_hierarchy_label')}** · "
-                                    f"{row.get('player_card_hierarchy_score', 0):.0f}/100 · "
-                                    f"evidens {row.get('player_card_hierarchy_confidence_score', 0):.0f}/100"
-                                )
-                            if row.get("career_context_verified") and row.get("career_status_label"):
-                                era = f" · {row.get('career_era_label')}" if row.get("career_era_label") else ""
-                                st.caption(f"Karriärkontext: **{row.get('career_status_label')}**{era}")
-                            if row.get("player_archetype_label"):
-                                st.caption(
-                                    f"Spelararketyp: **{row.get('player_archetype_label')}**"
-                                    + (f" · {row.get('rookie_window_label')}" if row.get("rookie_window_label") else "")
-                                )
-                            if row.get("rookie_claim_support") == "CHRONOLOGICALLY_SUSPICIOUS":
-                                st.warning("RC/rookie-anspråket ser kronologiskt tveksamt ut – verifiera checklist/program innan värdering.")
-                            if row.get("player_knowledge_verified"):
-                                player_bits=[]
-                                if row.get("player_lifecycle_label"):
-                                    player_bits.append(str(row.get("player_lifecycle_label")))
-                                if row.get("player_age") is not None:
-                                    player_bits.append(f"{int(row.get('player_age'))} år")
-                                if row.get("player_position"):
-                                    player_bits.append(f"pos {row.get('player_position')}")
-                                if row.get("player_team"):
-                                    player_bits.append(str(row.get("player_team")))
-                                if player_bits:
-                                    st.caption("Spelarkunskap: " + " · ".join(player_bits))
-                            basis=row.get("collector_worth_value_basis") or []
-                            if basis:
-                                st.caption("Värdedrivare: " + " · ".join(str(x) for x in basis[:5]))
-                            traps=row.get("collector_worth_hobby_traps") or []
-                            if traps:
-                                st.caption("⚠️ Samlarfälla: " + str(traps[0]))
-                            with st.expander("Varför är kortet samlarvärt – eller inte?", expanded=False):
-                                for reason in row.get("card_hierarchy_reasons") or []:
-                                    st.write("🧭 " + str(reason))
-                                for trap in row.get("card_hierarchy_hobby_traps") or []:
-                                    st.write("⚠️ " + str(trap))
-                                for reason in row.get("player_card_hierarchy_reasons") or []:
-                                    st.write("👤×🃏 " + str(reason))
-                                for caution in row.get("player_card_hierarchy_cautions") or []:
-                                    st.write("⚠️ " + str(caution))
-                                for trap in row.get("player_card_hierarchy_hobby_traps") or []:
-                                    st.write("🧠 " + str(trap))
-                                for reason in row.get("rookie_window_reasons") or []:
-                                    st.write("🕒 " + str(reason))
-                                for caution in row.get("rookie_window_cautions") or []:
-                                    st.write("⚠️ " + str(caution))
-                                for reason in row.get("collector_worth_strengths") or []:
-                                    st.write("✅ " + str(reason))
-                                for caution in row.get("collector_worth_cautions") or []:
-                                    st.write("⚠️ " + str(caution))
-                                for trap in row.get("collector_worth_hobby_traps") or []:
-                                    st.write("🧠 " + str(trap))
-                                st.caption(
-                                    "Samlarprofilen är inte ett pris. Marknadsvärde kräver fortfarande relevanta verifierade SOLD."
-                                )
+                        st.caption(" · ".join(facts))
+                        if row.get("certainty_limits"):
+                            st.caption("Begränsningar: " + "; ".join(row.get("certainty_limits") or []))
                         if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
                             st.caption("Största blockerare: " + str(row["primary_blocker"]))
-                        render_card_explanation_button(row.get("_source_item") or row, f"top3_{rank}")
-                        render_same_seller_button(row.get("_source_item") or row, f"top3_{rank}")
+                        render_card_explanation_button(row.get("_source_item") or row, f"top5_{rank}")
+                        render_same_seller_button(row.get("_source_item") or row, f"top5_{rank}")
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
                 st.caption(decision_tiers.get("note") or "")
