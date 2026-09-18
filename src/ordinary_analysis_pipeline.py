@@ -1,6 +1,7 @@
 """Shared ordinary analysis pipeline used by UI and background worker."""
 from __future__ import annotations
 import time
+import re
 from src.analyzer import analyze_item
 from src.analysis_cache import build_analysis_signature, get_cached_analysis, set_cached_analysis
 from src.fast_analysis_pool import select_fast_analysis_pool
@@ -185,9 +186,9 @@ def analyze_data(
         debug["after_sale_type"] += 1
 
         if (
-            (numbered_only and not bool(__import__("re").search(r"(?<!\d)\d{1,4}\s*/\s*\d{1,4}(?!\d)|\b(?:numbered|numrerad)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
-            or (patch_only and not bool(__import__("re").search(r"\b(?:patch|relic|memorabilia|jersey|game[- ]used|player[- ]worn)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
-            or (auto_only and not bool(__import__("re").search(r"\b(?:auto|autograph|autographed|hard[- ]signed|on[- ]card)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
+            (numbered_only and not bool(re.search(r"(?<!\d)\d{1,4}\s*/\s*\d{1,4}(?!\d)|\b(?:numbered|numrerad)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
+            or (patch_only and not bool(re.search(r"\b(?:patch|relic|memorabilia|jersey|game[- ]used|player[- ]worn)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
+            or (auto_only and not bool(re.search(r"\b(?:auto|autograph|autographed|hard[- ]signed|on[- ]card)\b", " ".join(str(item.get(k) or "") for k in ("titel","raw_text","full_description")).casefold())))
         ):
             debug["feature_filter_miss"] += 1
             continue
