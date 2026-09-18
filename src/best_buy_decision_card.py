@@ -22,7 +22,12 @@ def _verified_days(item):
 
 def _eligible(item):
     ce=item.get("capital_efficiency") or {}
-    return (_is_buy(item) and _identity_safe(item) and ce.get("score") is not None and _n(item.get("analysis_total_cost") or item.get("total_cost")) not in (None,0) and _n(item.get("net_profit_estimate")) is not None)
+    profit=_n(item.get("risk_adjusted_profit"))
+    if profit is None:
+        profit=_n(item.get("net_profit_estimate"))
+    return (_is_buy(item) and _identity_safe(item) and ce.get("score") is not None
+            and _n(item.get("analysis_total_cost") or item.get("total_cost")) not in (None,0)
+            and profit is not None and profit > 0)
 
 def _stable_id(item):
     return str(item.get("lank") or item.get("url") or item.get("id") or item.get("titel") or "")
@@ -42,6 +47,7 @@ def build_best_buy_decision_card(candidates):
         "title":item.get("titel") or "Okänt kort","player_name":item.get("player_name"),
         "total_cost":_n(item.get("analysis_total_cost") or item.get("total_cost")),
         "expected_resale":_n(item.get("expected_resale")),"net_profit":_n(item.get("net_profit_estimate")),
+        "risk_adjusted_profit":_n(item.get("risk_adjusted_profit")),
         "floor_profit":_n(item.get("floor_profit_estimate")),"expected_days":days,"velocity_verified":days is not None,
         "max_total_price":_n(item.get("max_total_price")),"max_item_price":_n(item.get("max_item_price")),
         "shipping":shipping_info["shipping"],"shipping_known":shipping_info["known"],"shipping_label":shipping_info["label"],
@@ -49,4 +55,4 @@ def build_best_buy_decision_card(candidates):
         "sale_probability":_n(item.get("sale_probability")),"sold_comparable_count":int(item.get("sold_comparable_count") or 0),"sellability_label":item.get("liquidity_label") or item.get("sellability_label"),"sellability_score":_n(item.get("liquidity_score") or item.get("sellability_score")),"exact_identity_support":True,
         "exact_identity_status":item.get("exact_identity_gate_status") or "VERIFIERAD",
         "reasons":list(item.get("opportunity_reasons") or [])[:2],"url":item.get("lank")},
-        "note":"Förstavalet rankas bara bland befintliga KÖP med beslutsstark exakt identitet och Capital Efficiency. Säljtid visas bara med verifierad sold-velocity."}
+        "note":"Förstavalet kräver KÖP, beslutsstark exakt identitet och positiv beräknad nettovinst. Säljtid visas bara med verifierad sold-velocity."}
