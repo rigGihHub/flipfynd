@@ -129,8 +129,6 @@ from src.ordinary_analysis_engine import (
     is_numbered as shared_is_numbered,
     is_patch as shared_is_patch,
     is_auto as shared_is_auto,
-    prepare_market_data as shared_prepare_market_data,
-    sport_market_items as shared_sport_market_items,
 )
 from src.ordinary_analysis_pipeline import analyze_data as shared_analyze_data
 from src.persistent_search_jobs import available as jobs_available, create_job, latest_active_job, latest_completed_job
