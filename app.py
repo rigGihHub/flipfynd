@@ -2206,10 +2206,12 @@ if st.session_state.get("results") is not None:
                     market = row.get("market_value")
                     net = row.get("estimated_net_profit")
                     asking = row.get("asking_reference")
-                    price_indication = market if market is not None else asking
+                    heuristic = row.get("heuristic_indication")
+                    price_indication = market if market is not None else (asking if asking is not None else heuristic)
                     indication_source = (
                         "SOLD/verifierat" if market is not None
-                        else ("Aktuella priser" if asking is not None else "Saknas")
+                        else ("Aktuella priser" if asking is not None
+                              else ("Modell/guide" if heuristic is not None else "Saknas"))
                     )
                     table_rows.append({
                         "#": rank,
@@ -2237,6 +2239,8 @@ if st.session_state.get("results") is not None:
                             facts.append(f"prisindikation {float(row['market_value']):.0f} kr (verifierat underlag)")
                         elif row.get("asking_reference") is not None:
                             facts.append(f"prisindikation {float(row['asking_reference']):.0f} kr (aktuella begärda priser)")
+                        elif row.get("heuristic_indication") is not None:
+                            facts.append(f"prisindikation {float(row['heuristic_indication']):.0f} kr (modell/guide – kontrollera själv)")
                         else:
                             facts.append("prisindikation saknas")
                         facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
