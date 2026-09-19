@@ -2228,7 +2228,13 @@ if st.session_state.get("results") is not None:
                         "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
                     })
                 st.dataframe(table_rows, use_container_width=True, hide_index=True)
-                st.caption("SOLD-evidens avgör om FlipFynd vågar säga KÖP – inte om en intressant kandidat får synas.")
+                negative_count = sum(1 for row in top_rows if row.get("best_of_bad_market"))
+                if negative_count:
+                    st.warning(
+                        f"{negative_count} av fem kandidater har redan negativ prisindikation och visas bara eftersom "
+                        "det saknas bättre prisbedömda alternativ. De är inte fynd – kontrollera kandidater utan prisdata först."
+                    )
+                st.caption("Prisindikation används för fyndjakt. SOLD ger starkare bekräftelse när det finns, men krävs inte för UNDERSÖK.")
                 for rank, row in enumerate(top_rows, start=1):
                     with st.expander(f"#{rank} · {row.get('title') or 'Okänt kort'}", expanded=False):
                         st.write(f"**{row.get('decision') or 'UNDERSÖK'}** · {tier_labels.get(row.get('tier'), 'Bäst av resten')}")
