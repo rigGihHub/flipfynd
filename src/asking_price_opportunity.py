@@ -202,6 +202,27 @@ def attach_asking_price_opportunity(item):
         ) else None
         out["ebay_active_context"] = context
         out["asking_price_opportunity"] = build_asking_price_opportunity(out, context, fx=fx)
-    except (requests.RequestException, ValueError, TypeError, KeyError):
-        out["asking_price_opportunity"] = {"status": "COMPARISON_UNAVAILABLE", "possible_find": False}
+    except requests.HTTPError as exc:
+        response = getattr(exc, "response", None)
+        out["asking_price_opportunity"] = {
+            "status": "COMPARISON_HTTP_ERROR",
+            "possible_find": False,
+            "http_status": getattr(response, "status_code", None),
+            "error_type": type(exc).__name__,
+        }
+    except requests.Timeout as exc:
+        out["asking_price_opportunity"] = {
+            "status": "COMPARISON_TIMEOUT", "possible_find": False,
+            "error_type": type(exc).__name__,
+        }
+    except requests.RequestException as exc:
+        out["asking_price_opportunity"] = {
+            "status": "COMPARISON_REQUEST_ERROR", "possible_find": False,
+            "error_type": type(exc).__name__,
+        }
+    except (ValueError, TypeError, KeyError) as exc:
+        out["asking_price_opportunity"] = {
+            "status": "COMPARISON_DATA_ERROR", "possible_find": False,
+            "error_type": type(exc).__name__,
+        }
     return out
