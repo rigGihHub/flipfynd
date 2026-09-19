@@ -2205,13 +2205,23 @@ if st.session_state.get("results") is not None:
                     total = row.get("total_cost")
                     market = row.get("market_value")
                     net = row.get("estimated_net_profit")
+                    asking = row.get("asking_reference")
+                    price_indication = market if market is not None else asking
+                    indication_source = (
+                        "SOLD/verifierat" if market is not None
+                        else ("Aktuella priser" if asking is not None else "Saknas")
+                    )
                     table_rows.append({
                         "#": rank,
                         "Kort": row.get("title") or "Okänt kort",
                         "Status": "KÖP" if row.get("decision") == "KÖP" else "UNDERSÖK",
                         "Kostnad": f"{float(total):.0f} kr" if total is not None else "–",
-                        "Realistiskt värde": f"{float(market):.0f} kr" if market is not None else "Ej verifierat",
-                        "Nettovinst": f"{float(net):.0f} kr" if net is not None else "–",
+                        "Prisindikation": f"{float(price_indication):.0f} kr" if price_indication is not None else "–",
+                        "Underlag": indication_source,
+                        "Möjlig marginal": (
+                            f"{float(price_indication-total):+.0f} kr"
+                            if price_indication is not None and total is not None else "–"
+                        ),
                         "Fyndpotential": f"{float(row.get('potential') or 0):.0f}/100",
                         "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
                     })
@@ -2224,9 +2234,11 @@ if st.session_state.get("results") is not None:
                         if row.get("total_cost") is not None:
                             facts.append(f"total kostnad {float(row['total_cost']):.0f} kr")
                         if row.get("market_value") is not None:
-                            facts.append(f"verifierat realistiskt värde {float(row['market_value']):.0f} kr")
+                            facts.append(f"prisindikation {float(row['market_value']):.0f} kr (verifierat underlag)")
+                        elif row.get("asking_reference") is not None:
+                            facts.append(f"prisindikation {float(row['asking_reference']):.0f} kr (aktuella begärda priser)")
                         else:
-                            facts.append("realistiskt värde: otillräckligt underlag")
+                            facts.append("prisindikation saknas")
                         facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
                         st.caption(" · ".join(facts))
                         if row.get("reasons"):
