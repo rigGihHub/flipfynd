@@ -69,6 +69,40 @@ def build_useful_top5(rows, limit=5):
     # Do not pad Top 5 with losers merely to reach five. A shorter useful list
     # is more honest and more actionable than five zero-potential rows.
     final=(positive+unknown)[:limit]
+
+    # Candidate rescue: if strict economics yields too few rows, surface the
+    # strongest research candidates whose economics are genuinely unknown.
+    # Never rescue a known negative-margin card. This keeps Top 5 useful while
+    # making special-engine signals feed the main workflow automatically.
+    if len(final) < limit:
+        used = {r.get("url") or str(r.get("title") or "").casefold() for r in final}
+        rescue = []
+        for r in enriched:
+            marker = r.get("url") or str(r.get("title") or "").casefold()
+            if marker in used or r["usefulness"]["known_negative"]:
+                continue
+            source = r.get("_source_item") or {}
+            research_strength = (
+                float(r.get("discovery_score") or 0)
+                + (8 if source.get("is_information_edge_candidate") else 0)
+                + (7 if source.get("is_hidden_find_candidate") else 0)
+                + (6 if source.get("mispriced_rookie_candidate") else 0)
+                + (6 if source.get("misclassified_card_candidate") else 0)
+                + min(8, float(source.get("valuable_card_structure_score") or 0))
+            )
+            if research_strength <= 0:
+                continue
+            rr = dict(r)
+            rr["candidate_rescue"] = True
+            rr["rescue_score"] = round(research_strength, 1)
+            rescue.append(rr)
+        rescue.sort(key=lambda r: (
+            float(r.get("rescue_score") or 0),
+            float(r.get("certainty") or 0),
+            float(r.get("freshness_score") or 0),
+        ), reverse=True)
+        final.extend(rescue[:limit-len(final)])
+
     for r in final:
         r["best_of_bad_market"] = bool(r["usefulness"]["known_negative"])
     return final
