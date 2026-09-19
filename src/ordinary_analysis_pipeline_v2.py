@@ -460,13 +460,8 @@ def analyze_data(
     else:
         debug["adaptive_price_research_added"] = 0
 
-        for idx, (original, fast, _attention) in enumerate(candidates):
+    for idx, (original, fast, _attention) in enumerate(candidates):
         analysed = full_by_index.get(idx, fast)
-        # Asking-price acquisition is intentionally limited to the deep-analysis
-        # budget. Fast-only rows keep discovery cheap; deep rows carry the
-        # external/active-market context needed by Top 5's false-positive guard.
-        # Preserve source URL/provenance even if a cached result predates those
-        # fields.
         if isinstance(analysed, dict):
             analysed = dict(analysed)
             analysed["lank"] = (
