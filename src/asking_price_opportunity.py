@@ -170,10 +170,22 @@ def select_asking_price_research(rows, *, limit=24):
         if freight is None:
             continue
         total_cost = price + freight
-        # Cheap exact-identifiable cards get first economic checks. General
-        # player prestige is deliberately not part of this ordering.
-        eligible.append((total_cost, -int(_number(row.get("sold_comps")) or 0), row))
-    eligible.sort(key=lambda pair: (pair[0], pair[1]))
+        # Prioritise plausible resale gaps rather than merely the cheapest
+        # sticker prices. Collector/discovery signals only route research; they
+        # never create value or BUY status.
+        discovery = _number(
+            row.get("opportunity_priority_score")
+            or row.get("deal_score")
+            or row.get("rank_score")
+            or row.get("collector_signal_score")
+        ) or 0.0
+        freshness = _number(row.get("freshness_score")) or 0.0
+        sold_hint = int(_number(row.get("sold_comps")) or 0)
+        # Lower tuple is researched first: cheap remains useful, but a strong
+        # identity/discovery signal can beat piles of generic 10 kr base cards.
+        route_score = total_cost - min(45.0, discovery * 0.35) - min(12.0, freshness) - min(15.0, sold_hint * 3.0)
+        eligible.append((route_score, total_cost, -sold_hint, row))
+    eligible.sort(key=lambda pair: (pair[0], pair[1], pair[2]))
     # Do not let one cheap price band consume every slot. Spread the economic
     # probes across the sorted pool so a 60–150 kr card with a large resale
     # gap can still be discovered behind many 10–30 kr base cards.
@@ -187,7 +199,7 @@ def select_asking_price_research(rows, *, limit=24):
         for i in range(spread_slots):
             idx = min(len(remainder) - 1, i * len(remainder) // max(1, spread_slots))
             chosen.append(remainder[idx])
-    return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for _, _, row in chosen]
+    return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for *_, row in chosen]
 
 
 def attach_asking_price_opportunity(item):
