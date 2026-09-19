@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.19-ebay-no-persist"
+RUNTIME_BUILD = "2026-09-19.20-adaptive-price"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -1140,7 +1140,7 @@ if st.session_state.get("results") is None and DATABASE_URL:
             # Never restore a completed search produced by an older analysis
             # engine. This was keeping obsolete Top 5 rows visible even after
             # the ranking/price pipeline changed.
-            if "ordinary-v2-ebay-no-persist-20260919-16" in restored_signature:
+            if "ordinary-v2-adaptive-price-20260919-17" in restored_signature:
                 st.session_state["results"] = restored.get("results") or []
                 st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
                 st.session_state["last_completed_search_signature"] = restored_signature
@@ -1768,7 +1768,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-ebay-no-persist-20260919-16"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-adaptive-price-20260919-17"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2222,7 +2222,8 @@ if st.session_state.get("results") is not None:
                     st.write("eBay API: " + ("✅ konfigurerad" if ebay_ready else "❌ saknar EBAY_CLIENT_ID / EBAY_CLIENT_SECRET"))
                     st.write(
                         f"Sökbar identitet {price_funnel.get('searchable_identity', 0)} → "
-                        f"routade {price_funnel.get('routed', 0)} → "
+                        f"routade {price_funnel.get('routed', 0)} "
+                        f"(extra prispass {current_debug.get('adaptive_price_research_added', 0)}) → "
                         f"djupanalyserade {price_funnel.get('deep_analysed', 0)} → "
                         f"eBay-context {price_funnel.get('context_attached', 0)} → "
                         f"prisbedömning {price_funnel.get('opportunity_attached', 0)} → "
