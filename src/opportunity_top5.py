@@ -12,6 +12,7 @@ from src.mispricing_detector import build_mispricing_hypothesis
 from src.oddity_story_hunter import build_oddity_story_signal
 from src.lot_treasure_hunter import build_lot_treasure_signal
 from src.top5_reality_gate import gate_and_sort
+from src.opportunity_discovery_signals import opportunity_discovery_score, opportunity_discovery_signals
 
 
 def _n(value, default=0.0):
@@ -321,6 +322,12 @@ def build_opportunity_top5(items, limit=5):
             if practical_roi >= 1.0:
                 economic += 3.0
 
+        discovery_signals = opportunity_discovery_signals(item)
+        discovery_score = opportunity_discovery_score(item)
+        # Discovery signals are deliberately capped in final ranking. They help
+        # choose what to investigate, but economics remains dominant.
+        research += max(-8.0, min(12.0, discovery_score * 0.18))
+
         freshness = _freshness(item)
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
         certainty = min(100.0, _n(item.get("ranking_confidence_score") or item.get("deal_confidence_score")) * 0.55 + sold * 10 + (20 if valuation_safe else 0))
@@ -348,6 +355,8 @@ def build_opportunity_top5(items, limit=5):
             "practical_margin": practical_margin,
             "practical_roi": practical_roi,
             "practical_price_source": practical_source,
+            "discovery_score": discovery_score,
+            "discovery_signals": discovery_signals,
             "asking_warning": asking_warning,
             "asking_positive": asking_positive,
             "asking_comparison_count": asking_count,
