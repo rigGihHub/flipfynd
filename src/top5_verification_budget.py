@@ -6,6 +6,8 @@ that could otherwise rank highly on cheap discovery signals.
 """
 from __future__ import annotations
 
+from src.opportunity_discovery_signals import opportunity_discovery_score
+
 
 def _n(v, default=0.0):
     try:
@@ -31,7 +33,7 @@ def _priority(candidate, idx):
     cheap_probe = 5 if 0 < total <= 75 else (2 if 0 < total <= 150 else 0)
     # Earlier newest-first rows win otherwise-equal routing decisions.
     freshness_order = max(0, 6 - min(6, idx / 20))
-    return rank + research + cheap_probe + freshness_order
+    return rank + research + cheap_probe + freshness_order + opportunity_discovery_score(fast)
 
 
 def add_top5_verification_indices(candidates, selected_indices, *, hard_cap=16, reserve_slots=5, max_per_player=2):
