@@ -1756,7 +1756,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-stable-20260919-1"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-practical-price-20260919-2"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
