@@ -88,6 +88,15 @@ def build_opportunity_top5(items, limit=5):
         # The existing asking-price engine stores richer comparison evidence in
         # asking_price_opportunity. Feed that same evidence back into Top 5
         # instead of maintaining a disconnected second shortlist.
+        # Preserve existing heuristic/guide resale context as a clearly
+        # labelled indication. It is useful for discovery even when no external
+        # active-price lookup succeeded, but it is never SOLD or verified value.
+        heuristic_indication = None
+        for key in ("expected_resale", "floor_resale", "guide_price", "guide_value", "price_guide_value"):
+            value = _n(item.get(key), 0.0)
+            if value > 0:
+                heuristic_indication = value
+                break
         asking_context = item.get("asking_price_opportunity") or {}
         if isinstance(asking_context, dict):
             value = _n(asking_context.get("reference_asking_price"), 0.0)
@@ -269,6 +278,7 @@ def build_opportunity_top5(items, limit=5):
             "certainty": round(certainty, 1),
             "sold_comps": sold,
             "asking_reference": asking_reference,
+            "heuristic_indication": heuristic_indication,
             "asking_warning": asking_warning,
             "asking_positive": asking_positive,
             "asking_comparison_count": asking_count,
