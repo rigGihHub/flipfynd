@@ -476,7 +476,10 @@ def analyze_data(
             status = str(opp.get("status") or "UNKNOWN")
             http_status = opp.get("http_status")
             error_type = opp.get("error_type")
+            error_stage = opp.get("error_stage")
             detail = status
+            if error_stage:
+                detail += f"/{error_stage}"
             if http_status:
                 detail += f"/HTTP_{http_status}"
             if error_type:
