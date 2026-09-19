@@ -83,9 +83,30 @@ def build_opportunity_top5(items, limit=5):
             value = _n(item.get(key), 0.0)
             if value > 0:
                 asking_values.append(value)
+
+        # The existing asking-price engine stores richer comparison evidence in
+        # asking_price_opportunity. Feed that same evidence back into Top 5
+        # instead of maintaining a disconnected second shortlist.
+        asking_context = item.get("asking_price_opportunity") or {}
+        if isinstance(asking_context, dict):
+            value = _n(asking_context.get("reference_asking_price"), 0.0)
+            if value > 0:
+                asking_values.append(value)
+            for comparison in asking_context.get("comparisons") or []:
+                if not isinstance(comparison, dict):
+                    continue
+                value = _n(
+                    comparison.get("asking_price_sek")
+                    or comparison.get("price_sek")
+                    or comparison.get("price"),
+                    0.0,
+                )
+                if value > 0:
+                    asking_values.append(value)
+
         for value in (item.get("asking_prices") or []):
             if isinstance(value, dict):
-                value = value.get("price") or value.get("value")
+                value = value.get("asking_price_sek") or value.get("price") or value.get("value")
             value = _n(value, 0.0)
             if value > 0:
                 asking_values.append(value)
