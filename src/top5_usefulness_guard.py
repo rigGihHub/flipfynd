@@ -83,7 +83,7 @@ def build_useful_top5(rows, limit=5):
                 continue
             source = r.get("_source_item") or {}
             research_strength = (
-                float(r.get("discovery_score") or 0)
+                float(r.get("discovery_score") or 0) + min(18.0, float(source.get("special_engine_strength") or 0))
                 + (8 if source.get("is_information_edge_candidate") else 0)
                 + (7 if source.get("is_hidden_find_candidate") else 0)
                 + (6 if source.get("mispriced_rookie_candidate") else 0)
