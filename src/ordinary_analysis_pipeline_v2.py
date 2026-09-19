@@ -41,6 +41,16 @@ def analyze_data(
     # Keep the deployed pipeline self-contained while Streamlit may retain
     # an older imported engine module across hot reloads.
     rows = list(data or [])
+    # Freshness is a discovery advantage: analyse newly listed cards first.
+    # Prefer explicit listing timestamps; preserve loader order as fallback.
+    def _freshness_key(row):
+        for key in ("listed_at","created_at","start_time","published_at","fetched_at","seen_at"):
+            value=(row or {}).get(key)
+            if value:
+                return str(value)
+        return ""
+    if any(_freshness_key(row) for row in rows):
+        rows.sort(key=_freshness_key, reverse=True)
     # Self-contained bounded preparation: avoid any hot-reloaded fetcher module
     # attributes in the interactive analysis path.
     cap = 1500
