@@ -108,8 +108,24 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             continue
         if not isfinite(value) or value <= 0:
             continue
-        raw_rows.append({"title": item.get("title"), "price": value, "currency": price.get("currency"), "url": item.get("itemWebUrl"), "source": "eBay Browse",
-                         "buying_options": item.get("buyingOptions") or [], "item_id": item.get("itemId")})
+        # Keep item price strictly separate from shipping. Browse API's
+        # price field is the listing/item price; shipping is diagnostic only
+        # and must never inflate the card's comparison value.
+        shipping_options = item.get("shippingOptions") or []
+        shipping_cost = None
+        if shipping_options:
+            cost = (shipping_options[0] or {}).get("shippingCost") or {}
+            try:
+                shipping_cost = float(cost.get("value")) if cost.get("value") is not None else None
+            except (TypeError, ValueError):
+                shipping_cost = None
+        raw_rows.append({
+            "title": item.get("title"), "price": value,
+            "item_price": value, "currency": price.get("currency"),
+            "shipping_price": shipping_cost,
+            "url": item.get("itemWebUrl"), "source": "eBay Browse",
+            "buying_options": item.get("buyingOptions") or [], "item_id": item.get("itemId")
+        })
     rows = []
     for row in raw_rows:
         candidate = _literal_identity_hints(identity or {}, row)
