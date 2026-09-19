@@ -270,7 +270,7 @@ def analyze_data(
     )
 
     results = []
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=8, max_cap=16)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=8, max_cap=40)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
         candidates,
@@ -324,7 +324,11 @@ def analyze_data(
     debug["ebay_credentials_configured"] = bool(ebay_client_id and ebay_client_secret)
     all_asking_eligible = select_asking_price_research(asking_candidates, limit=max(1, len(asking_candidates)))
     debug["asking_price_eligible_pool"] = len(all_asking_eligible)
-    asking_routes = all_asking_eligible[:12]
+    # Market-gap-first: screen a materially broader slice of the routable
+    # pool with the existing eBay asking-price comparison before final ranking.
+    # This is bounded to avoid turning every search into hundreds of API calls.
+    initial_price_limit = min(40, len(all_asking_eligible))
+    asking_routes = all_asking_eligible[:initial_price_limit]
     asking_indices = []
     routed_indices = []
     for routed in asking_routes:
