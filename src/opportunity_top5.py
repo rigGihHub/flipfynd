@@ -256,6 +256,19 @@ def build_opportunity_top5(items, limit=5):
             research += 4.0
             reasons.append("prisindikation finns – fördjupad kontroll rekommenderas")
 
+        # A model/guide indication is weaker than external asking/SOLD, but
+        # in practical discovery mode it should still affect ranking when it
+        # suggests a real spread. Never promote it to KÖP.
+        heuristic_margin = None
+        if heuristic_indication is not None and total is not None:
+            heuristic_margin = heuristic_indication - total
+            if heuristic_margin > 0 and not verified_edge and not asking_positive:
+                economic += min(14.0, 4.0 + 10.0 * min(1.0, heuristic_margin / max(total, 1.0)))
+                reasons.append("modell/guide visar möjlig marginal – kontrollera själv")
+            elif heuristic_margin <= 0:
+                economic -= 10.0
+                reasons.append("modell/guide visar ingen positiv marginal")
+
         freshness = _freshness(item)
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
         certainty = min(100.0, _n(item.get("ranking_confidence_score") or item.get("deal_confidence_score")) * 0.55 + sold * 10 + (20 if valuation_safe else 0))
@@ -279,6 +292,7 @@ def build_opportunity_top5(items, limit=5):
             "sold_comps": sold,
             "asking_reference": asking_reference,
             "heuristic_indication": heuristic_indication,
+            "heuristic_margin": heuristic_margin,
             "asking_warning": asking_warning,
             "asking_positive": asking_positive,
             "asking_comparison_count": asking_count,
