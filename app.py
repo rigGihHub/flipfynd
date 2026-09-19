@@ -213,6 +213,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Visible runtime marker. This makes deploy/hot-reload state observable instead
+# of guessing from stale search results.
+RUNTIME_BUILD = "2026-09-19.6-c617fda"
+st.caption(f"Build {RUNTIME_BUILD}")
+
 # Streamlit can restore an open sidebar from the browser even when the app asks
 # for a collapsed initial state. On narrow screens that hides the entire main
 # app. Normalize that restored state once per new app session; later user opens
