@@ -1693,7 +1693,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-20260918-1"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-stable-20260919-1"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -1801,9 +1801,21 @@ if run:
         st.error("Något gick fel under fyndanalysen. Dina inställningar är sparade; försök igen eller öppna tekniska detaljer i Administration & data.")
         raise
 
+    # Persist immediately after successful analysis so a later Streamlit
+    # rerun/navigation cannot make the user press Hitta fynd twice.
     st.session_state["results"] = results
     st.session_state["debug"] = debug
     st.session_state["results_data_version"] = get_data_version()
+    st.session_state["last_completed_search_signature"] = current_run_signature
+    if database_url:
+        try:
+            save_persistent_namespace(
+                database_url,
+                "ordinary_last_completed",
+                {"signature": current_run_signature, "results": results, "debug": debug},
+            )
+        except Exception:
+            pass
 
 
 def render_same_seller_button(item: dict, key: str) -> None:
