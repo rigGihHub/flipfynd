@@ -426,9 +426,14 @@ def build_opportunity_top5(items, limit=5):
         })
 
     # Freshness is the final tiebreaker, never a substitute for economics/evidence.
+    # Economic proximity is the dominant ordering for a bargain finder.
+    # When no positive edge exists, show the candidates closest to break-even
+    # rather than generic hobby/player potential.
     rows.sort(key=lambda r: (
-        r.get("evidence_quality", 0),
         r["decision"] == "KÖP",
+        r.get("evidence_quality", 0),
+        (r.get("practical_margin") if r.get("practical_margin") is not None else -10**9),
+        (r.get("practical_roi") if r.get("practical_roi") is not None else -10**9),
         not r.get("generic_lot"),
         not (r.get("_source_item") and not r.get("market_value") and int(r.get("sold_comps") or 0) == 0),
         r["potential"],
