@@ -1130,12 +1130,15 @@ if st.session_state.get("results") is None and DATABASE_URL:
     try:
         restored = load_persistent_namespace(DATABASE_URL, "ordinary_last_completed", {})
         if isinstance(restored, dict) and isinstance(restored.get("results"), list):
-            st.session_state["results"] = restored.get("results") or []
-            st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
-            st.session_state["last_completed_search_signature"] = restored.get("signature")
-            # Do not stamp the current data version here: the normal stale-data
-            # guard must still invalidate restored results after a real market refresh.
-            st.session_state["restored_completed_search"] = True
+            restored_signature = str(restored.get("signature") or "")
+            # Never restore a completed search produced by an older analysis
+            # engine. This was keeping obsolete Top 5 rows visible even after
+            # the ranking/price pipeline changed.
+            if "ordinary-v2-price-coverage-20260919-4" in restored_signature:
+                st.session_state["results"] = restored.get("results") or []
+                st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
+                st.session_state["last_completed_search_signature"] = restored_signature
+                st.session_state["restored_completed_search"] = True
     except Exception:
         pass
 
