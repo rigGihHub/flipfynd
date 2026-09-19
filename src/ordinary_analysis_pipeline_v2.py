@@ -376,6 +376,10 @@ def analyze_data(
             strategy_mode=strategy,
             sport=sport,
         )
+        # ROOT CAUSE FIX: active-price enrichment was imported and candidates
+        # were routed for it, but it was never actually called. Therefore
+        # asking_price_opportunity stayed absent for every analysed row.
+        full = attach_asking_price_opportunity(full)
         set_cached_analysis(signature, full)
         debug["full_analysis"] += 1
         return full
