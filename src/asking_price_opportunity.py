@@ -144,7 +144,13 @@ def select_asking_price_research(rows, *, limit=24):
     for row in rows:
         item = row.get("source_item") or row
         identity = asking_research_identity(item)
-        if not all(identity.get(key) for key in ("player_name", "season", "set_name", "card_number")):
+        # Full exact identity is ideal, but discovery may use a controlled
+        # relaxed route when player + card number + one of season/set is known.
+        # eBay candidate matching still decides whether a returned listing is
+        # eligible as price evidence.
+        core = bool(identity.get("player_name") and identity.get("card_number"))
+        context = bool(identity.get("season") or identity.get("set_name"))
+        if not (core and context):
             continue
         integrity = assess_listing_integrity(item)
         if not integrity["eligible_physical_single_card"] or integrity["reprint_risk"] or identity.get("is_lot"):
@@ -181,7 +187,9 @@ def attach_asking_price_opportunity(item):
     """Enrich full analyses only; no network request without usable identity/keys."""
     out = dict(item)
     identity = asking_research_identity(out)
-    if not all(identity.get(key) for key in ("player_name", "season", "set_name", "card_number")):
+    core = bool(identity.get("player_name") and identity.get("card_number"))
+    context_ready = bool(identity.get("season") or identity.get("set_name"))
+    if not (core and context_ready):
         return out
     client_id, client_secret = configured_credentials()
     if not client_id or not client_secret:
