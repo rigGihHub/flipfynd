@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-LATEST_MAX_PAGES = 3
+LATEST_MAX_PAGES = 5
 
 
 def newest_first_url(url):
@@ -26,6 +26,12 @@ def latest_analysis_items(items):
             continue
         category = row.get("source_category") or "unknown"
         latest[category] = max(latest.get(category, ""), row["latest_scan_at"])
-    return [row for row in rows if (row.get("source_category") or "unknown") not in latest
+    selected=[row for row in rows if (row.get("source_category") or "unknown") not in latest
             or (row.get("discovery_sort") == "AddedOn"
                 and row.get("latest_scan_at") == latest[row.get("source_category") or "unknown"])]
+    # Latest scans are fetched with sortBy=AddedOn and pages are persisted in
+    # crawl order. Preserve that ordering explicitly for opportunity-first use.
+    return sorted(selected, key=lambda row: (
+        str(row.get("latest_scan_at") or ""),
+        -int(row.get("sida") or 9999),
+    ), reverse=True)
