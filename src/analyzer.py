@@ -2836,11 +2836,24 @@ def build_invalid_result(
         "beslut": "SKIP",
         "kommentar": reason,
 
-        "lank":
-            item.get(
-                "lank",
-                "",
-            ),
+        "lank": (
+            item.get("lank")
+            or item.get("url")
+            or item.get("link")
+            or item.get("href")
+            or item.get("item_url")
+            or item.get("tradera_url")
+            or ""
+        ),
+        "url": (
+            item.get("lank")
+            or item.get("url")
+            or item.get("link")
+            or item.get("href")
+            or item.get("item_url")
+            or item.get("tradera_url")
+            or ""
+        ),
 
         "raw_text": item.get("raw_text", ""),
 
@@ -4156,11 +4169,24 @@ def analyze_core(
         "kommentar":
             comment,
 
-        "lank":
-            item.get(
-                "lank",
-                "",
-            ),
+        "lank": (
+            item.get("lank")
+            or item.get("url")
+            or item.get("link")
+            or item.get("href")
+            or item.get("item_url")
+            or item.get("tradera_url")
+            or ""
+        ),
+        "url": (
+            item.get("lank")
+            or item.get("url")
+            or item.get("link")
+            or item.get("href")
+            or item.get("item_url")
+            or item.get("tradera_url")
+            or ""
+        ),
 
         "sale_type":
             sale_type,
