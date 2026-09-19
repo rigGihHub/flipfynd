@@ -117,6 +117,35 @@ def _guide_triage(scp: dict | None) -> dict:
     }
 
 
+
+def _opportunity_research_priority(item: dict) -> tuple:
+    item = item or {}
+    try: total = float(item.get("analysis_total_cost") or item.get("total_cost") or item.get("pris") or 0)
+    except (TypeError, ValueError): total = 0.0
+    signal = 20.0 if research_identity_ready(item) else 0.0
+    signal += 15.0 if identity_ready(item) else 0.0
+    for key, weight in (("is_information_edge_candidate",14),("is_hidden_find_candidate",10),("mispriced_rookie_candidate",8),("misclassified_card_candidate",8)):
+        if item.get(key): signal += weight
+    for key, scale, cap in (("opportunity_priority_score",.35,35),("rank_score",.20,20),("valuable_card_structure_score",.30,15),("nonstandard_value_signal_score",.30,12)):
+        try: signal += min(cap, max(0.0, float(item.get(key) or 0) * scale))
+        except (TypeError, ValueError): pass
+    if 0 < total <= 75: signal += 4
+    return (signal, -total if total > 0 else -10**9)
+
+
+def select_comp_research_targets(items: Iterable[dict] | None, *, limit: int = 20) -> list[dict]:
+    """Spend comp-research budget on unique identities most likely to affect Top 5."""
+    rows = [x for x in (items or []) if isinstance(x, dict) and research_identity_ready(x)]
+    rows.sort(key=_opportunity_research_priority, reverse=True)
+    selected, seen = [], set()
+    for row in rows:
+        identity = identity_from_item(row, research=not identity_ready(row))
+        marker = tuple(str(identity.get(k) or "").casefold() for k in ("player_name","set_name","season","card_number","parallel"))
+        if marker in seen: continue
+        seen.add(marker); selected.append(row)
+        if len(selected) >= max(0, int(limit)): break
+    return selected
+
 def research_one(item: dict, sold_records: Iterable[dict] | None = None, *, scp_token: str | None = None) -> dict:
     """Run safe automated research for one already-analyzed listing."""
     title = _clean(item.get("titel") or item.get("title")) or "Okänt kort"
@@ -208,7 +237,7 @@ def run_auto_comp_research(items: Iterable[dict] | None, sold_records: Iterable[
     sales must still be explicitly verified/imported.
     """
     requested_limit = max(0, int(limit))
-    selected = [x for x in (items or []) if isinstance(x, dict)][:requested_limit]
+    selected = select_comp_research_targets(items, limit=requested_limit)
     researched_rows = [research_one(item, sold_records=sold_records or [], scp_token=scp_token) for item in selected]
     researched_rows.sort(key=_batch_sort_key)
     display_rows = researched_rows[: min(3, len(researched_rows))]
