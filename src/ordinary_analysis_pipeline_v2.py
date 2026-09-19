@@ -16,6 +16,7 @@ from src.segment_discovery_coverage import add_segment_coverage_indices, segment
 from src.discovery_engine import build_discovery_map, select_discovery_indices
 from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_indices
 from src.find_more_cards import select_second_pass_indices
+from src.top5_verification_budget import add_top5_verification_indices
 from src.pricing import total_acquisition_cost
 
 def analyze_data(
@@ -299,6 +300,16 @@ def analyze_data(
         hard_cap=dynamic_deep_cap,
         max_per_player=2,
     )
+    # Spend remaining deep-analysis/external-research capacity on candidates
+    # most likely to surface in Top 5, so asking-price guards cover the rows
+    # where a false positive would hurt most.
+    full_indices, top5_verification_added = add_top5_verification_indices(
+        candidates,
+        full_indices,
+        hard_cap=dynamic_deep_cap,
+        reserve_slots=5,
+        max_per_player=2,
+    )
     full_index_set = set(full_indices)
     debug["adaptive_full_selected"] = len(adaptive_indices)
     debug["collector_signal_coverage_added"] = len(collector_coverage_added)
@@ -310,6 +321,7 @@ def analyze_data(
     debug["budget_coverage_bands"] = budget_coverage_summary(candidates, full_indices, max_price)
     debug["segment_coverage_added"] = len(segment_added)
     debug["segment_coverage"] = segment_coverage_summary(candidates, full_indices, max_price)
+    debug["top5_verification_added"] = len(top5_verification_added)
     discovery_map = build_discovery_map(candidates)
     debug["discovery_hunter_counts"] = discovery_map.get("hunter_counts", {})
     market_sweep_map = build_market_sweep_map(candidates)
