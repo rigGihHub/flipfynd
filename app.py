@@ -215,8 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.9-unified-opportunities"
-st.caption(f"Build {RUNTIME_BUILD}")
+RUNTIME_BUILD = "2026-09-19.10-unified-opportunities"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -1353,7 +1352,10 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.markdown(f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; HOCKEY / FOTBOLL &nbsp;•&nbsp; TRADERA SCANNER</div>', unsafe_allow_html=True)
+st.markdown(
+    f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; BUILD {RUNTIME_BUILD} &nbsp;•&nbsp; HOCKEY / FOTBOLL &nbsp;•&nbsp; TRADERA SCANNER</div>',
+    unsafe_allow_html=True,
+)
 
 if st.session_state.get("fetch_last_message"):
     message = st.session_state["fetch_last_message"]
