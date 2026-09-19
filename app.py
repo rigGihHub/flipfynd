@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.26-market-gap-survival"
+RUNTIME_BUILD = "2026-09-19.27-always-top5"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -2210,6 +2210,24 @@ if st.session_state.get("results") is not None:
                 row for row in top_rows
                 if row.get("practical_margin") is None or float(row.get("practical_margin") or 0) > 0
             ]
+            # User-facing Top 5 is always filled with the five strongest analysed
+            # candidates. Known negative-margin rows may appear only as clearly
+            # labelled "Bäst av resten"; they never become KÖP or "fynd".
+            if len(top_rows) < 5:
+                ranked_all = list((build_opportunity_top5(st.session_state.get("results") or [], limit=max(25, len(st.session_state.get("results") or []))).get("rows") or []))
+                seen_top = {(row.get("url") or str(row.get("title") or "").casefold()) for row in top_rows}
+                for row in ranked_all:
+                    marker = row.get("url") or str(row.get("title") or "").casefold()
+                    if marker in seen_top:
+                        continue
+                    fallback = dict(row)
+                    if fallback.get("practical_margin") is not None and float(fallback.get("practical_margin") or 0) <= 0:
+                        fallback["tier"] = "REMAINDER"
+                        fallback["decision"] = "UNDERSÖK"
+                    top_rows.append(fallback)
+                    seen_top.add(marker)
+                    if len(top_rows) >= 5:
+                        break
             rescued_count = sum(1 for row in top_rows if row.get("candidate_rescue"))
 
             current_debug = st.session_state.get("debug") or {}
