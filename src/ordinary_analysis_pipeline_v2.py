@@ -267,12 +267,12 @@ def analyze_data(
     )
 
     results = []
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=18, max_cap=60)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=8, max_cap=16)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
         candidates,
         adaptive_indices,
-        extra_slots=6,
+        extra_slots=3,
         hard_cap=dynamic_deep_cap,
     )
     full_indices = diversify_full_analysis_indices(
@@ -287,7 +287,7 @@ def analyze_data(
         candidates,
         full_indices,
         budget=max_price,
-        extra_slots=8,
+        extra_slots=3,
         hard_cap=dynamic_deep_cap,
         max_per_player=2,
     )
@@ -358,7 +358,7 @@ def analyze_data(
         market_sweep_indices = select_market_sweep_indices(
             candidates,
             full_index_set,
-            extra_limit=8,
+            extra_limit=3,
             total_hard_cap=dynamic_deep_cap,
             max_per_player=2,
         )
@@ -374,7 +374,7 @@ def analyze_data(
         fallback_indices = select_second_pass_indices(
             len(candidates),
             after_sweep.union(discovery_indices),
-            extra_limit=min(12, remaining_room),
+            extra_limit=min(4, remaining_room),
             total_hard_cap=dynamic_deep_cap,
         )
         extra_indices = market_sweep_indices + discovery_indices + fallback_indices
