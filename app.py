@@ -2812,106 +2812,108 @@ if st.session_state.get("results") is not None:
                             st.markdown(f"[Öppna annonsen]({mrow['url']})")
                         st.divider()
 
-            with st.expander("🔎 Varför blir inget ett verifierat KÖP?", expanded=False):
-                st.caption(
-                    "Här ser du exakt hur många annonser som finns kvar efter varje steg. "
-                    "Detta är diagnostik för den hårda KÖP-gränsen. Den dynamiska topp 5-listan ovan "
-                    "visar fortfarande de bästa kontrollkandidaterna."
-                )
-                stages = funnel.get("stages") or []
-                st.write(" → ".join(f"**{row['count']}** {row['label'].lower()}" for row in stages))
-
-                d = funnel.get("decisions") or {}
-                d1, d2, d3 = st.columns(3)
-                d1.metric("KÖP", int(d.get("KÖP", 0)))
-                d2.metric("BEVAKA", int(d.get("BEVAKA", 0)))
-                d3.metric("EJ KÖPKLARA", int(d.get("SKIP", 0)))
-
-                debug_state = st.session_state.get("debug") or {}
-                coverage_added = int(debug_state.get("coverage_diversified_added", 0) or 0)
-                if coverage_added > 0:
-                    st.info(
-                        f"Urvalet breddades med {coverage_added} kandidat(er) från andra signalprofiler "
-                        "så att inte en enda ranking eller samma spelare tar alla djupanalysplatser."
-                    )
-                discovery_deepened = int(debug_state.get("discovery_deepened", 0) or 0)
-                if discovery_deepened:
-                    st.info(
-                        f"Discovery Engine gav {discovery_deepened} kandidat(er) från andra fyndspår "
-                        "djupanalys. KÖP-kraven är oförändrade."
-                    )
-                if debug_state.get("second_pass_triggered"):
-                    st.success(
-                        f"FlipFynd gjorde automatiskt ett extra analysvarv på "
-                        f"{int(debug_state.get('second_pass_full', 0) or 0)} fler kandidater eftersom första varvet gav 0 KÖP."
-                    )
-
-                biggest = funnel.get("biggest_drop")
-                if biggest and biggest.get("drop", 0) > 0:
+            if _advanced_terminal:
+                with st.expander("🔎 Varför blir inget ett verifierat KÖP?", expanded=False):
                     st.caption(
-                        f"Största bortfallet i grundsållningen: {biggest['from']} → {biggest['to']} "
-                        f"({biggest['drop']} annonser försvinner där)."
+                        "Här ser du exakt hur många annonser som finns kvar efter varje steg. "
+                        "Detta är diagnostik för den hårda KÖP-gränsen. Den dynamiska topp 5-listan ovan "
+                        "visar fortfarande de bästa kontrollkandidaterna."
                     )
+                    stages = funnel.get("stages") or []
+                    st.write(" → ".join(f"**{row['count']}** {row['label'].lower()}" for row in stages))
 
-                readiness = funnel.get("decision_readiness") or []
-                if readiness:
-                    st.markdown("**Beslutsunderlag – var saknas evidens?**")
-                    st.caption(
-                        "Dessa mått är oberoende evidensgrindar, inte en påhittad sekventiell funnel. "
-                        "De visar hur många analyserade annonser som faktiskt har respektive typ av underlag."
-                    )
-                    rcols = st.columns(min(3, len(readiness)))
-                    for idx, row in enumerate(readiness):
-                        count = int(row.get("count", 0) or 0)
-                        share = float(row.get("share", 0) or 0)
-                        rcols[idx % len(rcols)].metric(row.get("label", "Underlag"), count, f"{share:.0%} av analyserade")
+                    d = funnel.get("decisions") or {}
+                    d1, d2, d3 = st.columns(3)
+                    d1.metric("KÖP", int(d.get("KÖP", 0)))
+                    d2.metric("BEVAKA", int(d.get("BEVAKA", 0)))
+                    d3.metric("EJ KÖPKLARA", int(d.get("SKIP", 0)))
 
-                blockers = funnel.get("blockers") or []
-                if blockers:
-                    st.markdown("**Vanligaste skälen till att analyserade kort inte blir KÖP:**")
-                    bcols = st.columns(min(3, len(blockers)))
-                    for idx, blocker in enumerate(blockers):
-                        bcols[idx % len(bcols)].metric(blocker["label"], blocker["count"])
+                    debug_state = st.session_state.get("debug") or {}
+                    coverage_added = int(debug_state.get("coverage_diversified_added", 0) or 0)
+                    if coverage_added > 0:
+                        st.info(
+                            f"Urvalet breddades med {coverage_added} kandidat(er) från andra signalprofiler "
+                            "så att inte en enda ranking eller samma spelare tar alla djupanalysplatser."
+                        )
+                    discovery_deepened = int(debug_state.get("discovery_deepened", 0) or 0)
+                    if discovery_deepened:
+                        st.info(
+                            f"Discovery Engine gav {discovery_deepened} kandidat(er) från andra fyndspår "
+                            "djupanalys. KÖP-kraven är oförändrade."
+                        )
+                    if debug_state.get("second_pass_triggered"):
+                        st.success(
+                            f"FlipFynd gjorde automatiskt ett extra analysvarv på "
+                            f"{int(debug_state.get('second_pass_full', 0) or 0)} fler kandidater eftersom första varvet gav 0 KÖP."
+                        )
 
-                primary = funnel.get("primary_reasons") or []
-                if primary:
-                    with st.expander("Visa exakta stopporsaker", expanded=False):
-                        for row in primary:
-                            category = row.get("category") or "Övrigt"
-                            st.write(f"• **{row['count']} st · {category}** – {row['reason']}")
+                    biggest = funnel.get("biggest_drop")
+                    if biggest and biggest.get("drop", 0) > 0:
+                        st.caption(
+                            f"Största bortfallet i grundsållningen: {biggest['from']} → {biggest['to']} "
+                            f"({biggest['drop']} annonser försvinner där)."
+                        )
 
-                if stages and stages[-1]["count"] == 0:
-                    st.warning(
-                        "Inga annonser når själva analysen. Då sitter problemet före köpbedömningen – "
-                        "titta på steget där antalet faller till noll."
-                    )
-                elif no_buy and stages and stages[-1]["count"] > 0:
-                    st.info(
-                        "Annonser når analysen, men inget klarar den verifierade KÖP-gränsen. "
-                        "Det hindrar inte FlipFynd från att visa de fem bästa UNDERSÖK-kandidaterna ovan."
-                    )
+                    readiness = funnel.get("decision_readiness") or []
+                    if readiness:
+                        st.markdown("**Beslutsunderlag – var saknas evidens?**")
+                        st.caption(
+                            "Dessa mått är oberoende evidensgrindar, inte en påhittad sekventiell funnel. "
+                            "De visar hur många analyserade annonser som faktiskt har respektive typ av underlag."
+                        )
+                        rcols = st.columns(min(3, len(readiness)))
+                        for idx, row in enumerate(readiness):
+                            count = int(row.get("count", 0) or 0)
+                            share = float(row.get("share", 0) or 0)
+                            rcols[idx % len(rcols)].metric(row.get("label", "Underlag"), count, f"{share:.0%} av analyserade")
 
-            hidden_analysed = [
-                item for item in (st.session_state.get("results") or [])
-                if item not in visible
-            ]
-            if hidden_analysed:
-                with st.expander(f"Visa fler analyserade kort ({len(hidden_analysed)})", expanded=False):
-                    st.caption(
-                        "Dessa kort har analyserats men ligger utanför huvudlistan, oftast eftersom de är SKIP "
-                        "eller har lägre analyssäkerhet. De är inte fynd bara för att de visas här."
-                    )
-                    for extra_idx, candidate in enumerate(hidden_analysed[:50], start=1):
-                        title = candidate.get("titel") or candidate.get("title") or "Okänd annons"
-                        decision = candidate.get("beslut") or candidate.get("decision") or "Ej bedömd"
-                        st.write(f"**#{extra_idx} · {title}** · {decision}")
-                        url = candidate.get("lank") or candidate.get("url") or candidate.get("link")
-                        if url:
-                            st.markdown(f"[Öppna annonsen på Tradera ↗]({url})")
-                        reason = candidate.get("reason") or candidate.get("decision_reason")
-                        if reason:
-                            st.caption(str(reason))
-                        st.divider()
+                    blockers = funnel.get("blockers") or []
+                    if blockers:
+                        st.markdown("**Vanligaste skälen till att analyserade kort inte blir KÖP:**")
+                        bcols = st.columns(min(3, len(blockers)))
+                        for idx, blocker in enumerate(blockers):
+                            bcols[idx % len(bcols)].metric(blocker["label"], blocker["count"])
+
+                    primary = funnel.get("primary_reasons") or []
+                    if primary:
+                        with st.expander("Visa exakta stopporsaker", expanded=False):
+                            for row in primary:
+                                category = row.get("category") or "Övrigt"
+                                st.write(f"• **{row['count']} st · {category}** – {row['reason']}")
+
+                    if stages and stages[-1]["count"] == 0:
+                        st.warning(
+                            "Inga annonser når själva analysen. Då sitter problemet före köpbedömningen – "
+                            "titta på steget där antalet faller till noll."
+                        )
+                    elif no_buy and stages and stages[-1]["count"] > 0:
+                        st.info(
+                            "Annonser når analysen, men inget klarar den verifierade KÖP-gränsen. "
+                            "Det hindrar inte FlipFynd från att visa de fem bästa UNDERSÖK-kandidaterna ovan."
+                        )
+
+            if _advanced_terminal:
+                hidden_analysed = [
+                    item for item in (st.session_state.get("results") or [])
+                    if item not in visible
+                ]
+                if hidden_analysed:
+                    with st.expander(f"Visa fler analyserade kort ({len(hidden_analysed)})", expanded=False):
+                        st.caption(
+                            "Dessa kort har analyserats men ligger utanför huvudlistan, oftast eftersom de är SKIP "
+                            "eller har lägre analyssäkerhet. De är inte fynd bara för att de visas här."
+                        )
+                        for extra_idx, candidate in enumerate(hidden_analysed[:50], start=1):
+                            title = candidate.get("titel") or candidate.get("title") or "Okänd annons"
+                            decision = candidate.get("beslut") or candidate.get("decision") or "Ej bedömd"
+                            st.write(f"**#{extra_idx} · {title}** · {decision}")
+                            url = candidate.get("lank") or candidate.get("url") or candidate.get("link")
+                            if url:
+                                st.markdown(f"[Öppna annonsen på Tradera ↗]({url})")
+                            reason = candidate.get("reason") or candidate.get("decision_reason")
+                            if reason:
+                                st.caption(str(reason))
+                            st.divider()
 
         st.caption("Behöver du alla interna mått? Slå på ‘Visa fördjupad analys’ ovan.")
         st.stop()
