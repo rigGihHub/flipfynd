@@ -291,6 +291,36 @@ def build_opportunity_top5(items, limit=5):
             else:
                 economic -= min(18.0, 8.0 + 10.0 * min(1.0, abs(practical_roi)))
 
+        # Discovery-quality improvements: reward actionable economics and
+        # penalise common false-positive patterns without inventing value.
+        shipping_known = item.get("shipping_known")
+        if shipping_known is False:
+            economic -= 4.0
+            reasons.append("frakt osäker")
+        sale_type = str(item.get("sale_type") or "").casefold()
+        bid_count = int(_n(item.get("bid_count"), 0) or 0)
+        if "auktion" in sale_type and bid_count > 0:
+            research += min(4.0, bid_count * 0.5)
+            reasons.append("observerad budaktivitet")
+        if item.get("detail_enrichment_status") == "ok":
+            research += 2.0
+        if item.get("visual_verification_required"):
+            economic -= 3.0
+        if item.get("reprint_risk") or item.get("listing_integrity_reprint_risk"):
+            economic -= 30.0
+            reasons.append("reprint-risk")
+        if item.get("condition_risk") or item.get("damage_risk"):
+            economic -= 12.0
+            reasons.append("skickrisk")
+        if practical_margin is not None and practical_margin > 0 and practical_roi is not None:
+            # Tiny nominal spreads are less useful even at high ROI.
+            if practical_margin < 20:
+                economic -= 7.0
+            elif practical_margin >= 50:
+                economic += 4.0
+            if practical_roi >= 1.0:
+                economic += 3.0
+
         freshness = _freshness(item)
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
         certainty = min(100.0, _n(item.get("ranking_confidence_score") or item.get("deal_confidence_score")) * 0.55 + sold * 10 + (20 if valuation_safe else 0))
