@@ -11,6 +11,7 @@ from src.bad_listing_hunter import build_bad_listing_signal
 from src.mispricing_detector import build_mispricing_hypothesis
 from src.oddity_story_hunter import build_oddity_story_signal
 from src.lot_treasure_hunter import build_lot_treasure_signal
+from src.top5_reality_gate import gate_and_sort
 
 
 def _n(value, default=0.0):
@@ -235,7 +236,8 @@ def build_opportunity_top5(items, limit=5):
         deduped.append(row)
         if len(deduped) >= max(0, int(limit)):
             break
+    final_rows = gate_and_sort(deduped, limit=limit)
     return {
-        "rows": deduped,
-        "note": "KÖP kräver verifierad ekonomi. UNDERSÖK rankas även med researchsignaler; färskhet används som fördel/tiebreaker.",
+        "rows": final_rows,
+        "note": "KÖP kräver verifierad ekonomi. Top 5 passerar dessutom en sista reality gate som kan nedranka kandidater med svag eller motsägande prisdata.",
     }
