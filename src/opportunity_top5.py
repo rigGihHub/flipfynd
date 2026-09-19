@@ -269,6 +269,28 @@ def build_opportunity_top5(items, limit=5):
                 economic -= 10.0
                 reasons.append("modell/guide visar ingen positiv marginal")
 
+        # Practical resale signal: rank by likely spread relative to acquisition
+        # cost, while keeping evidence quality separate. This prevents a famous
+        # player/card signal from beating a less glamorous card with a much
+        # better observable price gap.
+        practical_margin = None
+        practical_source = None
+        if market is not None and total is not None:
+            practical_margin, practical_source = market - total, "VERIFIED"
+        elif asking_reference is not None and total is not None:
+            practical_margin, practical_source = asking_reference - total, "ACTIVE_PRICE"
+        elif heuristic_indication is not None and total is not None:
+            practical_margin, practical_source = heuristic_indication - total, "MODEL_GUIDE"
+
+        practical_roi = None
+        if practical_margin is not None and total and total > 0:
+            practical_roi = practical_margin / total
+            if practical_margin > 0:
+                source_weight = {"VERIFIED": 1.0, "ACTIVE_PRICE": 0.80, "MODEL_GUIDE": 0.45}.get(practical_source, 0.0)
+                economic += min(18.0, (6.0 + 12.0 * min(1.0, practical_roi)) * source_weight)
+            else:
+                economic -= min(18.0, 8.0 + 10.0 * min(1.0, abs(practical_roi)))
+
         freshness = _freshness(item)
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
         certainty = min(100.0, _n(item.get("ranking_confidence_score") or item.get("deal_confidence_score")) * 0.55 + sold * 10 + (20 if valuation_safe else 0))
@@ -293,6 +315,9 @@ def build_opportunity_top5(items, limit=5):
             "asking_reference": asking_reference,
             "heuristic_indication": heuristic_indication,
             "heuristic_margin": heuristic_margin,
+            "practical_margin": practical_margin,
+            "practical_roi": practical_roi,
+            "practical_price_source": practical_source,
             "asking_warning": asking_warning,
             "asking_positive": asking_positive,
             "asking_comparison_count": asking_count,
@@ -310,6 +335,8 @@ def build_opportunity_top5(items, limit=5):
         not r.get("generic_lot"),
         not (r.get("_source_item") and not r.get("market_value") and int(r.get("sold_comps") or 0) == 0),
         r["potential"],
+        (r.get("practical_margin") if r.get("practical_margin") is not None else -10**9),
+        (r.get("practical_roi") if r.get("practical_roi") is not None else -10**9),
         r["certainty"],
         r["freshness_score"],
         -(r["total_cost"] or 10**9),
