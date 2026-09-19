@@ -432,13 +432,26 @@ def build_opportunity_top5(items, limit=5):
         deduped.append(row)
         if len(deduped) >= max(0, int(limit)):
             break
-    # Apply the final gate to the whole candidate pool, not only the first
-    # pre-gate five. Otherwise a candidate that should be demoted can remain in
-    # Top 5 simply because stronger alternatives were discarded too early.
-    # Gate the full pool, then enforce usefulness. Do not let five known
-    # negative-margin rows crowd out candidates whose price still needs research.
+    # Apply the reality gate first, but always return the requested number of
+    # best analysed candidates. The usefulness guard may remove known losses;
+    # refill those empty slots from the gated ranking as clearly labelled
+    # REMAINDER/UNDERSÖK rows rather than returning a one-row "Top 5".
     gated_rows = gate_and_sort(rows, limit=max(limit * 20, len(rows)))
     final_rows = build_useful_top5(gated_rows, limit=limit)
+    seen_final = {(row.get("url") or str(row.get("title") or "").casefold()) for row in final_rows}
+    if len(final_rows) < limit:
+        for row in gated_rows:
+            marker = row.get("url") or str(row.get("title") or "").casefold()
+            if marker in seen_final:
+                continue
+            fallback = dict(row)
+            fallback["tier"] = "REMAINDER"
+            fallback["decision"] = "UNDERSÖK"
+            fallback["candidate_rescue"] = True
+            final_rows.append(fallback)
+            seen_final.add(marker)
+            if len(final_rows) >= limit:
+                break
     return {
         "rows": final_rows,
         "note": "KÖP kräver verifierad ekonomi. Top 5 passerar dessutom en sista reality gate som kan nedranka kandidater med svag eller motsägande prisdata.",
