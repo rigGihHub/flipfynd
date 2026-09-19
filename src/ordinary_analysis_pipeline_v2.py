@@ -322,7 +322,9 @@ def analyze_data(
         asking_candidates.append({"source_item": merged, "_candidate_index": idx})
     ebay_client_id, ebay_client_secret = configured_credentials()
     debug["ebay_credentials_configured"] = bool(ebay_client_id and ebay_client_secret)
-    asking_routes = select_asking_price_research(asking_candidates, limit=12)
+    all_asking_eligible = select_asking_price_research(asking_candidates, limit=max(1, len(asking_candidates)))
+    debug["asking_price_eligible_pool"] = len(all_asking_eligible)
+    asking_routes = all_asking_eligible[:12]
     asking_indices = []
     for routed in asking_routes:
         idx = routed.get("_candidate_index")
@@ -432,7 +434,7 @@ def analyze_data(
                 full_by_index[idx] = _run_full_analysis(idx)
                 full_index_set.add(idx)
 
-    # Adaptive eBay continuation when the first price probes find no margin.\n    first_price_find = any(isinstance(item, dict) and (item.get("asking_price_opportunity") or {}).get("possible_find") for item in full_by_index.values())\n    if not first_price_find and debug.get("ebay_credentials_configured"):\n        already = set(full_by_index)\n        next_routes = select_asking_price_research(asking_candidates, limit=32)\n        adaptive_price_indices = []\n        for routed in next_routes:\n            idx = routed.get("_candidate_index")\n            if isinstance(idx, int) and idx not in already:\n                adaptive_price_indices.append(idx)\n            if len(adaptive_price_indices) >= 12:\n                break\n        for idx in adaptive_price_indices:\n            full_by_index[idx] = _run_full_analysis(idx)\n            full_index_set.add(idx)\n        debug["adaptive_price_research_added"] = len(adaptive_price_indices)\n        debug["asking_price_routed"] = len(set(asking_indices + adaptive_price_indices))\n    else:\n        debug["adaptive_price_research_added"] = 0\n\n    for idx, (original, fast, _attention) in enumerate(candidates):
+    # Adaptive eBay continuation when the first price probes find no margin.\n    first_price_find = any(isinstance(item, dict) and (item.get("asking_price_opportunity") or {}).get("possible_find") for item in full_by_index.values())\n    if not first_price_find and debug.get("ebay_credentials_configured"):\n        already = set(full_by_index)\n        next_routes = all_asking_eligible\n        adaptive_price_indices = []\n        for routed in next_routes:\n            idx = routed.get("_candidate_index")\n            if isinstance(idx, int) and idx not in already:\n                adaptive_price_indices.append(idx)\n            if len(adaptive_price_indices) >= 12:\n                break\n        for idx in adaptive_price_indices:\n            full_by_index[idx] = _run_full_analysis(idx)\n            full_index_set.add(idx)\n        debug["adaptive_price_research_added"] = len(adaptive_price_indices)\n        debug["asking_price_routed"] = len(set(asking_indices + adaptive_price_indices))\n    else:\n        debug["adaptive_price_research_added"] = 0\n\n    for idx, (original, fast, _attention) in enumerate(candidates):
         analysed = full_by_index.get(idx, fast)
         # Asking-price acquisition is intentionally limited to the deep-analysis
         # budget. Fast-only rows keep discovery cheap; deep rows carry the
@@ -459,7 +461,7 @@ def analyze_data(
         and (row.get("asking_price_opportunity") or {}).get("reference_asking_price")
     )
     debug["price_research_funnel"] = {
-        "searchable_identity": sum(1 for row in results if isinstance(row, dict) and row.get("exact_identity_gate_supports_comp_research")),
+        "searchable_identity": debug.get("asking_price_eligible_pool", 0),
         "routed": debug.get("asking_price_routed", 0),
         "deep_analysed": len(full_by_index),
         "context_attached": sum(1 for row in results if isinstance(row, dict) and isinstance(row.get("ebay_active_context"), dict)),
