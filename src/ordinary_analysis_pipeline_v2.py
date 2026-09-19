@@ -270,7 +270,7 @@ def analyze_data(
     )
 
     results = []
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=8, max_cap=40)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=12, max_cap=80)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
         candidates,
@@ -327,7 +327,10 @@ def analyze_data(
     # Market-gap-first: screen a materially broader slice of the routable
     # pool with the existing eBay asking-price comparison before final ranking.
     # This is bounded to avoid turning every search into hundreds of API calls.
-    initial_price_limit = min(40, len(all_asking_eligible))
+    # Mispricing sweep: cover a much broader part of the exact-identifiable
+    # market before spending ranking attention. This is intentionally bounded,
+    # but large enough to hunt beyond the obvious cheapest base cards.
+    initial_price_limit = min(80, len(all_asking_eligible))
     asking_routes = all_asking_eligible[:initial_price_limit]
     asking_indices = []
     routed_indices = []
