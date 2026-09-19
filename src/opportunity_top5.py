@@ -264,7 +264,10 @@ def build_opportunity_top5(items, limit=5):
         deduped.append(row)
         if len(deduped) >= max(0, int(limit)):
             break
-    final_rows = gate_and_sort(deduped, limit=limit)
+    # Apply the final gate to the whole candidate pool, not only the first
+    # pre-gate five. Otherwise a candidate that should be demoted can remain in
+    # Top 5 simply because stronger alternatives were discarded too early.
+    final_rows = gate_and_sort(rows, limit=limit)
     return {
         "rows": final_rows,
         "note": "KÖP kräver verifierad ekonomi. Top 5 passerar dessutom en sista reality gate som kan nedranka kandidater med svag eller motsägande prisdata.",
