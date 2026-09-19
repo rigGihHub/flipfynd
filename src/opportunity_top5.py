@@ -113,6 +113,15 @@ def build_opportunity_top5(items, limit=5):
                 asking_values.append(value)
         asking_reference = min(asking_values) if asking_values else None
 
+        asking_context = item.get("asking_price_opportunity") or {}
+        asking_margin = _n(asking_context.get("net_margin"), 0.0) if isinstance(asking_context, dict) else 0.0
+        asking_count = int(_n(asking_context.get("comparison_count"), 0) or 0) if isinstance(asking_context, dict) else 0
+        asking_positive = bool(
+            isinstance(asking_context, dict)
+            and asking_context.get("possible_find")
+            and asking_margin > 0
+            and asking_count > 0
+        )
         verified_edge = bool(market is not None and total is not None and market > total)
         buy = bool(existing_decision in {"KÖP", "BUY"} and sold >= 2 and valuation_safe and verified_edge)
 
@@ -168,6 +177,15 @@ def build_opportunity_top5(items, limit=5):
         if verified_edge:
             economic = min(28.0, 12.0 + 16.0 * min(1.0, (market - total) / max(total, 1.0)))
             reasons.insert(0, "verifierat värde över köpkostnad")
+        elif asking_positive and total:
+            # Active asking is now the primary practical screening context.
+            # It may rank an UNDERSÖK candidate highly, but never creates KÖP.
+            economic += min(22.0, 7.0 + 15.0 * min(1.0, asking_margin / max(total, 1.0)))
+            if asking_count >= 3:
+                economic += 5.0
+                reasons.insert(0, f"{asking_count} jämförbara aktiva priser visar möjlig marginal")
+            else:
+                reasons.insert(0, "aktivt jämförpris visar möjlig marginal")
         elif total:
             # No verified value means we do not know that a low purchase price is
             # cheap. Penalise uncertainty rather than rewarding "rookie", fame or
@@ -237,6 +255,9 @@ def build_opportunity_top5(items, limit=5):
             "sold_comps": sold,
             "asking_reference": asking_reference,
             "asking_warning": asking_warning,
+            "asking_positive": asking_positive,
+            "asking_comparison_count": asking_count,
+            "asking_net_margin": asking_margin if asking_positive else None,
             "generic_lot": generic_lot,
             "freshness_score": round(freshness, 1),
             "primary_blocker": None if buy else ("Marknadsvärde/SOLD ännu inte verifierat" if not valuation_safe or sold < 2 else "Ekonomiskt övertag inte verifierat"),
