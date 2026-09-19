@@ -1123,6 +1123,22 @@ def analyze_data(*args, **kwargs):
 ensure_state()
 update_fetch_status()
 
+# Restore the last completed ordinary search when Streamlit creates a new
+# browser session (for example after leaving the app and returning). Session
+# state is ephemeral; the completed result is not.
+if st.session_state.get("results") is None and DATABASE_URL:
+    try:
+        restored = load_persistent_namespace(DATABASE_URL, "ordinary_last_completed", {})
+        if isinstance(restored, dict) and isinstance(restored.get("results"), list):
+            st.session_state["results"] = restored.get("results") or []
+            st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
+            st.session_state["last_completed_search_signature"] = restored.get("signature")
+            # Do not stamp the current data version here: the normal stale-data
+            # guard must still invalidate restored results after a real market refresh.
+            st.session_state["restored_completed_search"] = True
+    except Exception:
+        pass
+
 if st.session_state.get("fetch_status") == "running":
     # Data is persisted page-by-page during a crawl; refresh the cached dataset
     # so counts and newly fetched sport data become visible immediately.
@@ -1381,6 +1397,8 @@ if repaired_categories:
     )
 if st.session_state.pop("results_stale_notice", False):
     st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det gamla sökresultatet rensades så att du inte ser en inaktuell nolla.")
+if st.session_state.pop("restored_completed_search", False):
+    st.caption("↩️ Din senaste färdiga fyndsökning har återställts.")
 _fetch_state_summary = load_fetch_state()
 _last_values = [
     info.get("last_fetch_at")
