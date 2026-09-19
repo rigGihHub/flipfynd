@@ -1134,7 +1134,7 @@ if st.session_state.get("results") is None and DATABASE_URL:
             # Never restore a completed search produced by an older analysis
             # engine. This was keeping obsolete Top 5 rows visible even after
             # the ranking/price pipeline changed.
-            if "ordinary-v2-price-coverage-20260919-4" in restored_signature:
+            if "ordinary-v2-ui-negative-guard-20260919-5" in restored_signature:
                 st.session_state["results"] = restored.get("results") or []
                 st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
                 st.session_state["last_completed_search_signature"] = restored_signature
@@ -1759,7 +1759,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-price-coverage-20260919-4"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-ui-negative-guard-20260919-5"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2193,6 +2193,13 @@ if st.session_state.get("results") is not None:
             )
             opportunity_top5 = build_opportunity_top5(st.session_state.get("results") or [], limit=5)
             top_rows = list(opportunity_top5.get("rows") or [])
+            # Last-resort UI invariant: never render a known negative-margin
+            # candidate as a Top-5 find. This protects the product even if an
+            # older imported ranking module survives a Streamlit hot reload.
+            top_rows = [
+                row for row in top_rows
+                if row.get("practical_margin") is None or float(row.get("practical_margin") or 0) > 0
+            ]
 
             st.markdown("### 🏆 Topp 5 i den här sökningen")
             if not top_rows:
