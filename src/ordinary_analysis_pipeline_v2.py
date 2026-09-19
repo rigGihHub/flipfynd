@@ -474,7 +474,14 @@ def analyze_data(
         opp = row.get("asking_price_opportunity")
         if isinstance(opp, dict):
             status = str(opp.get("status") or "UNKNOWN")
-            price_status_counts[status] = price_status_counts.get(status, 0) + 1
+            http_status = opp.get("http_status")
+            error_type = opp.get("error_type")
+            detail = status
+            if http_status:
+                detail += f"/HTTP_{http_status}"
+            if error_type:
+                detail += f"/{error_type}"
+            price_status_counts[detail] = price_status_counts.get(detail, 0) + 1
     debug["price_research_status_counts"] = price_status_counts
 
     results.sort(
