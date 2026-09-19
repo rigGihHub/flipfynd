@@ -136,7 +136,20 @@ def build_opportunity_top5(items, limit=5):
         if odd.get("candidate"):
             research += min(14, _n(odd.get("priority_score")) * 0.14); reasons.append("oddity/story-spår")
         if lot.get("candidate"):
-            research += min(8, 2 * len(lot.get("evidence_types") or [])); reasons.append("lot/paket värt kontroll")
+            # A lot is a reason to inspect images, not evidence that the lot is
+            # economically valuable. Only concrete card-level evidence may add
+            # a small research boost; generic lot/weak-listing signals do not.
+            concrete_lot_evidence = bool(
+                item.get("valuable_card_tags")
+                or item.get("nonstandard_value_known_matches")
+                or item.get("misclassified_card_price_gap_supported")
+                or item.get("mispriced_rookie_price_gap_supported")
+            )
+            if concrete_lot_evidence:
+                research += 3
+                reasons.append("lot med konkret kortsignal att kontrollera")
+            else:
+                reasons.append("lot/paket – innehållet måste identifieras")
         if item.get("is_hidden_find_candidate"):
             research += 6; reasons.append("kan vara underexponerad")
         if item.get("is_information_edge_candidate"):
@@ -161,6 +174,19 @@ def build_opportunity_top5(items, limit=5):
             # a low sticker price.
             economic -= 12.0
             economic -= min(12.0, max(0.0, math.log10(max(total, 10.0) / 10.0) * 5.0))
+
+        # Generic lots must not crowd out identifiable single cards in Top 5.
+        # Without a concrete card-level value signal they are a separate manual
+        # image-review task, not a leading resale opportunity.
+        generic_lot = bool(lot.get("candidate") and not (
+            item.get("valuable_card_tags")
+            or item.get("nonstandard_value_known_matches")
+            or item.get("misclassified_card_price_gap_supported")
+            or item.get("mispriced_rookie_price_gap_supported")
+        ))
+        if generic_lot:
+            economic -= 24.0
+            reasons.append("generisk lot utan identifierat värdekort")
 
         # Negative asking-price guard. A comparable asking level can only
         # DOWN-rank. Never use it to infer upside.
@@ -211,6 +237,7 @@ def build_opportunity_top5(items, limit=5):
             "sold_comps": sold,
             "asking_reference": asking_reference,
             "asking_warning": asking_warning,
+            "generic_lot": generic_lot,
             "freshness_score": round(freshness, 1),
             "primary_blocker": None if buy else ("Marknadsvärde/SOLD ännu inte verifierat" if not valuation_safe or sold < 2 else "Ekonomiskt övertag inte verifierat"),
             "reasons": list(dict.fromkeys(reasons))[:5] or ["bäst av analyserade kandidater"],
@@ -220,6 +247,7 @@ def build_opportunity_top5(items, limit=5):
     # Freshness is the final tiebreaker, never a substitute for economics/evidence.
     rows.sort(key=lambda r: (
         r["decision"] == "KÖP",
+        not r.get("generic_lot"),
         not (r.get("_source_item") and not r.get("market_value") and int(r.get("sold_comps") or 0) == 0),
         r["potential"],
         r["certainty"],
