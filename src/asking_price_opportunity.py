@@ -89,7 +89,17 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     freight = _number(shipping["shipping"])
     if freight is None:
         return {**out, "status": "SHIPPING_INVALID"}
-    reference = rows[0]["asking_price_sek"]
+    # Use a conservative lower-market reference rather than a single highest
+    # listing. With several exact active comps, the lower quartile resists one
+    # unrealistically cheap or expensive listing while staying conservative.
+    prices = [row["asking_price_sek"] for row in rows]
+    if len(prices) >= 3:
+        lower_index = max(0, int((len(prices) - 1) * 0.25))
+        reference = prices[lower_index]
+        reference_method = "LOWER_QUARTILE"
+    else:
+        reference = prices[0]
+        reference_method = "LOWEST_ASKING"
     fee = round(min(200.0, max(3.0, reference * 0.10)), 2)
     packaging = 3.0
     total = round(price + freight, 2)
@@ -99,8 +109,13 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         "possible_find": margin > 0, "purchase_price": price,
         "shipping": freight, "shipping_known": shipping["known"],
         "total_cost": total, "reference_asking_price": reference,
+        "reference_method": reference_method,
         "selling_fee": fee, "packaging": packaging, "net_margin": margin,
         "comparison_count": len(rows), "comparisons": rows[:5],
+        "asking_evidence_strength": (
+            "STRONG_ACTIVE_CONTEXT" if len(rows) >= 3
+            else "LIMITED_ACTIVE_CONTEXT"
+        ),
         "fx_date": (fx or {}).get("date"), "fx_source": (fx or {}).get("source"),
         "fetched_at": (context or {}).get("fetched_at"),
         "note": "Begärda kortpriser, inte genomförda försäljningar. Marginalen förutsätter försäljning till jämförelsepriset och att köparen betalar vidarefrakten. Avgift 10 % (3–200 kr), emballage 3 kr. Skick och efterfrågan måste bedömas.",
