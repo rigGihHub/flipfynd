@@ -93,13 +93,17 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     # listing. With several exact active comps, the lower quartile resists one
     # unrealistically cheap or expensive listing while staying conservative.
     prices = [row["asking_price_sek"] for row in rows]
+    # Active listings are an upper-bound indication, not realised value.
+    # Use the low end of exact item prices and apply a conservative haircut so
+    # one expensive listing cannot manufacture a fake resale opportunity.
     if len(prices) >= 3:
         lower_index = max(0, int((len(prices) - 1) * 0.25))
-        reference = prices[lower_index]
-        reference_method = "LOWER_QUARTILE"
+        observed_reference = prices[lower_index]
+        reference_method = "LOWER_QUARTILE_ACTIVE"
     else:
-        reference = prices[0]
-        reference_method = "LOWEST_ASKING"
+        observed_reference = prices[0]
+        reference_method = "LOWEST_ACTIVE"
+    reference = round(observed_reference * 0.85, 2)
     fee = round(min(200.0, max(3.0, reference * 0.10)), 2)
     packaging = 3.0
     total = round(price + freight, 2)
@@ -108,7 +112,7 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         **out, "status": "POSSIBLE_FIND" if margin > 0 else "NO_MARGIN",
         "possible_find": margin > 0, "purchase_price": price,
         "shipping": freight, "shipping_known": shipping["known"],
-        "total_cost": total, "reference_asking_price": reference,
+        "total_cost": total, "reference_asking_price": reference, "observed_asking_price": observed_reference,
         "reference_method": reference_method,
         "selling_fee": fee, "packaging": packaging, "net_margin": margin,
         "comparison_count": len(rows), "comparisons": rows[:5],
