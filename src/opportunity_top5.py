@@ -13,6 +13,7 @@ from src.oddity_story_hunter import build_oddity_story_signal
 from src.lot_treasure_hunter import build_lot_treasure_signal
 from src.top5_reality_gate import gate_and_sort
 from src.opportunity_discovery_signals import opportunity_discovery_score, opportunity_discovery_signals
+from src.top5_usefulness_guard import build_useful_top5
 
 
 def _n(value, default=0.0):
@@ -393,7 +394,10 @@ def build_opportunity_top5(items, limit=5):
     # Apply the final gate to the whole candidate pool, not only the first
     # pre-gate five. Otherwise a candidate that should be demoted can remain in
     # Top 5 simply because stronger alternatives were discarded too early.
-    final_rows = gate_and_sort(rows, limit=limit)
+    # Gate the full pool, then enforce usefulness. Do not let five known
+    # negative-margin rows crowd out candidates whose price still needs research.
+    gated_rows = gate_and_sort(rows, limit=max(limit * 20, len(rows)))
+    final_rows = build_useful_top5(gated_rows, limit=limit)
     return {
         "rows": final_rows,
         "note": "KÖP kräver verifierad ekonomi. Top 5 passerar dessutom en sista reality gate som kan nedranka kandidater med svag eller motsägande prisdata.",
