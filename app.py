@@ -1468,17 +1468,30 @@ if st.button(
     disabled=_fetch_status == "running",
     key="top_fetch_selected",
 ):
+    # The primary flow is a rolling newest-first crawl: first refresh the latest
+    # window, then continue with the next not-yet-loaded market pages.
+    st.session_state["continue_market_after_latest"] = True
     start_fetch(fetch_category, True, "latest")
     st.rerun()
 st.caption(
-    f"Senast inlagda först · högst {LATEST_MAX_PAGES} resultatsidor per sport. "
-    "Sparade annonser återanvänds och befintliga annonser uppdateras. "
-    "En snabb hämtning täcker inte hela marknaden."
+    f"Senast inlagda först · högst {LATEST_MAX_PAGES} resultatsidor i första steget. "
+    "När de senaste är kontrollerade fortsätter FlipFynd automatiskt med nästa "
+    "ännu inte inlästa marknadssidor."
 )
 if _fetch_status == "running":
     st.info(fetch_progress_message() or "Hämtningen pågår… Annonser sparas sida för sida.")
     if st.button("⏹ Avbryt hämtning", key="top_stop_fetch"):
         stop_fetch()
+        st.rerun()
+elif _fetch_status == "finished" and st.session_state.pop("continue_market_after_latest", False):
+    # Chain the archive-growth pass only after a successful latest refresh.
+    # market_batch uses persisted coverage state and therefore starts at the
+    # next not-yet-loaded page instead of rescanning the newest window.
+    if start_fetch(fetch_category, True, "market_batch"):
+        st.session_state["fetch_last_message"] = (
+            "De senaste annonserna är kontrollerade. Fortsätter automatiskt "
+            "med nästa ännu inte inlästa annonser…"
+        )
         st.rerun()
 elif _fetch_status == "failed":
     st.error(st.session_state.get("fetch_last_message") or "Hämtningen misslyckades. Försök igen.")
