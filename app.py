@@ -1413,11 +1413,18 @@ _count_parts = [
 if _sport_counts["unknown"]:
     _count_parts.append(f"{_sport_counts['unknown']:,} okategoriserade")
 
+# Distinguish the full saved archive from the current latest-scan window.
+# Repeated latest refreshes are expected to overlap heavily and therefore do
+# not necessarily increase the archive by many rows.
+_total_loaded = len(_visible_data)
+_latest_window = latest_analysis_items(_visible_data)
+_latest_window_count = len(_latest_window)
+
 st.caption(
     (
-        f"{len(_visible_data):,} annonser totalt • "
+        f"Totalt inlästa: {_total_loaded:,} annonser • "
         + " • ".join(_count_parts)
-        + f" • {_latest_label} {_latest_fetch}"
+        + f" • aktuell senaste-scan: {_latest_window_count:,} • {_latest_label} {_latest_fetch}"
     ).replace(",", " ")
 )
 
@@ -1480,21 +1487,36 @@ elif _fetch_status == "failed":
         with st.expander("Tekniska detaljer"):
             st.code(log_tail, language="text")
 
+# Two explicit actions: refresh newest listings versus extend the saved
+# archive. They must not look like the same operation to the user.
 with st.expander("Fler hämtningsalternativ"):
-    extra_modes = {
-        "Läs in fler äldre annonser": "market_batch",
-        "Uppdatera äldre sparade sidor": "scheduled_refresh",
-        "Full genomsökning (tar längre tid)": "full",
-    }
-    extra_mode = st.selectbox("Omfattning", list(extra_modes), key="extra_fetch_mode")
-    st.caption("Använder sporten som valts ovan. Sparade annonser finns kvar.")
+    st.markdown("**Läs in fler annonser**")
+    st.caption(
+        "Fortsätter på nästa ännu inte inlästa marknadssidor och bygger ut arkivet. "
+        "Använd detta när du vill öka Totalt inlästa – inte Uppdatera senaste."
+    )
     if st.button(
-        "Kör vald hämtning",
+        "➕ Läs in fler annonser",
         disabled=_fetch_status == "running",
-        key="extra_fetch_start",
+        key="fetch_more_market",
+        use_container_width=True,
     ):
-        start_fetch(fetch_category, True, extra_modes[extra_mode])
+        start_fetch(fetch_category, True, "market_batch")
         st.rerun()
+
+    with st.expander("Övriga avancerade hämtningar", expanded=False):
+        extra_modes = {
+            "Uppdatera äldre sparade sidor": "scheduled_refresh",
+            "Full genomsökning (tar längre tid)": "full",
+        }
+        extra_mode = st.selectbox("Omfattning", list(extra_modes), key="extra_fetch_mode")
+        if st.button(
+            "Kör avancerad hämtning",
+            disabled=_fetch_status == "running",
+            key="extra_fetch_start",
+        ):
+            start_fetch(fetch_category, True, extra_modes[extra_mode])
+            st.rerun()
 
 def render_search_pipeline(debug, sport_label, max_price, search):
     """Explain where listings disappear without guessing about the market."""
