@@ -1661,13 +1661,19 @@ with st.form("analysis_form"):
                 help="Slå på endast om du vill se kort som inte är tillräckligt starka för huvudlistan.",
             )
 
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            numbered_only = st.checkbox("Endast numrerade", value=False)
-        with f2:
-            patch_only = st.checkbox("Endast patch/relic", value=False)
-        with f3:
-            auto_only = st.checkbox("Endast autograf", value=False)
+        st.caption(
+            "Autografer, numrerade kort och patch/relic ingår alltid i den vanliga fyndsökningen. "
+            "Filtren nedan används bara om du vill begränsa sökningen till en viss korttyp."
+        )
+        card_type_filter = st.radio(
+            "Korttyp",
+            ["Alla kort", "Endast autograf", "Endast numrerade", "Endast patch/relic"],
+            horizontal=True,
+            key="ordinary_card_type_filter",
+        )
+        auto_only = card_type_filter == "Endast autograf"
+        numbered_only = card_type_filter == "Endast numrerade"
+        patch_only = card_type_filter == "Endast patch/relic"
 
     # Intern prestandaparameter: användaren ska inte behöva förstå den.
     # Keep the interactive Streamlit request bounded. The background worker
