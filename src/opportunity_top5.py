@@ -69,6 +69,28 @@ def build_opportunity_top5(items, limit=5):
             market = None
 
         existing_decision = str(item.get("beslut") or item.get("decision") or "").upper()
+
+        # Asking/guide prices are NOT valuation evidence, but a low exact-card
+        # asking context is useful negative evidence. It can suppress a false
+        # positive when our acquisition cost is already near/above what other
+        # sellers ask; it can never create market value or KÖP.
+        asking_values = []
+        for key in (
+            "guide_price", "guide_value", "asking_price", "asking_market_price",
+            "external_asking_price", "price_guide_value", "pricecharting_price",
+            "sports_cards_pro_price", "ebay_asking_price",
+        ):
+            value = _n(item.get(key), 0.0)
+            if value > 0:
+                asking_values.append(value)
+        for value in (item.get("asking_prices") or []):
+            if isinstance(value, dict):
+                value = value.get("price") or value.get("value")
+            value = _n(value, 0.0)
+            if value > 0:
+                asking_values.append(value)
+        asking_reference = min(asking_values) if asking_values else None
+
         verified_edge = bool(market is not None and total is not None and market > total)
         buy = bool(existing_decision in {"KÖP", "BUY"} and sold >= 2 and valuation_safe and verified_edge)
 
@@ -118,6 +140,20 @@ def build_opportunity_top5(items, limit=5):
             economic -= 12.0
             economic -= min(12.0, max(0.0, math.log10(max(total, 10.0) / 10.0) * 5.0))
 
+        # Negative asking-price guard. A comparable asking level can only
+        # DOWN-rank. Never use it to infer upside.
+        asking_warning = None
+        if asking_reference is not None and total is not None:
+            ratio = total / max(asking_reference, 0.01)
+            if ratio >= 1.0:
+                economic -= min(30.0, 14.0 + (ratio - 1.0) * 10.0)
+                asking_warning = "köpkostnaden är redan vid/över observerat begärt pris"
+            elif ratio >= 0.70:
+                economic -= 8.0
+                asking_warning = "liten marginal mot observerat begärt pris"
+            if asking_warning:
+                reasons.append(asking_warning)
+
         # Commodity/base-card warning: no exact SOLD evidence + no safe valuation
         # + no strong exact-card research evidence. Such cards can fill the list
         # only as "best of the rest", never dominate it.
@@ -151,6 +187,8 @@ def build_opportunity_top5(items, limit=5):
             "potential": round(score, 1),
             "certainty": round(certainty, 1),
             "sold_comps": sold,
+            "asking_reference": asking_reference,
+            "asking_warning": asking_warning,
             "freshness_score": round(freshness, 1),
             "primary_blocker": None if buy else ("Marknadsvärde/SOLD ännu inte verifierat" if not valuation_safe or sold < 2 else "Ekonomiskt övertag inte verifierat"),
             "reasons": list(dict.fromkeys(reasons))[:5] or ["bäst av analyserade kandidater"],
