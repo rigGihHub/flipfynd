@@ -70,6 +70,28 @@ def opportunity_discovery_signals(item):
     # 20 reject obvious commodity/no-evidence crowding via negative signal
     if not sold and not comps and not identity.get("card_number") and not item.get("valuable_card_tags"):
         add("commodity_uncertainty", -8, "svagt kortspecifikt prisunderlag")
+    # 31-50: additional discovery dimensions. These remain bounded clues,
+    # never standalone valuation evidence.
+    if item.get("parallel") or identity.get("parallel"): add("parallel_identity", 4, "parallel identifierad")
+    if item.get("is_rookie") and identity.get("card_number"): add("rookie_exact", 3, "rookie med kortnummer")
+    if item.get("case_hit") or item.get("ssp_evidence"): add("ssp_case_hit", 5, "SSP/case-hit-signal")
+    if item.get("variation_evidence"): add("variation", 4, "variant/variation-signal")
+    if item.get("short_print_evidence"): add("short_print", 4, "short-print-signal")
+    if item.get("auction_ending_soon") and int(_n(item.get("bid_count")))==0: add("ending_unbid", 3, "snart slut utan bud")
+    if item.get("buy_now") and total>0: add("buy_now_actionable", 2, "direkt köpbar")
+    if item.get("seller_feedback_score") and _n(item.get("seller_feedback_score"))>=98: add("seller_quality", 1, "stark säljarhistorik")
+    if item.get("image_count") and _n(item.get("image_count"))>=2: add("image_coverage", 1, "flera annonsbilder")
+    if item.get("condition") and not item.get("condition_risk"): add("condition_stated", 1, "skick angivet")
+    if item.get("market_edge_score") and _n(item.get("market_edge_score"))>=60: add("market_edge", 4, "marknadsedge")
+    if item.get("visual_edge_score") and _n(item.get("visual_edge_score"))>=60: add("visual_edge", 3, "visuell edge")
+    if item.get("collector_signal_score") and _n(item.get("collector_signal_score"))>=10: add("collector_signal", 3, "samlarvärdessignal")
+    if item.get("rookie_importance_matched"): add("rookie_importance", 2, "relevant rookieprofil")
+    if item.get("player_card_demand_review_priority_score") and _n(item.get("player_card_demand_review_priority_score"))>=12: add("review_priority", 2, "stark review-prioritet")
+    if item.get("mispricing_supported"): add("supported_mispricing", 6, "prisgap stöds av data")
+    if item.get("exact_supply_count") == 0 and (sold or comps): add("scarce_supply", 3, "låg observerad tillgång")
+    if item.get("exact_supply_count") and _n(item.get("exact_supply_count"))>=10 and not sold: add("oversupply", -4, "hög tillgång utan säljbevis")
+    if item.get("shipping_known") is True: add("shipping_known", 2, "frakt verifierad")
+    if item.get("shipping_known") is False: add("shipping_unknown", -3, "frakt osäker")
     return signals
 
 
