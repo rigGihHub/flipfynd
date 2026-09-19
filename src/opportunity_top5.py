@@ -49,7 +49,46 @@ def _freshness(item):
         return 0.0
 
 
+def _expand_special_engine_candidates(items):
+    """Create one unified candidate pool from ordinary + special-engine signals."""
+    expanded = []
+    seen = set()
+    for raw in items or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        url = listing_url(item)
+        marker = url or str(item.get("item_id") or item.get("id") or item.get("titel") or item.get("title") or "").casefold()
+        if marker and marker in seen:
+            continue
+        if marker:
+            seen.add(marker)
+
+        # Materialize special-engine outputs on the same row so they cannot live
+        # in disconnected UI-only shortlists.
+        try: item["_bad_listing_signal"] = build_bad_listing_signal(item)
+        except Exception: item["_bad_listing_signal"] = {}
+        try: item["_mispricing_signal"] = build_mispricing_hypothesis(item)
+        except Exception: item["_mispricing_signal"] = {}
+        try: item["_oddity_signal"] = build_oddity_story_signal(item)
+        except Exception: item["_oddity_signal"] = {}
+        try: item["_lot_signal"] = build_lot_treasure_signal(item)
+        except Exception: item["_lot_signal"] = {}
+
+        special_strength = 0.0
+        for signal in (item["_bad_listing_signal"], item["_mispricing_signal"], item["_oddity_signal"], item["_lot_signal"]):
+            if not isinstance(signal, dict):
+                continue
+            if signal.get("candidate"): special_strength += 8
+            if signal.get("status") in {"SUPPORTED_PRICE_GAP", "REVIEW", "CANDIDATE"}: special_strength += 6
+            special_strength += min(8.0, _n(signal.get("score"), 0.0) * 0.10)
+        item["special_engine_strength"] = round(special_strength, 1)
+        expanded.append(item)
+    return expanded
+
+
 def build_opportunity_top5(items, limit=5):
+    items = _expand_special_engine_candidates(items)
     rows = []
     for item in items or []:
         if not isinstance(item, dict):
@@ -324,7 +363,9 @@ def build_opportunity_top5(items, limit=5):
                 economic += 3.0
 
         discovery_signals = opportunity_discovery_signals(item)
-        discovery_score = opportunity_discovery_score(item)
+        discovery_score = opportunity_discovery_score(item) + min(18.0, _n(item.get("special_engine_strength"), 0.0))
+        if item.get("special_engine_strength"):
+            reasons.append("specialmotor signalerar kontrollkandidat")
         # Discovery signals are deliberately capped in final ranking. They help
         # choose what to investigate, but economics remains dominant.
         research += max(-8.0, min(12.0, discovery_score * 0.18))
