@@ -116,7 +116,7 @@ def build_oddity_story_queue(items, limit=8):
             continue
         rows.append({
             "title": item.get("titel") or item.get("title") or "Okänd annons",
-            "url": item.get("url"),
+            "url": item.get("lank") or item.get("url"),
             "decision": item.get("beslut") or item.get("decision"),
             "signal": signal,
             "_rank": (
