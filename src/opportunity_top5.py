@@ -139,11 +139,13 @@ def build_opportunity_top5(items, limit=5):
                 heuristic_indication = value
                 break
         asking_context = item.get("asking_price_opportunity") or {}
-        if isinstance(asking_context, dict):
+        asking_status = str(asking_context.get("status") or "") if isinstance(asking_context, dict) else ""
+        single_comp_review = asking_status == "SINGLE_COMP_REVIEW"
+        if isinstance(asking_context, dict) and not single_comp_review:
             value = _n(asking_context.get("reference_asking_price"), 0.0)
             if value > 0:
                 asking_values.append(value)
-            for comparison in asking_context.get("comparisons") or []:
+            for comparison in ([] if single_comp_review else (asking_context.get("comparisons") or [])):
                 if not isinstance(comparison, dict):
                     continue
                 value = _n(
@@ -165,7 +167,7 @@ def build_opportunity_top5(items, limit=5):
 
         asking_context = item.get("asking_price_opportunity") or {}
         asking_margin = _n(asking_context.get("net_margin"), 0.0) if isinstance(asking_context, dict) else 0.0
-        asking_count = int(_n(asking_context.get("comparison_count"), 0) or 0) if isinstance(asking_context, dict) else 0
+        asking_count = int(_n(asking_context.get("comparison_count"), 0) or 0) if isinstance(asking_context, dict) and not single_comp_review else 0
         asking_positive = bool(
             isinstance(asking_context, dict)
             and asking_context.get("possible_find")
@@ -379,6 +381,17 @@ def build_opportunity_top5(items, limit=5):
             net = item.get("net_profit")
         net = _n(net, 0.0) if net is not None else None
 
+        # Evidence quality is the primary Top-5 ordering dimension.
+        # A single active listing is review-only and must rank below candidates
+        # with multiple exact active comps or verified valuation evidence.
+        evidence_quality = (
+            4 if buy else
+            3 if verified_edge else
+            2 if asking_positive and asking_count >= 2 else
+            1 if price_context_count > 0 and not single_comp_review else
+            0
+        )
+
         rows.append({
             "title": title,
             "url": url,
@@ -401,6 +414,8 @@ def build_opportunity_top5(items, limit=5):
             "discovery_signals": discovery_signals,
             "asking_warning": asking_warning,
             "asking_positive": asking_positive,
+            "single_comp_review": single_comp_review,
+            "evidence_quality": evidence_quality,
             "asking_comparison_count": asking_count,
             "asking_net_margin": asking_margin if asking_positive else None,
             "generic_lot": generic_lot,
@@ -412,6 +427,7 @@ def build_opportunity_top5(items, limit=5):
 
     # Freshness is the final tiebreaker, never a substitute for economics/evidence.
     rows.sort(key=lambda r: (
+        r.get("evidence_quality", 0),
         r["decision"] == "KÖP",
         not r.get("generic_lot"),
         not (r.get("_source_item") and not r.get("market_value") and int(r.get("sold_comps") or 0) == 0),
