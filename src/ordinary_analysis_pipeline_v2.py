@@ -338,14 +338,13 @@ def analyze_data(
             if idx not in full_indices:
                 asking_indices.append(idx)
     # Keep hard CPU cap: replace weakest tail slots rather than expanding it.
-    for idx in asking_indices:
-        if idx in full_indices:
-            continue
-        if len(full_indices) < dynamic_deep_cap:
-            full_indices.append(idx)
-        elif full_indices:
-            full_indices[-1] = idx
-    full_indices = list(dict.fromkeys(full_indices))[:dynamic_deep_cap]
+    # Guarantee the market-gap routes actually survive into the executable
+    # deep-analysis set. Previously repeated tail replacement meant only the
+    # last asking route survived when the CPU set was already full.
+    asking_unique = list(dict.fromkeys(routed_indices))
+    retained_non_asking = [idx for idx in full_indices if idx not in asking_unique]
+    room_for_non_asking = max(0, dynamic_deep_cap - len(asking_unique))
+    full_indices = (asking_unique + retained_non_asking[:room_for_non_asking])[:dynamic_deep_cap]
 
     full_index_set = set(full_indices)
     debug["asking_price_routed"] = len(routed_indices)
