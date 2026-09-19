@@ -42,6 +42,34 @@ def opportunity_discovery_signals(item):
     if bids>0: add("auction_activity", min(4,bids*.5), "budaktivitet")
     # 10 low-capital probe; intentionally tiny
     if 0<total<=75: add("capital_efficiency_probe", 2, "låg kapitalinsats")
+
+    # 11 seller concentration / combined shipping opportunity
+    seller = item.get("saljare") or item.get("seller")
+    if seller and item.get("same_seller_opportunity"): add("same_seller", 3, "möjlig samfraktsfördel")
+    # 12 grade clarity
+    if item.get("grade") or item.get("grading_company"): add("grade_clarity", 3, "graderat kort är lättare att jämföra exakt")
+    # 13 serial-number clarity
+    if item.get("serial_denominator") or item.get("serial_number"): add("serial_clarity", 4, "numrering ger starkare kortidentitet")
+    # 14 autograph/relic evidence, card-specific not checkbox-driven
+    if item.get("is_auto") or item.get("autograph_evidence"): add("autograph", 4, "autografidentifiering")
+    if item.get("is_patch") or item.get("is_relic") or item.get("relic_evidence"): add("relic", 3, "patch/relic-identifiering")
+    # 15 listing-detail enrichment
+    if item.get("detail_enrichment_status") == "ok": add("detail_enriched", 3, "annonsdetaljer verifierade")
+    # 16 exact card number
+    identity=item.get("exact_identity_gate_research_identity_fields") or item.get("exact_identity_gate_identity_fields") or {}
+    if identity.get("card_number"): add("card_number", 4, "kortnummer identifierat")
+    # 17 set+season completeness
+    if identity.get("set_name") and identity.get("season"): add("set_season", 4, "set och säsong identifierade")
+    # 18 price-context breadth
+    asking=item.get("asking_price_opportunity") or {}
+    comps=int(_n(asking.get("comparison_count")))
+    if comps>=3: add("price_breadth", min(7, 3+comps*.5), "flera jämförbara aktiva priser")
+    # 19 meaningful nominal margin
+    margin=_n(asking.get("net_margin"))
+    if margin>=50: add("nominal_margin", min(8, 3+margin/50), "meningsfull möjlig nettomarginal")
+    # 20 reject obvious commodity/no-evidence crowding via negative signal
+    if not sold and not comps and not identity.get("card_number") and not item.get("valuable_card_tags"):
+        add("commodity_uncertainty", -8, "svagt kortspecifikt prisunderlag")
     return signals
 
 
