@@ -134,35 +134,32 @@ def _ordinary_rank_key(row: dict):
 
 
 def _seller_opportunity_rank_key(row: dict):
-    """Order seller candidates without weakening ordinary BUY evidence gates."""
+    """Rank resale economics first; hype/research signals only break ties."""
     decision = str(row.get("decision") or "").upper()
-    decision_tier = 2 if decision.startswith("KÖP") else 1 if decision.startswith("UNDERSÖK") else 0
     sold = int(_num(row.get("sold_comps")))
-    evidence_tier = 1 if row.get("identity_ok") and sold > 0 else 0
-    collector = min(40.0, _num(row.get("collector_signal_score")))
-    merit = assess_seller_card_merit(row)
-    deal = _num(row.get("deal_score"))
+    identity_ok = bool(row.get("identity_ok"))
     profit = _num(row.get("risk_adjusted_profit"))
-    economic_tier = 2 if deal >= 30 and profit > 0 else 1 if deal > 0 and profit >= 0 else 0
-    opportunity_score = _seller_opportunity_score(row)
-    asking = row.get("asking_price_opportunity") or {}
-    asking_find = bool(asking.get("possible_find"))
+    deal = _num(row.get("deal_score"))
     readiness = assess_deal_readiness(row)
     verified_find = decision.startswith("KÖP") and readiness["ready_for_find"]
-    verified_economics = bool(row.get("identity_ok")) and sold > 0 and profit > 0
+    verified_profit = identity_ok and sold > 0 and profit > 0
+    asking = row.get("asking_price_opportunity") or {}
+    asking_find = bool(asking.get("possible_find"))
     research = seller_result_tier(row) == "RESEARCH"
-    # Active asking prices are discovery evidence. They may surface a candidate,
-    # but they must not outrank SOLD-backed positive economics.
-    tier = 4 if verified_find else 3 if verified_economics else 2 if asking_find else 1 if research else 0
+    merit = assess_seller_card_merit(row)
+
+    # Top 5 is a resale list. A card with zero/negative expected net profit must
+    # never outrank a card with verified positive economics merely because the
+    # player, rookie tag or collector signals look attractive.
+    tier = 4 if verified_find else 3 if verified_profit else 2 if asking_find else 1 if research else 0
     return (
         tier,
-        profit if verified_economics else 0.0,
-        evidence_tier,
-        economic_tier,
-        decision_tier,
+        profit if verified_profit else 0.0,
+        sold if verified_profit else 0,
+        _num(row.get("valuation_confidence")) if verified_profit else 0.0,
+        deal if verified_profit else 0.0,
         _num(asking.get("net_margin")) if asking_find else 0.0,
-        opportunity_score,
-        deal,
+        _seller_opportunity_score(row),
         merit["score"],
         _num(row.get("rank_score")),
         _num(row.get("player_market_score")),
