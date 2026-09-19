@@ -210,13 +210,17 @@ def _persistent_put(key, payload):
 
 
 def fetch_configured_ebay_active_context(query, identity=None):
-    """Cached entrypoint shared across reruns and, with Postgres, sessions."""
+    """Fetch eBay context for the current analysis only.
+
+    Compliance rule: do not persist or cross-session cache eBay response data.
+    The OAuth token cache remains in-process only and contains no listing data.
+    """
     identity_json = json.dumps(identity or {}, sort_keys=True, ensure_ascii=False, default=str)
-    key = _persistent_cache_key(query, identity_json)
-    cached = _persistent_get(key)
-    if cached is not None:
-        return cached
-    result = _fetch_configured_cached(query, identity_json, int(time.time() // 900))
-    if result.get("ok"):
-        _persistent_put(key, result)
-    return result
+    identity_obj = json.loads(identity_json) if identity_json else {}
+    client_id, client_secret = configured_credentials()
+    return fetch_ebay_active_context(
+        query,
+        identity=identity_obj,
+        client_id=client_id,
+        client_secret=client_secret,
+    )
