@@ -901,6 +901,18 @@ def start_fetch(
         )
         return False
 
+    # A new market fetch invalidates the old analysis immediately. Keeping
+    # previous debug/results visible while fresh listings are loading makes two
+    # different datasets look like one search (for example 240 current listings
+    # next to diagnostics from an older 3,085-row run).
+    st.session_state["results"] = None
+    st.session_state["debug"] = None
+    st.session_state["result_cache"] = {}
+    st.session_state.pop("results_data_version", None)
+    st.session_state.pop("last_completed_search_signature", None)
+    st.session_state.pop("active_search_job_id", None)
+    st.session_state["results_stale_notice"] = True
+
     st.session_state["fetch_process"] = process
     st.session_state["fetch_status"] = "running"
     st.session_state["fetch_category"] = category
@@ -948,6 +960,13 @@ def update_fetch_status():
         st.session_state[
             "result_cache"
         ] = {}
+        # Defensive second invalidation: the fetched file may change after the
+        # subprocess exits, so no pre-fetch diagnostics may survive completion.
+        st.session_state["results"] = None
+        st.session_state["debug"] = None
+        st.session_state.pop("results_data_version", None)
+        st.session_state.pop("last_completed_search_signature", None)
+        st.session_state["results_stale_notice"] = True
 
     else:
         st.session_state[
