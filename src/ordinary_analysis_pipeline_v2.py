@@ -18,6 +18,7 @@ from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_
 from src.find_more_cards import select_second_pass_indices
 from src.top5_verification_budget import add_top5_verification_indices
 from src.pricing import total_acquisition_cost
+from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 
 def analyze_data(
     data,
@@ -310,7 +311,32 @@ def analyze_data(
         reserve_slots=5,
         max_per_player=2,
     )
+    # Price-data coverage pass: reserve part of the bounded deep budget for
+    # exact-identifiable rows that can receive official eBay active-price
+    # context. This directly addresses the "480 analysed, no usable price
+    # indication" failure mode.
+    asking_candidates = []
+    for idx, (original, fast, attention) in enumerate(candidates):
+        merged = {**original, **fast}
+        asking_candidates.append({"source_item": merged, "_candidate_index": idx})
+    asking_routes = select_asking_price_research(asking_candidates, limit=12)
+    asking_indices = []
+    for routed in asking_routes:
+        idx = routed.get("_candidate_index")
+        if isinstance(idx, int) and idx not in full_indices:
+            asking_indices.append(idx)
+    # Keep hard CPU cap: replace weakest tail slots rather than expanding it.
+    for idx in asking_indices:
+        if idx in full_indices:
+            continue
+        if len(full_indices) < dynamic_deep_cap:
+            full_indices.append(idx)
+        elif full_indices:
+            full_indices[-1] = idx
+    full_indices = list(dict.fromkeys(full_indices))[:dynamic_deep_cap]
+
     full_index_set = set(full_indices)
+    debug["asking_price_routed"] = len(asking_indices)
     debug["adaptive_full_selected"] = len(adaptive_indices)
     debug["collector_signal_coverage_added"] = len(collector_coverage_added)
     debug["dynamic_deep_cap"] = dynamic_deep_cap
