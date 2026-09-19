@@ -1756,7 +1756,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-practical-price-20260919-2"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-no-negative-padding-20260919-3"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2193,7 +2193,10 @@ if st.session_state.get("results") is not None:
 
             st.markdown("### 🏆 Topp 5 i den här sökningen")
             if not top_rows:
-                st.info("Inga relevanta analyserade annonser finns ännu. Hämta senaste annonser och kör Hitta fynd.")
+                st.warning(
+                    "Inga kandidater med positiv eller ännu okänd fyndmarginal hittades i den analyserade gruppen. "
+                    "FlipFynd visar inte längre kända minusaffärer bara för att fylla Top 5."
+                )
             else:
                 tier_labels = {
                     "VERIFIED": "Verifierat fynd",
