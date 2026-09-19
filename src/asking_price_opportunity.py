@@ -209,6 +209,7 @@ def attach_asking_price_opportunity(item):
             "possible_find": False,
             "http_status": getattr(response, "status_code", None),
             "error_type": type(exc).__name__,
+            "error_stage": str(getattr(exc, "ebay_stage", "UNKNOWN")),
         }
     except requests.Timeout as exc:
         out["asking_price_opportunity"] = {
