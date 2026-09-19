@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.31-always-five"
+RUNTIME_BUILD = "2026-09-19.32-clear-top5"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -1768,7 +1768,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-always-five-20260919-25"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-clear-top5-20260919-26"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2252,9 +2252,27 @@ if st.session_state.get("results") is not None:
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))
 
-            st.markdown("### 🏆 Topp 5 i den här sökningen")
+            actual_find_count = sum(
+                1 for row in top_rows
+                if (
+                    (row.get("decision") == "KÖP")
+                    or (row.get("asking_positive") is True)
+                    or (
+                        row.get("practical_margin") is not None
+                        and float(row.get("practical_margin") or 0) > 0
+                        and row.get("practical_price_source") in {"VERIFIED", "ACTIVE_PRICE"}
+                        and int(row.get("asking_comparison_count") or 0) >= 2
+                    )
+                )
+            )
+            if actual_find_count:
+                st.markdown("### 🏆 Fynd att undersöka")
+                st.caption(f"{actual_find_count} kandidat(er) har verklig positiv prisindikation i den här körningen. Övriga rader är bäst av resten.")
+            else:
+                st.markdown("### 🔎 Bäst av resten – inga fynd hittades")
+                st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Listan visar ändå de fem högst rankade kandidaterna för manuell kontroll.")
             if rescued_count:
-                st.caption(f"🔎 {rescued_count} kandidat(er) har räddats in från FlipFynds researchsignaler för vidare kontroll; de har ännu ingen bevisad positiv marginal.")
+                st.caption(f"{rescued_count} kandidat(er) visas för vidare kontroll trots att positiv marginal inte är bevisad.")
             if not top_rows:
                 st.warning(
                     "Inga kandidater med positiv eller ännu okänd fyndmarginal hittades i den analyserade gruppen. "
@@ -2264,7 +2282,7 @@ if st.session_state.get("results") is not None:
                 tier_labels = {
                     "VERIFIED": "Verifierat fynd",
                     "PROMISING": "Lovande · undersök",
-                    "REMAINDER": "Bäst av resten",
+                    "REMAINDER": "Inte fynd · bäst av resten",
                 }
                 table_rows = []
                 for rank, row in enumerate(top_rows, start=1):
