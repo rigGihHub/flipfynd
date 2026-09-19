@@ -65,9 +65,10 @@ def build_useful_top5(rows, limit=5):
     unknown.sort(key=key,reverse=True)
     negative.sort(key=lambda r:((_n(r.get("practical_margin"),-10**9) or -10**9),*key(r)),reverse=True)
     # Never let known losers crowd out researchable unknowns.
+    # Product rule: known negative-margin rows are not fynd candidates.
+    # Do not pad Top 5 with losers merely to reach five. A shorter useful list
+    # is more honest and more actionable than five zero-potential rows.
     final=(positive+unknown)[:limit]
-    if len(final)<limit:
-        final.extend(negative[:limit-len(final)])
     for r in final:
         r["best_of_bad_market"] = bool(r["usefulness"]["known_negative"])
     return final
