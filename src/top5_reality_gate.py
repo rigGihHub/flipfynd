@@ -75,10 +75,28 @@ def apply_reality_gate(row):
 
 def gate_and_sort(rows, limit=5):
     gated = [apply_reality_gate(row) for row in (rows or [])]
+
+    # Practical discovery mode: positive/less-negative economics must dominate
+    # missing-SOLD penalties. The old ordering sorted on penalty before margin,
+    # which is why the same zero-potential cards stayed on top after many
+    # ranking improvements.
+    def economic_bucket(r):
+        margin = _n(r.get("practical_margin"))
+        if margin is not None and margin > 0:
+            return 3
+        if margin is not None and margin == 0:
+            return 2
+        if margin is not None:
+            return 1
+        return 0
+
     gated.sort(key=lambda r: (
         str(r.get("decision") or "").upper() == "KÖP",
-        -float(r.get("reality_gate_penalty") or 0),
+        economic_bucket(r),
+        _n(r.get("practical_margin"), -10**9),
+        _n(r.get("practical_roi"), -10**9),
         float(r.get("potential") or 0),
+        -float(r.get("reality_gate_penalty") or 0),
         float(r.get("certainty") or 0),
         float(r.get("freshness_score") or 0),
     ), reverse=True)
