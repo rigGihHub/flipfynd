@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.34-evidence-first"
+RUNTIME_BUILD = "2026-09-19.35-mispricing-sweep"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -1768,7 +1768,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-evidence-first-20260919-28"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-mispricing-sweep-20260919-29"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2269,8 +2269,8 @@ if st.session_state.get("results") is not None:
                 st.markdown("### 🏆 Fynd att undersöka")
                 st.caption(f"{actual_find_count} kandidat(er) har verklig positiv prisindikation i den här körningen. Övriga rader är bäst av resten.")
             else:
-                st.markdown("### 🔎 Bäst av resten – inga fynd hittades")
-                st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Listan visar ändå de fem högst rankade kandidaterna för manuell kontroll.")
+                st.markdown("### 🔎 Närmast fyndgränsen – inga fynd hittades")
+                st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Listan visar de fem kandidater som ligger närmast en lönsam vidareförsäljning av det som kunde prisbedömas.")
             if rescued_count:
                 st.caption(f"{rescued_count} kandidat(er) visas för vidare kontroll trots att positiv marginal inte är bevisad.")
             if not top_rows:
