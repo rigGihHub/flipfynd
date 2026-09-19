@@ -77,7 +77,10 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
             timeout=timeout,
         )
-        token_response.raise_for_status()
+        if not token_response.ok:
+            err = requests.HTTPError(f"EBAY_TOKEN_HTTP_{token_response.status_code}", response=token_response)
+            setattr(err, "ebay_stage", "TOKEN")
+            raise err
         token_data = token_response.json()
         token = token_data.get("access_token")
         if token and session is requests:
@@ -91,7 +94,10 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
         timeout=timeout,
     )
-    response.raise_for_status()
+    if not response.ok:
+        err = requests.HTTPError(f"EBAY_BROWSE_HTTP_{response.status_code}", response=response)
+        setattr(err, "ebay_stage", "BROWSE")
+        raise err
     payload = response.json()
     raw_rows = []
     for item in payload.get("itemSummaries") or []:
