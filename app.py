@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.7-d2bef5e"
+RUNTIME_BUILD = "2026-09-19.8-candidate-rescue"
 st.caption(f"Build {RUNTIME_BUILD}")
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
@@ -1141,7 +1141,7 @@ if st.session_state.get("results") is None and DATABASE_URL:
             # Never restore a completed search produced by an older analysis
             # engine. This was keeping obsolete Top 5 rows visible even after
             # the ranking/price pipeline changed.
-            if "ordinary-v2-ui-negative-guard-20260919-5" in restored_signature:
+            if "ordinary-v2-candidate-rescue-20260919-6" in restored_signature:
                 st.session_state["results"] = restored.get("results") or []
                 st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
                 st.session_state["last_completed_search_signature"] = restored_signature
@@ -1766,7 +1766,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-ui-negative-guard-20260919-5"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-candidate-rescue-20260919-6"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2207,8 +2207,11 @@ if st.session_state.get("results") is not None:
                 row for row in top_rows
                 if row.get("practical_margin") is None or float(row.get("practical_margin") or 0) > 0
             ]
+            rescued_count = sum(1 for row in top_rows if row.get("candidate_rescue"))
 
             st.markdown("### 🏆 Topp 5 i den här sökningen")
+            if rescued_count:
+                st.caption(f"🔎 {rescued_count} kandidat(er) har räddats in från FlipFynds researchsignaler för vidare kontroll; de har ännu ingen bevisad positiv marginal.")
             if not top_rows:
                 st.warning(
                     "Inga kandidater med positiv eller ännu okänd fyndmarginal hittades i den analyserade gruppen. "
