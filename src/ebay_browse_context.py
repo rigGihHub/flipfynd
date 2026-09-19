@@ -142,8 +142,19 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         candidate_graded = bool(parsed.get("grading_company") or parsed.get("grade")
                                 or re.search(r"\b(?:PSA|BGS|BVG|SGC|CGC|CSG|KSA|TAG)\b", str(row.get("title") or ""), re.I))
         extra_serial = bool(parsed.get("serial_number") and not (identity or {}).get("serial_denominator"))
+        # A comparison is only economic evidence when the exact card identity
+        # is materially present in the listing title. This blocks near-set/card
+        # collisions (e.g. parallel names or wrong card numbers) from creating
+        # inflated references.
+        target_number = str((identity or {}).get("card_number") or "").strip().lstrip("#")
+        number_present = bool(target_number and re.search(rf"(?<![A-Za-z0-9])#?{re.escape(target_number)}(?![A-Za-z0-9])", str(row.get("title") or ""), re.I))
+        target_player = str((identity or {}).get("player_name") or "").strip()
+        player_tokens = [tok for tok in re.findall(r"[A-Za-zÀ-ÿ0-9]+", target_player.casefold()) if len(tok) >= 3]
+        title_fold = str(row.get("title") or "").casefold()
+        player_present = bool(player_tokens and all(tok in title_fold for tok in player_tokens))
         row["asking_comparison_eligible"] = bool(
             match["label"] == "STRONG_CANDIDATE" and not match["missing"] and not match["conflicts"]
+            and number_present and player_present
             and target_graded == candidate_graded and not extra_serial
             and (not target_graded or ((identity or {}).get("grade") and (identity or {}).get("grading_company")))
             and "FIXED_PRICE" in row["buying_options"]
