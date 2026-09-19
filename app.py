@@ -90,6 +90,7 @@ from src.segment_discovery_coverage import add_segment_coverage_indices, segment
 from src.segment_yield_learning import build_segment_yield_report, best_observed_segments
 from src.decision_tiers import build_decision_tiers
 from src.decision_tiers_compat import build_decision_tiers_compat
+from src.opportunity_top5 import build_opportunity_top5
 from src.research_shortlist import build_research_shortlist, evidence_coverage, research_identity_failure_diagnostics
 from src.unlock_research_queue import build_unlock_research_queue
 from src.auto_comp_research import run_auto_comp_research
@@ -2117,239 +2118,76 @@ if st.session_state.get("results") is not None:
 
             render_asking_price_shortlist(st.session_state.get("results") or [])
 
-            # Evidence-aware dynamic Top 5: always surface the strongest review
-            # candidates, while keeping the stricter BUY gate completely separate.
-            decision_tiers = build_decision_tiers_compat(build_decision_tiers, st.session_state.get("results") or [], total_limit=5, require_verified_economic_edge=True)
-            if not decision_tiers.get("rows"):
-                st.info("**Inga verifierade fynd eller tydliga kontrollkandidater just nu.** Det betyder inte att de inlästa sidorna saknar fynd – det betyder att inget analyserat kort ännu har tillräckligt underlag för att visas ansvarsfullt.")
-                coverage = evidence_coverage(st.session_state.get("results") or [])
-                if coverage.get("total"):
-                    st.caption(
-                        f"Evidenstäckning: {coverage['with_2_sold']}/{coverage['total']} har minst 2 exact SOLD · "
-                        f"{coverage.get('research_identity_ready',0)}/{coverage['total']} har sökbar comp-identitet · "
-                        f"{coverage['identity_ready']}/{coverage['total']} har beslutsstark exact identity · "
-                        f"{coverage['market_value_ready']}/{coverage['total']} har säkert marknadsvärde · "
-                        f"{coverage['max_price_ready']}/{coverage['total']} har evidensbaserat maxpris."
-                    )
-                    if coverage['with_2_sold'] == 0:
-                        if coverage.get('research_identity_ready', 0) < max(10, coverage['total'] * 0.10):
-                            st.warning("**Flaskhalsen är både identitet och comp-data.** För få annonser är ens strukturerade nog för smal comp-research, så fler SOLD-källor ensamma räcker inte ännu.")
-                            diag = research_identity_failure_diagnostics(st.session_state.get("results") or [])
-                            if diag.get("top"):
-                                st.markdown("**Var research-identiteten faller bort:**")
-                                st.caption(" · ".join(f"{name}: {count}" for name, count in diag["top"][:5]))
-                                st.caption(diag.get("note") or "")
-                            st.caption("Research-läget accepterar nu även en smal identitet när exakt ett fält saknas och övriga identitetsankare gör sökningen tillräckligt avgränsad. Detta låser aldrig upp värdering eller KÖP.")
-                        else:
-                            st.warning("**Flaskhalsen är främst comp-data, inte sökbredden.** FlipFynd har sökbara identiteter men saknar verifierade avslut för dem. Att läsa fler Tradera-sidor löser därför inte detta av sig självt.")
-                if decision_tiers.get("rejection_reasons"):
-                    common=sorted(decision_tiers["rejection_reasons"].items(), key=lambda kv: kv[1], reverse=True)[:3]
-                    st.caption("Vanligaste verifieringsluckorna: " + " · ".join(f"{reason} ({count})" for reason,count in common))
+            # One compact Top 5. Research signals may rank UNDERSÖK candidates,
+            # but KÖP remains gated by verified economic evidence.
+            decision_tiers = build_decision_tiers_compat(
+                build_decision_tiers,
+                st.session_state.get("results") or [],
+                total_limit=5,
+                require_verified_economic_edge=True,
+            )
+            opportunity_top5 = build_opportunity_top5(st.session_state.get("results") or [], limit=5)
+            top_rows = list(opportunity_top5.get("rows") or [])
 
-                unlock_queue = build_unlock_research_queue(
-                    st.session_state.get("results") or [],
-                    limit=10,
-                    actionable_only=True,
-                )
-                if unlock_queue.get("rows"):
-                    with st.expander("⚡ Närmast att låsa upp – research med högst hävstång", expanded=True):
-                        u1, u2, u3 = st.columns(3)
-                        u1.metric("1 sale från comp-tröskeln", unlock_queue.get("near_unlock_count", 0))
-                        u2.metric("Exact ID men 0 sales", unlock_queue.get("exact_ready_no_sales_count", 0))
-                        u3.metric("Värda research", len(unlock_queue.get("rows") or []))
-                        st.caption("I stället för att forska på hundratals kort samtidigt prioriterar FlipFynd de kort där minsta nästa evidenssteg sannolikt gör mest nytta.")
-                        if unlock_queue.get("suppressed_count"):
-                            st.caption(
-                                f"{unlock_queue['suppressed_count']} svaga bas-/standardkort har dolts. "
-                                "En sökbar titel räcker inte för att få en plats i researchkön."
-                            )
-
-                        if st.button("🚀 Kör automatisk comp-jakt på topp 5", key="auto_comp_hunt_top5", use_container_width=True):
-                            queue_items = [row.get("source_item") for row in (unlock_queue.get("rows") or [])[:5] if isinstance(row.get("source_item"), dict)]
-                            scp_token = None
-                            try:
-                                scp_token = os.getenv("SPORTSCARDSPRO_TOKEN") or st.secrets.get("SPORTSCARDSPRO_TOKEN")
-                            except Exception:
-                                scp_token = os.getenv("SPORTSCARDSPRO_TOKEN")
-                            st.session_state["auto_comp_research_pack"] = run_auto_comp_research(
-                                queue_items,
-                                _load_sold_comp_records(),
-                                limit=5,
-                                scp_token=str(scp_token or "").strip() or None,
-                            )
-
-                        auto_pack = st.session_state.get("auto_comp_research_pack")
-                        if isinstance(auto_pack, dict) and auto_pack.get("rows"):
-                            st.markdown("**Automatisk comp-jakt – researchpaket**")
-                            a1, a2, a3 = st.columns(3)
-                            a1.metric("Körda kandidater", auto_pack.get("processed_count", 0))
-                            a2.metric("1 sale från tröskeln", auto_pack.get("one_sale_away_count", 0))
-                            a3.metric("Har redan 2+ exact SOLD", auto_pack.get("threshold_met_count", 0))
-                            for aidx, ar in enumerate(auto_pack.get("rows") or [], start=1):
-                                with st.container(border=True):
-                                    st.markdown(f"**{aidx}. {ar['title']}**")
-                                    st.caption(f"Exact SOLD i biblioteket: {ar['exact_sold_count']} · saknas: {ar['missing_exact_sales']} · {ar['next_action']}")
-                                    if ar.get("query"):
-                                        st.code(ar["query"], language=None)
-                                    research_links = ar.get("research_links") or []
-                                    if research_links:
-                                        cols = st.columns(min(4, len(research_links)))
-                                        for col, link in zip(cols, research_links[:4]):
-                                            col.link_button(f"{link['label']} ↗", link['url'], use_container_width=True)
-                                    verification_queue = ar.get("verification_queue") or []
-                                    if verification_queue:
-                                        with st.expander("🎯 Verifiera dessa träffar först", expanded=True):
-                                            st.caption("Prioriteringskön väljer starka kandidatmatcher med högst informationsvärde först och försöker sprida verifieringen över oberoende källor. Den verifierar ingenting automatiskt.")
-                                            for vidx, vr in enumerate(verification_queue[:5], start=1):
-                                                sold_tag = " · uppges SOLD" if vr.get("sold_claim") else ""
-                                                st.markdown(f"**{vidx}. Prioritet {vr.get('verification_priority',0)}/99 · {vr.get('verification_source_group') or vr.get('source','okänd')}{sold_tag}**")
-                                                if vr.get("title"):
-                                                    st.write(vr["title"])
-                                                st.caption(vr.get("verification_reason") or "Verifiera exact identity och eventuell SOLD-status.")
-                                                if vr.get("url"):
-                                                    st.link_button("Öppna för verifiering ↗", vr["url"], key=f"verify_priority_{aidx}_{vidx}")
-                                            st.caption("En SOLD-markering i källmaterialet är bara en signal tills FlipFynd har verifierat att det är samma exakta kort och en faktisk genomförd försäljning.")
-                                    candidate_matches = ar.get("candidate_matches") or []
-                                    useful_matches = [m for m in candidate_matches if m.get("label") in {"STRONG_CANDIDATE", "REVIEW"}]
-                                    if useful_matches:
-                                        with st.expander("🧬 Matcha möjliga comp-träffar", expanded=False):
-                                            st.caption("Detta rankar bara kandidater. En hög matchpoäng är inte samma sak som verifierad exact identity eller verifierad SOLD.")
-                                            match_labels = {"STRONG_CANDIDATE":"🟢 STARK KANDIDAT", "REVIEW":"🟡 GRANSKA", "WEAK":"⚪ SVAG", "REJECT":"🔴 FEL MATCH"}
-                                            for midx, match in enumerate(useful_matches[:5], start=1):
-                                                st.markdown(f"**{match_labels.get(match['label'], match['label'])} · {match['candidate_confidence']}/99**")
-                                                if match.get("title"):
-                                                    st.write(match["title"])
-                                                bits=[]
-                                                if match.get("matches"):
-                                                    bits.append("match: " + ", ".join(match["matches"]))
-                                                if match.get("missing"):
-                                                    bits.append("saknas: " + ", ".join(match["missing"]))
-                                                if match.get("conflicts"):
-                                                    bits.append("konflikt: " + ", ".join(match["conflicts"]))
-                                                if bits:
-                                                    st.caption(" · ".join(bits))
-                                                if match.get("url"):
-                                                    st.link_button("Öppna kandidat ↗", match["url"], key=f"candidate_match_{aidx}_{midx}")
-                                            st.caption("Parallel, autograf, patch, serienummer eller grading som inte stämmer blockerar automatisk exact-match. Verifiera alltid träffen innan sale importeras.")
-                                    ladder = ar.get("query_ladder") or []
-                                    if len(ladder) > 1:
-                                        with st.expander("Sök bredare utan att sänka evidenskraven", expanded=False):
-                                            st.caption("FlipFynd provar flera sökfraser eftersom samma kort ofta namnges olika. Breda träffar är bara kandidater tills exakt identitet och SOLD-status verifierats.")
-                                            for qidx, rung in enumerate(ladder, start=1):
-                                                st.markdown(f"**{qidx}. {rung['label']}**")
-                                                st.code(rung['query'], language=None)
-                                                qcols = st.columns(2)
-                                                qcols[0].link_button("eBay Sold ↗", rung['ebay_sold_url'], key=f"ladder_ebay_{aidx}_{qidx}", use_container_width=True)
-                                                qcols[1].link_button("Tradera ↗", rung['tradera_url'], key=f"ladder_tradera_{aidx}_{qidx}", use_container_width=True)
-                                                st.caption(rung.get('note') or "")
-                                    scp = ar.get("sports_cards_pro")
-                                    if isinstance(scp, dict) and scp.get("ok"):
-                                        st.caption(
-                                            "SportsCardsPro guide/context: "
-                                            + (f"${scp['ungraded_usd']:.2f} raw" if scp.get("ungraded_usd") is not None else "raw-värde saknas")
-                                            + " — räknas inte som SOLD."
-                                        )
-                            st.caption(auto_pack.get("note") or "")
-                        unlock_labels = {
-                            "ONE_SALE_AWAY": "🟢 1 SALE FRÅN TRÖSKEL",
-                            "EXACT_READY_NO_SALES": "🔵 EXACT ID – HITTA FÖRSTA SALE",
-                            "RESEARCH_READY_NO_SALES": "🟣 SÖKBAR TITEL – HITTA KANDIDAT-COMPS",
-                            "VALUATION_NEXT": "🟡 SOLD FINNS – LÅS UPP VÄRDERING",
-                            "MAX_PRICE_NEXT": "🟠 VÄRDERING FINNS – LÅS UPP MAXPRIS",
-                            "IDENTITY_FIRST": "⚪ IDENTITET FÖRST",
-                            "REVIEW": "⚪ GRANSKA",
-                        }
-                        for idx, uq in enumerate(unlock_queue.get("rows") or [], start=1):
-                            with st.container(border=True):
-                                st.markdown(f"**{idx}. {uq['title']}**")
-                                st.write(f"**{unlock_labels.get(uq['status'], uq['status'])}** · {uq['action']}")
-                                st.caption(
-                                    f"Exact SOLD: {uq['sold_comps']} · "
-                                    f"identitet {'beslutsstark' if uq['identity_ready'] else ('sökbar' if uq.get('research_identity_ready') else 'saknas')} · "
-                                    f"värdering {'redo' if uq['market_value_ready'] else 'saknas'} · "
-                                    f"maxpris {'redo' if uq['max_price_ready'] else 'saknas'}"
-                                )
-                                if uq.get("url"):
-                                    st.link_button("Öppna annonsen ↗", uq["url"], key=f"unlock_open_{idx}")
-                        st.caption(unlock_queue.get("note") or "")
-
-                research_rows = build_research_shortlist(st.session_state.get("results") or [], limit=5)
-                if research_rows:
-                    with st.expander("🔬 Mest lovande att verifiera nu – inte KÖP ännu", expanded=False):
-                        st.caption("Detta är en researchkö, inte en fyndlista. Syftet är att visa vilka kort FlipFynd bör hämta exact comps för först när den hårda KÖP-gaten ännu inte kan släppa igenom något.")
-                        for idx, rr in enumerate(research_rows, start=1):
-                            st.markdown(f"**{idx}. {rr['title']}**")
-                            st.caption(" · ".join(rr.get('reasons') or []))
-                            if rr.get('url'):
-                                st.link_button("Öppna annonsen ↗", rr['url'], key=f"research_open_{idx}")
-            if decision_tiers.get("rows"):
-                st.markdown("### 🏆 Topp 5 i den här sökningen")
-                top_rows = list(decision_tiers.get("rows") or [])[:5]
-                # Presentation fallback: SOLD evidence controls confidence/BUY,
-                # not whether an analysed candidate is allowed to appear.
-                if len(top_rows) < 5:
-                    seen = {str(r.get("url") or r.get("title") or "") for r in top_rows}
-                    for source in list(results or []):
-                        if len(top_rows) >= 5:
-                            break
-                        key = str(source.get("lank") or source.get("url") or source.get("titel") or source.get("title") or "")
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        top_rows.append({
-                            "title": source.get("titel") or source.get("title") or "Okänt kort",
-                            "url": source.get("lank") or source.get("url"),
-                            "tier": "REMAINDER",
-                            "decision": "UNDERSÖK",
-                            "total_cost": source.get("analysis_total_cost") or source.get("total_cost"),
-                            "market_value": None,
-                            "potential": source.get("deal_score") or source.get("rank_score") or 0,
-                            "certainty": source.get("ranking_confidence_score") or source.get("deal_confidence_score") or 0,
-                            "sold_comps": source.get("sold_comparable_count") or 0,
-                            "primary_blocker": "Marknadsvärde/SOLD ännu inte verifierat",
-                            "_source_item": source,
-                        })
+            st.markdown("### 🏆 Topp 5 i den här sökningen")
+            if not top_rows:
+                st.info("Inga relevanta analyserade annonser finns ännu. Hämta senaste annonser och kör Hitta fynd.")
+            else:
                 tier_labels = {
                     "VERIFIED": "Verifierat fynd",
-                    "PROMISING": "Lovande · kontrollera",
+                    "PROMISING": "Lovande · undersök",
                     "REMAINDER": "Bäst av resten",
                 }
                 table_rows = []
                 for rank, row in enumerate(top_rows, start=1):
                     total = row.get("total_cost")
                     market = row.get("market_value")
+                    net = row.get("estimated_net_profit")
                     table_rows.append({
                         "#": rank,
                         "Kort": row.get("title") or "Okänt kort",
-                        "Status": tier_labels.get(row.get("tier"), "Ej verifierat"),
+                        "Status": "KÖP" if row.get("decision") == "KÖP" else "UNDERSÖK",
                         "Kostnad": f"{float(total):.0f} kr" if total is not None else "–",
-                        "Marknad": f"{float(market):.0f} kr" if market is not None else "–",
-                        "Fynd": f"{float(row.get('potential') or 0):.0f}/100",
+                        "Realistiskt värde": f"{float(market):.0f} kr" if market is not None else "Ej verifierat",
+                        "Nettovinst": f"{float(net):.0f} kr" if net is not None else "–",
+                        "Fyndpotential": f"{float(row.get('potential') or 0):.0f}/100",
                         "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
                     })
                 st.dataframe(table_rows, use_container_width=True, hide_index=True)
-                st.caption("Klicka upp ett kort nedan när du vill se detaljer. Tabellen är huvudvyn.")
+                st.caption("SOLD-evidens avgör om FlipFynd vågar säga KÖP – inte om en intressant kandidat får synas.")
                 for rank, row in enumerate(top_rows, start=1):
                     with st.expander(f"#{rank} · {row.get('title') or 'Okänt kort'}", expanded=False):
-                        st.write(f"**{tier_labels.get(row.get('tier'), 'Ej verifierat')}** · {row.get('decision') or 'EJ BESLUT'}")
-                        facts=[]
+                        st.write(f"**{row.get('decision') or 'UNDERSÖK'}** · {tier_labels.get(row.get('tier'), 'Bäst av resten')}")
+                        facts = []
                         if row.get("total_cost") is not None:
-                            facts.append(f"kostar {float(row['total_cost']):.0f} kr")
+                            facts.append(f"total kostnad {float(row['total_cost']):.0f} kr")
                         if row.get("market_value") is not None:
-                            facts.append(f"marknadsvärde {float(row['market_value']):.0f} kr")
+                            facts.append(f"verifierat realistiskt värde {float(row['market_value']):.0f} kr")
                         else:
-                            facts.append("marknadsvärde: otillräckligt underlag")
+                            facts.append("realistiskt värde: otillräckligt underlag")
                         facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
                         st.caption(" · ".join(facts))
-                        if row.get("certainty_limits"):
-                            st.caption("Begränsningar: " + "; ".join(row.get("certainty_limits") or []))
-                        if row.get("primary_blocker") and row.get("tier") != "VERIFIED":
-                            st.caption("Största blockerare: " + str(row["primary_blocker"]))
+                        if row.get("reasons"):
+                            st.caption("Varför: " + " · ".join(row.get("reasons") or []))
+                        if row.get("primary_blocker"):
+                            st.caption("Kontrollera först: " + str(row["primary_blocker"]))
                         render_card_explanation_button(row.get("_source_item") or row, f"top5_{rank}")
                         render_same_seller_button(row.get("_source_item") or row, f"top5_{rank}")
                         if row.get("url"):
                             st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
-                st.caption(decision_tiers.get("note") or "")
+                st.caption(opportunity_top5.get("note") or "")
+
+            with st.expander("🔬 Avancerad fyndjakt / så tänker FlipFynd", expanded=False):
+                coverage = evidence_coverage(st.session_state.get("results") or [])
+                if coverage.get("total"):
+                    st.caption(
+                        f"Evidens: {coverage['with_2_sold']}/{coverage['total']} har minst 2 exact SOLD · "
+                        f"{coverage.get('research_identity_ready',0)}/{coverage['total']} har sökbar comp-identitet · "
+                        f"{coverage['market_value_ready']}/{coverage['total']} har säkert marknadsvärde."
+                    )
+                if decision_tiers.get("rejection_reasons"):
+                    common = sorted(decision_tiers["rejection_reasons"].items(), key=lambda kv: kv[1], reverse=True)[:3]
+                    st.caption("Vanligaste verifieringsluckorna: " + " · ".join(f"{reason} ({count})" for reason, count in common))
 
                 segment_yield = build_segment_yield_report(
                     st.session_state.get("results") or [],
