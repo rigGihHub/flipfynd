@@ -387,8 +387,32 @@ def analyze_data(
                 full_by_index[idx] = _run_full_analysis(idx)
                 full_index_set.add(idx)
 
-    for idx, (_, fast, _attention) in enumerate(candidates):
-        results.append(full_by_index.get(idx, fast))
+    for idx, (original, fast, _attention) in enumerate(candidates):
+        analysed = full_by_index.get(idx, fast)
+        # Asking-price acquisition is intentionally limited to the deep-analysis
+        # budget. Fast-only rows keep discovery cheap; deep rows carry the
+        # external/active-market context needed by Top 5's false-positive guard.
+        # Preserve source URL/provenance even if a cached result predates those
+        # fields.
+        if isinstance(analysed, dict):
+            analysed = dict(analysed)
+            analysed["lank"] = (
+                analysed.get("lank") or analysed.get("url")
+                or original.get("lank") or original.get("url")
+            )
+            analysed["url"] = analysed.get("url") or analysed.get("lank")
+        results.append(analysed)
+
+    debug["asking_context_candidates"] = sum(
+        1 for row in results
+        if isinstance(row, dict) and isinstance(row.get("asking_price_opportunity"), dict)
+    )
+    debug["asking_context_covered"] = sum(
+        1 for row in results
+        if isinstance(row, dict)
+        and isinstance(row.get("asking_price_opportunity"), dict)
+        and (row.get("asking_price_opportunity") or {}).get("reference_asking_price")
+    )
 
     results.sort(
         key=lambda item: (
