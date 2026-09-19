@@ -233,6 +233,20 @@ def build_opportunity_top5(items, limit=5):
             economic -= 12.0
             reasons.append("saknar värdebevis för exakt kort")
 
+        # Practical discovery mode: use whatever real price context exists
+        # to indicate a possible find. SOLD remains strongest, but active asking,
+        # guide context and comparable listing prices may support UNDERSÖK.
+        # Missing evidence lowers confidence; it no longer empties the shortlist.
+        price_context_count = sold + asking_count + len(asking_values)
+        indication_only = bool(not buy and (
+            asking_positive
+            or price_context_count > 0
+            or mis.get("status") == "SUPPORTED_PRICE_GAP"
+        ))
+        if indication_only and not asking_positive and not verified_edge:
+            research += 4.0
+            reasons.append("prisindikation finns – fördjupad kontroll rekommenderas")
+
         freshness = _freshness(item)
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
         certainty = min(100.0, _n(item.get("ranking_confidence_score") or item.get("deal_confidence_score")) * 0.55 + sold * 10 + (20 if valuation_safe else 0))
@@ -245,8 +259,9 @@ def build_opportunity_top5(items, limit=5):
         rows.append({
             "title": title,
             "url": url,
-            "tier": "VERIFIED" if buy else ("PROMISING" if score >= 45 and not weak_unvalued else "REMAINDER"),
+            "tier": "VERIFIED" if buy else ("PROMISING" if (score >= 45 or indication_only) and not weak_unvalued else "REMAINDER"),
             "decision": "KÖP" if buy else "UNDERSÖK",
+            "indication_only": indication_only,
             "total_cost": total,
             "market_value": market,
             "estimated_net_profit": net,
