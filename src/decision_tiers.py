@@ -307,7 +307,18 @@ def build_decision_tiers(candidates, total_limit=5, require_verified_economic_ed
 
     tier_order={"VERIFIED":2,"PROMISING":1,"REMAINDER":0}
     if fallback_investigate_mode:
-        rows.sort(key=lambda r:(r["research_ready"],-r["guide_priority"],r["investigate_score"],r["structural_merit"],r["potential"],r["certainty"]),reverse=True)
+        # Research ordering must still care about economics. A famous player or
+        # collectible-looking card must not outrank a cheaper listing merely
+        # because its identity is easier to research.
+        def _research_sort(r):
+            cost=_n(r.get("total_cost"),999999)
+            guide=_n(r.get("guide_ungraded_usd"),0)
+            source=r.get("_source_item") or {}
+            ask_to_guide=(cost/(guide*9.5)) if guide>0 and cost>=0 else 999
+            obvious_overprice_penalty=35 if ask_to_guide>2.0 else (18 if ask_to_guide>1.25 else 0)
+            economic_signal=max(0.0,100.0-obvious_overprice_penalty-min(35.0,max(0.0,ask_to_guide-0.65)*25.0))
+            return (economic_signal,r["investigate_score"],r["structural_merit"],r["potential"],r["certainty"],-cost)
+        rows.sort(key=_research_sort,reverse=True)
     else:
         rows.sort(key=lambda r:(tier_order[r["tier"]],r["potential"],r["certainty"],r["sold_comps"]),reverse=True)
     selected=_select_diverse(rows,total_limit)
