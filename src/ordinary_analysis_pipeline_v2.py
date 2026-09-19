@@ -19,6 +19,7 @@ from src.find_more_cards import select_second_pass_indices
 from src.top5_verification_budget import add_top5_verification_indices
 from src.pricing import total_acquisition_cost
 from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
+from src.ebay_browse_context import configured_credentials
 
 def analyze_data(
     data,
@@ -319,6 +320,8 @@ def analyze_data(
     for idx, (original, fast, attention) in enumerate(candidates):
         merged = {**original, **fast}
         asking_candidates.append({"source_item": merged, "_candidate_index": idx})
+    ebay_client_id, ebay_client_secret = configured_credentials()
+    debug["ebay_credentials_configured"] = bool(ebay_client_id and ebay_client_secret)
     asking_routes = select_asking_price_research(asking_candidates, limit=12)
     asking_indices = []
     for routed in asking_routes:
