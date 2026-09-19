@@ -444,7 +444,14 @@ def analyze_data(
         for item in full_by_index.values()
     )
     if not first_price_find and debug.get("ebay_credentials_configured"):
-        already = set(routed_indices)
+        # Only exclude rows that actually received an asking-price result.
+        # A candidate being selected for CPU deep analysis does not mean eBay
+        # research was successfully executed for it.
+        already = {
+            idx for idx, item in full_by_index.items()
+            if isinstance(item, dict)
+            and isinstance(item.get("asking_price_opportunity"), dict)
+        }
         adaptive_price_indices = []
         for routed in all_asking_eligible:
             idx = routed.get("_candidate_index")
