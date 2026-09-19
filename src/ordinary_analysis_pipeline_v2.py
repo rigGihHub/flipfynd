@@ -455,6 +455,24 @@ def analyze_data(
         and isinstance(row.get("asking_price_opportunity"), dict)
         and (row.get("asking_price_opportunity") or {}).get("reference_asking_price")
     )
+    debug["price_research_funnel"] = {
+        "searchable_identity": sum(1 for row in results if isinstance(row, dict) and row.get("exact_identity_gate_supports_comp_research")),
+        "routed": debug.get("asking_price_routed", 0),
+        "deep_analysed": len(full_by_index),
+        "context_attached": sum(1 for row in results if isinstance(row, dict) and isinstance(row.get("ebay_active_context"), dict)),
+        "opportunity_attached": debug.get("asking_context_candidates", 0),
+        "usable_reference": debug.get("asking_context_covered", 0),
+        "possible_find": sum(1 for row in results if isinstance(row, dict) and (row.get("asking_price_opportunity") or {}).get("possible_find")),
+    }
+    price_status_counts = {}
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        opp = row.get("asking_price_opportunity")
+        if isinstance(opp, dict):
+            status = str(opp.get("status") or "UNKNOWN")
+            price_status_counts[status] = price_status_counts.get(status, 0) + 1
+    debug["price_research_status_counts"] = price_status_counts
 
     results.sort(
         key=lambda item: (
