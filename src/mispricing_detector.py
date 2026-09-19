@@ -100,7 +100,7 @@ def build_mispricing_review_queue(items, limit=10):
             continue
         rows.append({
             "title": item.get("titel") or item.get("title") or "Okänt kort",
-            "url": item.get("url"),
+            "url": item.get("lank") or item.get("url") or item.get("link") or item.get("href") or item.get("item_url") or item.get("tradera_url"),
             "decision": item.get("beslut") or item.get("decision"),
             "hypothesis": h,
             "_priority": (
