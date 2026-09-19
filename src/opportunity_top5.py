@@ -77,7 +77,10 @@ def build_opportunity_top5(items, limit=5):
         odd = build_oddity_story_signal(item)
         lot = build_lot_treasure_signal(item)
 
-        base = min(35.0, max(0.0, _n(item.get("opportunity_priority_score") or item.get("deal_score") or item.get("rank_score"))) * 0.35)
+        # Generic rank/player/rookie signals are discovery clues, not proof that
+        # this exact card is worth money. Cap them hard when no valuation exists.
+        raw_base = max(0.0, _n(item.get("opportunity_priority_score") or item.get("deal_score") or item.get("rank_score")))
+        base = min(22.0 if valuation_safe else 10.0, raw_base * 0.22)
         research = 0.0
         reasons = []
         if mis.get("status") == "SUPPORTED_PRICE_GAP":
@@ -95,8 +98,11 @@ def build_opportunity_top5(items, limit=5):
         if item.get("is_information_edge_candidate"):
             research += 6; reasons.append("informationsövertag")
         if item.get("mispriced_rookie_candidate"):
-            research += 5; reasons.append("rookie underbeskriven")
-        research = min(35.0, research)
+            research += 3; reasons.append("rookie underbeskriven")
+        # Without SOLD-backed valuation, research signals may keep a card visible
+        # but must not be strong enough to make a cheap common rookie look like
+        # the best economic opportunity.
+        research = min(35.0 if valuation_safe else 18.0, research)
 
         evidence = min(12.0, sold * 4.0)
         if valuation_safe:
@@ -106,9 +112,24 @@ def build_opportunity_top5(items, limit=5):
             economic = min(28.0, 12.0 + 16.0 * min(1.0, (market - total) / max(total, 1.0)))
             reasons.insert(0, "verifierat värde över köpkostnad")
         elif total:
-            # With no verified value, expensive star cards must not float to the
-            # top merely because player/card signals are strong.
-            economic -= min(16.0, max(0.0, math.log10(max(total, 10.0) / 10.0) * 7.0))
+            # No verified value means we do not know that a low purchase price is
+            # cheap. Penalise uncertainty rather than rewarding "rookie", fame or
+            # a low sticker price.
+            economic -= 12.0
+            economic -= min(12.0, max(0.0, math.log10(max(total, 10.0) / 10.0) * 5.0))
+
+        # Commodity/base-card warning: no exact SOLD evidence + no safe valuation
+        # + no strong exact-card research evidence. Such cards can fill the list
+        # only as "best of the rest", never dominate it.
+        strong_exact_signal = bool(
+            mis.get("status") == "SUPPORTED_PRICE_GAP"
+            or odd.get("known_story_matches")
+            or item.get("is_information_edge_candidate")
+        )
+        weak_unvalued = bool(not valuation_safe and sold == 0 and not strong_exact_signal)
+        if weak_unvalued:
+            economic -= 12.0
+            reasons.append("saknar värdebevis för exakt kort")
 
         freshness = _freshness(item)
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
@@ -122,7 +143,7 @@ def build_opportunity_top5(items, limit=5):
         rows.append({
             "title": title,
             "url": url,
-            "tier": "VERIFIED" if buy else ("PROMISING" if score >= 45 else "REMAINDER"),
+            "tier": "VERIFIED" if buy else ("PROMISING" if score >= 45 and not weak_unvalued else "REMAINDER"),
             "decision": "KÖP" if buy else "UNDERSÖK",
             "total_cost": total,
             "market_value": market,
@@ -139,6 +160,7 @@ def build_opportunity_top5(items, limit=5):
     # Freshness is the final tiebreaker, never a substitute for economics/evidence.
     rows.sort(key=lambda r: (
         r["decision"] == "KÖP",
+        not (r.get("_source_item") and not r.get("market_value") and int(r.get("sold_comps") or 0) == 0),
         r["potential"],
         r["certainty"],
         r["freshness_score"],
