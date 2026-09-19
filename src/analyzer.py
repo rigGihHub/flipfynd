@@ -95,6 +95,20 @@ FOOTBALL_PREMIUM = {
 }
 
 
+def clean_listing_title(value):
+    """Remove marketplace UI/accessibility prefixes from the card title."""
+    text = " ".join(str(value or "").split())
+    # Tradera accessibility/UI text can leak into scraped titles. These tokens
+    # describe the listing UI, not the card, and hurt exact identity matching.
+    patterns = (
+        r"^badge\s+p[åa]\s+objektet\s*:\s*(?:ny\s+)?",
+        r"^ny\s+badge\s+p[åa]\s+objektet\s*:\s*",
+    )
+    for pattern in patterns:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+    return text
+
+
 def normalize_name(name):
     return normalize_player_name(name)
 
@@ -2911,10 +2925,9 @@ def analyze_core(
     if detail_images:
         item["image_urls"] = list(dict.fromkeys(list(item.get("image_urls") or []) + detail_images))[:16]
 
-    title = item.get(
-        "titel",
-        "",
-    )
+    title = clean_listing_title(item.get("titel") or item.get("title") or "")
+    item["titel"] = title
+    item["title"] = title
 
     price = item.get(
         "pris"
