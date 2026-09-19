@@ -100,17 +100,20 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         lower_index = max(0, int((len(prices) - 1) * 0.25))
         observed_reference = prices[lower_index]
         reference_method = "LOWER_QUARTILE_ACTIVE"
+        reference = round(observed_reference * 0.85, 2)
     else:
         observed_reference = prices[0]
-        reference_method = "LOWEST_ACTIVE"
-    reference = round(observed_reference * 0.85, 2)
+        reference_method = "SINGLE_ACTIVE_REVIEW" if len(prices) == 1 else "LOWEST_ACTIVE"
+        # One active seller is too weak to create a "possible find" by itself.
+        reference = round(observed_reference * 0.85, 2)
     fee = round(min(200.0, max(3.0, reference * 0.10)), 2)
     packaging = 3.0
     total = round(price + freight, 2)
     margin = round(reference - total - fee - packaging, 2)
+    enough_comps_for_find = len(rows) >= 2
     return {
-        **out, "status": "POSSIBLE_FIND" if margin > 0 else "NO_MARGIN",
-        "possible_find": margin > 0, "purchase_price": price,
+        **out, "status": "POSSIBLE_FIND" if margin > 0 and enough_comps_for_find else ("SINGLE_COMP_REVIEW" if margin > 0 else "NO_MARGIN"),
+        "possible_find": bool(margin > 0 and enough_comps_for_find), "purchase_price": price,
         "shipping": freight, "shipping_known": shipping["known"],
         "total_cost": total, "reference_asking_price": reference, "observed_asking_price": observed_reference,
         "reference_method": reference_method,
