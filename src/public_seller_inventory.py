@@ -51,7 +51,11 @@ def build_profile_page_url(profile_url: str, page_number: int, paging_size: int 
         seller_id = str(profile.get("seller_id") or "")
         suffix = _PAGING_SUFFIX_CACHE.get(seller_id, "")
     if not suffix and paging_size:
-        suffix = f".a0.s{max(1, int(paging_size))}"
+        # Tradera's s-value is the page size, not the seller's total number of
+        # listings. Feeding total_listing_estimate here made URLs such as
+        # paging=10.a0.s9533, which Tradera can normalize back to the same page.
+        # Use the observed/default profile page size instead.
+        suffix = ".a0.s48"
     if not suffix:
         # This is only a bootstrap fallback. Once page 1 has been read, Tradera's
         # own paging link or the stored total listing estimate must be reused.
