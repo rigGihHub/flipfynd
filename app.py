@@ -6367,22 +6367,24 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
         else:
             st.info(f"Delstopp efter ett sökblock · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
-        st.code(
+        _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
+        _diag_lines = [
             f"{_diag_code} | status={seller_top5_result.get('public_status')} | "
             f"saved={_saved} | pages={_pages} | next={_next} | "
             f"estimate={seller_top5_result.get('total_listing_estimate')} | "
-            f"resume={bool(seller_top5_result.get('resume_required'))}",
-            language=None,
-        )
-        _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
+            f"resume={bool(seller_top5_result.get('resume_required'))}"
+        ]
         if _start_dbg:
-            st.code(
+            _diag_lines.append(
                 f"FF-CONTROLLER-START | source={_start_dbg.get('source')} | "
                 f"next={_start_dbg.get('next_page')} | pages={_start_dbg.get('pages_read')} | "
-                f"items={_start_dbg.get('items')}",
-                language=None,
+                f"items={_start_dbg.get('items')}"
             )
-        st.caption("Felsökningskod – skicka hela raden om säljsökningen fastnar.")
+        _public_error = seller_top5_result.get("public_error")
+        if _public_error:
+            _diag_lines.append(f"FF-PUBLIC-ERROR | {_public_error}")
+        st.code("\n".join(_diag_lines), language=None)
+        st.caption("Felsökning – allt ligger i samma kopierbara ruta.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
     if seller_top5_result and not (seller_top5_result.get("rows") or []):
