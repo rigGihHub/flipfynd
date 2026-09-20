@@ -47,7 +47,7 @@ def seller_page(
         if not paging_match:
             paging_match = re.search(r"paging=2\\.a0\\.s(?P<size>\\d+)", seed_html.replace("&amp;", "&"), re.I)
         if not paging_match:
-            paging_pos = decoded_seed.lower().find("paging")
+            token_probe = re.search(r"\\d+\\.a0\\.s\\d+", decoded_seed, re.I)\n            paging_pos = token_probe.start() if token_probe else decoded_seed.lower().find("paging=")
             paging_excerpt = (
                 decoded_seed[max(0, paging_pos - 80): paging_pos + 220]
                 if paging_pos >= 0 else ""
