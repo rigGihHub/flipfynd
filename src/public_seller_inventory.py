@@ -322,3 +322,71 @@ def fetch_public_seller_inventory_batch(
         "inventory_source": "TRADERA_PUBLIC_PROFILE",
         "total_listing_estimate": total_listing_estimate,
     }
+
+
+def crawl_public_seller_inventory(
+    profile_url: str,
+    *,
+    start_page: int = 1,
+    max_pages: int = 120,
+    timeout: int = 8,
+    progress_callback=None,
+    fallback_alias: str | None = None,
+    paging_size: int | None = None,
+) -> dict:
+    """Headless multi-page crawl for the background worker.
+
+    Unlike the Streamlit controller this function owns the crawl loop itself,
+    so it can keep advancing without browser reruns or button clicks.
+    """
+    all_items: dict[str, dict] = {}
+    page = max(1, int(start_page or 1))
+    total_pages = max(1, int(max_pages or 120))
+    total_estimate = paging_size
+    pages_read = 0
+    last_result = None
+
+    for _ in range(total_pages):
+        result = fetch_public_seller_inventory_batch(
+            profile_url,
+            start_page=page,
+            max_pages=1,
+            timeout=timeout,
+            progress_callback=progress_callback,
+            fallback_alias=fallback_alias,
+            paging_size=total_estimate,
+        )
+        last_result = result
+        if not result.get("ok"):
+            # An empty page after at least one successful page is normal EOF.
+            if result.get("status") == "NO_LISTINGS_IN_HTML" and all_items:
+                return {
+                    "ok": True, "status": "OK", "items": list(all_items.values()),
+                    "pages_read": pages_read, "next_page": page, "exhausted": True,
+                    "total_listing_estimate": total_estimate,
+                    "inventory_source": "TRADERA_PUBLIC_PROFILE",
+                }
+            out = dict(result)
+            out["items"] = list(all_items.values())
+            out["pages_read"] = pages_read
+            out["next_page"] = page
+            return out
+
+        for item in result.get("items") or []:
+            item_id = str(item.get("tradera_item_id") or "")
+            if item_id:
+                all_items[item_id] = item
+        pages_read += int(result.get("pages_read") or 1)
+        if result.get("total_listing_estimate"):
+            total_estimate = int(result["total_listing_estimate"])
+        page = int(result.get("next_page") or (page + 1))
+        if result.get("exhausted"):
+            break
+
+    return {
+        "ok": True, "status": "OK", "items": list(all_items.values()),
+        "pages_read": pages_read, "next_page": page,
+        "exhausted": bool((last_result or {}).get("exhausted")),
+        "total_listing_estimate": total_estimate,
+        "inventory_source": "TRADERA_PUBLIC_PROFILE",
+    }
