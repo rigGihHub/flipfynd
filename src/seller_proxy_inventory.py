@@ -75,6 +75,10 @@ def fetch_proxy_seller_inventory_batch(
                 "status": "PROXY_HTTP_ERROR",
                 "http_status": response.status_code,
                 "error": detail or f"proxy http {response.status_code}",
+                "diagnostic_code": (
+                    detail.get("code") if isinstance(detail, dict)
+                    else "FF-SELLER-PROXY-HTTP"
+                ),
                 "items": list(all_items.values()),
                 "next_page": page,
                 "pages_read": pages_read,
