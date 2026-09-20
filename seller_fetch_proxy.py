@@ -8,6 +8,30 @@ from curl_cffi import requests as curl_requests
 
 from src.public_seller_inventory import extract_public_profile_items
 
+def _decode_embedded_markup(value: str) -> str:
+    value = html_lib.unescape(value or "")
+    for _ in range(2):
+        value = (value.replace("\\u003c", "<").replace("\\u003e", ">")
+                 .replace("\\u0026", "&").replace("\\u0022", '"')
+                 .replace("\\u0027", "'").replace("\\\"", '"'))
+    return value
+
+
+def _page_href(markup: str, page: int) -> str | None:
+    text = _decode_embedded_markup(markup)
+    # Tradera's observed production markup:
+    # aria-label="Sida 2" href="/profile/items/...?...paging=2.a0.s9529"
+    patterns = (
+        rf'aria-label=["\']Sida {page}["\'][^>]*href=["\']([^"\']+)["\']',
+        rf'href=["\']([^"\']*paging={page}\.a0\.s\d+[^"\']*)["\']',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return html_lib.unescape(match.group(1))
+    return None
+
+
 app = FastAPI(title="FlipFynd Seller Fetch Proxy")
 _TOTAL_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
 
@@ -41,29 +65,9 @@ def seller_page(
             base, impersonate="chrome", timeout=15,
             headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
         )
-        seed_html = html_lib.unescape(seed.text or "")
-        # Next.js embeds parts of the rendered markup as JSON strings. Decode
-        # only HTML-relevant unicode escapes before searching for anchors.
-        # The response contains JSON-escaped markup (literal backslash-u).
-        # Normalize both single- and double-escaped forms.
-        for _ in range(2):
-            seed_html = (seed_html.replace("\\u003c", "<").replace("\\u003e", ">")
-                         .replace("\\u0026", "&").replace("\\u0022", '"')
-                         .replace("\\u0027", "'").replace("\\\"", '"'))
-        # Follow the exact page link emitted by Tradera instead of rebuilding
-        # its paging token. Attribute order is not guaranteed, so locate an
-        # anchor containing the requested aria-label and then extract href.
-        anchor_match = re.search(
-            rf"<a\\b[^>]*aria-label=[\"']Sida {page}[\"'][^>]*>",
-            seed_html, re.I,
-        )
-        if not anchor_match:
-            anchor_match = re.search(
-                rf"<a\\b[^>]*href=[\"'][^\"']*paging={page}\\.a0\\.s\\d+[^\"']*[\"'][^>]*>",
-                seed_html, re.I,
-            )
-        href_match = re.search(r"href=[\"']([^\"']+)[\"']", anchor_match.group(0), re.I) if anchor_match else None
-        if not href_match:
+        seed_html = seed.text or ""
+        href = _page_href(seed_html, page)
+        if not href:
             detail = {
                 "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
                 "requested_page": page,
@@ -72,7 +76,7 @@ def seller_page(
             }
             print(f"SELLER_PAGING_ERROR {detail}", flush=True)
             raise HTTPException(status_code=502, detail=detail)
-        url = urljoin(str(seed.url), html_lib.unescape(href_match.group(1)))
+        url = urljoin(str(seed.url), href)
         print(f"SELLER_PAGE_LINK seller={seller_id} page={page} url={url}", flush=True)
     try:
         response = curl_requests.get(
