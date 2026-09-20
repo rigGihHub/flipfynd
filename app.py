@@ -6045,6 +6045,11 @@ def _clear_seller_top5_ui():
     )
     for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url"):
         st.session_state.pop(key, None)
+    if DATABASE_URL:
+        try:
+            save_persistent_namespace(DATABASE_URL, "seller_last_result", None)
+        except Exception:
+            pass
     try:
         for key in ("seller", "seller_profile"):
             if key in st.query_params:
@@ -6052,6 +6057,20 @@ def _clear_seller_top5_ui():
     except Exception:
         pass
 
+
+if not st.session_state.get("seller_top5_result") and DATABASE_URL:
+    try:
+        _saved_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {})
+        if isinstance(_saved_seller, dict) and isinstance(_saved_seller.get("result"), dict):
+            _saved_alias = str(_saved_seller.get("alias") or "").strip()
+            _saved_profile = str(_saved_seller.get("profile_url") or "").strip()
+            if _saved_alias and not st.session_state.get("seller_top5_alias"):
+                st.session_state["seller_top5_alias"] = _saved_alias
+            if _saved_profile and not st.session_state.get("seller_top5_profile_url"):
+                st.session_state["seller_top5_profile_url"] = _saved_profile
+            st.session_state["seller_top5_result"] = _saved_seller["result"]
+    except Exception:
+        pass
 
 _seller_existing_result = st.session_state.get("seller_top5_result") or {}
 _seller_existing_status = str(_seller_existing_result.get("status") or "")
@@ -6190,6 +6209,21 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                     top5["status"] = "PROFILE_INCOMPLETE"
                     top5["rows"] = []
                 st.session_state["seller_top5_result"] = top5
+                # Persist seller continuation/result independently of the
+                # browser websocket so leaving the app cannot reset the crawl.
+                if DATABASE_URL:
+                    try:
+                        save_persistent_namespace(
+                            DATABASE_URL,
+                            "seller_last_result",
+                            {
+                                "alias": alias,
+                                "profile_url": seller_top5_profile_url_resolved,
+                                "result": top5,
+                            },
+                        )
+                    except Exception:
+                        pass
                 found_count = int(top5.get("inventory_count") or 0)
                 quick_count = int(top5.get("quick_analysed") or 0)
                 full_count = int(top5.get("full_analysed") or 0)
