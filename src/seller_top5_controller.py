@@ -400,6 +400,14 @@ def resolve_seller_top5(
             except Exception as exc:
                 page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
 
+            if not page_result.get("ok") and str(page_result.get("status") or "") == "NO_LISTINGS_IN_HTML" and stored_items:
+                # With one-page checkpointed reads the first empty page is the
+                # normal end-of-profile signal. Previously it was treated as a
+                # fetch failure, so a fully crawled seller could remain stuck
+                # forever in INVENTORY_PARTIAL and ask for another click.
+                exhausted = True
+                break
+
             if not page_result.get("ok"):
                 # Streamlit Cloud can be blocked/reset by Tradera even when the
                 # public profile is healthy. Retry the same single page through
