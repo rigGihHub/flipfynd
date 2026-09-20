@@ -392,6 +392,10 @@ def build_opportunity_top5(items, limit=5):
             0
         )
 
+        break_even_gap = None
+        if practical_margin is not None:
+            break_even_gap = max(0.0, -practical_margin)
+
         rows.append({
             "title": title,
             "url": url,
@@ -409,6 +413,7 @@ def build_opportunity_top5(items, limit=5):
             "heuristic_margin": heuristic_margin,
             "practical_margin": practical_margin,
             "practical_roi": practical_roi,
+            "break_even_gap": break_even_gap,
             "practical_price_source": practical_source,
             "discovery_score": discovery_score,
             "discovery_signals": discovery_signals,
