@@ -1147,8 +1147,23 @@ def fetch_tradera_category(
             print(message, flush=True)
 
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                page.wait_for_timeout(1200)
+                # Tradera occasionally stalls on a single navigation. Retry the
+                # same page before aborting the incremental update so a transient
+                # connection timeout does not kill the whole fetch.
+                last_nav_error = None
+                for nav_attempt in range(3):
+                    try:
+                        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(900)
+                        last_nav_error = None
+                        break
+                    except Exception as nav_exc:
+                        last_nav_error = nav_exc
+                        print(f"Navigation sida {page_number} försök {nav_attempt + 1}/3 misslyckades: {type(nav_exc).__name__}", flush=True)
+                        if nav_attempt < 2:
+                            page.wait_for_timeout(1200 * (nav_attempt + 1))
+                if last_nav_error is not None:
+                    raise last_nav_error
 
                 anchors = page.locator('a[href*="/item/"]')
                 count = anchors.count()
