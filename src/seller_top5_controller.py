@@ -451,32 +451,19 @@ def resolve_seller_top5(
             )
             new_item_keys = set(page_items) - set(stored_items)
             if current_page > 1 and page_items and not new_item_keys:
-                # A public Tradera response can silently drop its paging query
-                # and return page 1 again. Retry this page through the proxy;
-                # never report a repeated page as forward progress.
-                try:
-                    retry = fetch_proxy_seller_inventory_batch(
-                        profile_text,
-                        start_page=current_page,
-                        max_pages=1,
-                        progress_callback=combined_progress,
-                        fallback_alias=alias,
-                    )
-                except Exception as exc:
-                    retry = {"ok": False, "error": str(exc), "items": []}
-                retry_items = _sanitize_public_items(
-                    retry.get("items") or [], seller_alias=alias, seller_id=seller_id
-                ) if retry.get("ok") else {}
-                if set(retry_items) - set(stored_items):
-                    page_result = retry
-                    page_items = retry_items
-                    new_item_keys = set(page_items) - set(stored_items)
-                else:
-                    public_failure = {
-                        "status": "REPEATED_PAGE",
-                        "error": f"Tradera returnerade samma annonser igen för sida {current_page}.",
-                    }
-                    break
+                # The proxy may legitimately return overlapping listings when
+                # Tradera reorders a large seller inventory. Do not turn a
+                # successful HTTP page into a fatal error. Advance the cursor;
+                # later pages can still contribute new item ids. The bounded
+                # block prevents an infinite loop.
+                combined_progress({
+                    "phase": "page_overlap",
+                    "page": current_page,
+                    "pages_read": pages_this_run,
+                    "max_pages": batch_pages,
+                    "found_count": len(stored_items),
+                    "page_count": len(page_items),
+                })
             stored_items.update(page_items)
             pages_this_run += int(page_result.get("pages_read") or 0)
             current_page = int(page_result.get("next_page") or (current_page + 1))
