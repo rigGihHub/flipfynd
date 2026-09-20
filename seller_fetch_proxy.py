@@ -59,7 +59,15 @@ def seller_page(
             total = None
 
     if not items:
-        raise HTTPException(status_code=502, detail="no_listings_parsed")
+        raise HTTPException(status_code=502, detail={
+            "code": "no_listings_parsed",
+            "requested_page": page,
+            "requested_url": url,
+            "response_url": str(response.url),
+            "html_length": len(html),
+            "has_item_path": "/item/" in html,
+            "html_prefix": re.sub(r"\\s+", " ", html[:180]),
+        })
 
     return {
         "ok": True,
@@ -71,4 +79,6 @@ def seller_page(
         "parsed_count": len(items),
         "total_listing_estimate": total,
         "source_url": str(response.url),
+        "requested_url": url,
+        "html_length": len(html),
     }
