@@ -69,6 +69,14 @@ def seller_page(
             "html_prefix": re.sub(r"\\s+", " ", html[:180]),
         })
 
+    item_ids = [str(x.get("tradera_item_id") or "") for x in items if x.get("tradera_item_id")]
+    print(
+        f"SELLER_PAGE seller={seller_id} requested_page={page} "
+        f"count={len(items)} first_id={item_ids[0] if item_ids else '-'} "
+        f"last_id={item_ids[-1] if item_ids else '-'} source_url={response.url}",
+        flush=True,
+    )
+
     return {
         "ok": True,
         "seller_id": str(seller_id),
