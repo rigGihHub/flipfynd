@@ -911,11 +911,10 @@ def start_fetch(
     # previous debug/results visible while fresh listings are loading makes two
     # different datasets look like one search (for example 240 current listings
     # next to diagnostics from an older 3,085-row run).
-    st.session_state["results"] = None
-    st.session_state["debug"] = None
+    # Keep the last completed result visible while fresh listings load.
+    # Mark it stale instead of blanking the user's screen; a new Hitta fynd run
+    # will replace it against the updated dataset.
     st.session_state["result_cache"] = {}
-    st.session_state.pop("results_data_version", None)
-    st.session_state.pop("last_completed_search_signature", None)
     st.session_state.pop("active_search_job_id", None)
     st.session_state["results_stale_notice"] = True
 
@@ -968,10 +967,8 @@ def update_fetch_status():
         ] = {}
         # Defensive second invalidation: the fetched file may change after the
         # subprocess exits, so no pre-fetch diagnostics may survive completion.
-        st.session_state["results"] = None
-        st.session_state["debug"] = None
-        st.session_state.pop("results_data_version", None)
-        st.session_state.pop("last_completed_search_signature", None)
+        # Fresh market data makes the old analysis stale, not disposable.
+        # Keep it visible until the replacement analysis completes.
         st.session_state["results_stale_notice"] = True
 
     else:
@@ -1388,8 +1385,8 @@ if (
     and _previous_result_version
     and _previous_result_version != _current_dataset_version
 ):
-    st.session_state["results"] = None
-    st.session_state["debug"] = None
+    # Preserve the last completed cards across refresh/navigation. They are
+    # labelled stale until a new analysis completes instead of disappearing.
     st.session_state["results_stale_notice"] = True
 
 # FlipFynd har en huvuduppgift: visa de bästa fynden just nu.
