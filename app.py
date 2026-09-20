@@ -6080,6 +6080,19 @@ if not st.session_state.get("seller_top5_result") and DATABASE_URL:
         pass
 
 _seller_existing_result = st.session_state.get("seller_top5_result") or {}
+# The durable namespace can lag one click behind the in-session crawl result.
+# Prefer whichever checkpoint has progressed furthest so "Sök vidare" cannot
+# regress from page 10 back to the older page-1/9 block.
+try:
+    _persisted_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
+    _persisted_result = (_persisted_seller or {}).get("result") if isinstance(_persisted_seller, dict) else {}
+    _session_next = int(((_seller_existing_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
+    _persisted_next = int(((_persisted_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
+    if isinstance(_persisted_result, dict) and _persisted_next > _session_next:
+        _seller_existing_result = _persisted_result
+        st.session_state["seller_top5_result"] = _persisted_result
+except Exception:
+    pass
 _seller_existing_status = str(_seller_existing_result.get("status") or "")
 _seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
 
