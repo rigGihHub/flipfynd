@@ -22,7 +22,7 @@ _ANCHOR_RE = re.compile(
 _PRICE_RE = re.compile(r"(?P<price>\d[\d\s.]*)\s*kr", re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 _SCRIPT_RE = re.compile(r"<script[^>]*>(.*?)</script>", re.I | re.S)
-_PAGING_HINT_RE = re.compile(r"paging=\d+\.a0\.s(?P<count>\d+)", re.I)
+_PAGING_HINT_RE = re.compile(r"paging=(?:%3A|:)?(?P<page>\d+)(?:\.a0\.s|%2Ea0%2Es)(?P<count>\d+)", re.I)
 _TOTAL_LISTINGS_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
 _PAGING_SUFFIX_CACHE: dict[str, str] = {}
 
@@ -60,7 +60,9 @@ def build_profile_page_url(profile_url: str, page_number: int, paging_size: int 
         # This is only a bootstrap fallback. Once page 1 has been read, Tradera's
         # own paging link or the stored total listing estimate must be reused.
         suffix = ".a0.s48"
-    query["paging"] = [f"{page_number}{suffix}"]
+    # Tradera uses a leading colon in its paging token. Without it, pages
+    # beyond the first block can be normalized back to the same result set.
+    query["paging"] = [f":{page_number}{suffix}"]
     return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
 
 
