@@ -45,8 +45,23 @@ def seller_page(
         if not paging_match:
             paging_match = re.search(r"paging=2\\.a0\\.s(?P<size>\\d+)", seed_html.replace("&amp;", "&"), re.I)
         if not paging_match:
-            raise HTTPException(status_code=502, detail="paging_contract_not_found")
-        url = base + ("&" if "?" in base else "?") + f"paging={page}.a0.s{paging_match.group('size')}"
+            detail = {
+                "code": "FF-SELLER-PAGING-CONTRACT-NOT-FOUND",
+                "requested_page": page,
+                "seed_status": seed.status_code,
+                "seed_url": str(seed.url),
+                "seed_html_length": len(seed_html),
+                "has_paging_literal": "paging=" in seed_html,
+            }
+            print(f"SELLER_PAGING_ERROR {detail}", flush=True)
+            raise HTTPException(status_code=502, detail=detail)
+        paging_size = paging_match.group("size")
+        url = base + ("&" if "?" in base else "?") + f"paging={page}.a0.s{paging_size}"
+        print(
+            f"SELLER_PAGING_CONTRACT seller={seller_id} page={page} "
+            f"size={paging_size} url={url}",
+            flush=True,
+        )
     try:
         response = curl_requests.get(
             url,
@@ -60,7 +75,15 @@ def seller_page(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"tradera_fetch_failed: {exc}") from exc
     if response.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"tradera_http_{response.status_code}")
+        detail = {
+            "code": "FF-SELLER-TRADERA-HTTP",
+            "requested_page": page,
+            "tradera_status": response.status_code,
+            "requested_url": url,
+            "response_url": str(response.url),
+        }
+        print(f"SELLER_PAGING_ERROR {detail}", flush=True)
+        raise HTTPException(status_code=502, detail=detail)
 
     html = response.text or ""
     items = extract_public_profile_items(
