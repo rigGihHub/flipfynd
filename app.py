@@ -1140,10 +1140,15 @@ if st.session_state.get("results") is None and DATABASE_URL:
             # Never restore a completed search produced by an older analysis
             # engine. This was keeping obsolete Top 5 rows visible even after
             # the ranking/price pipeline changed.
-            if "ordinary-v2-market-gap-survival-20260919-23" in restored_signature:
+            # Restore the last completed search across browser/session loss.
+            # Exact engine-version freshness is handled by the next explicit
+            # Hitta fynd run; losing the user's visible results is worse than
+            # showing them with a clear restored marker.
+            if restored_signature:
                 st.session_state["results"] = restored.get("results") or []
                 st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
                 st.session_state["last_completed_search_signature"] = restored_signature
+                st.session_state["results_data_version"] = restored.get("data_version") or get_data_version()
                 st.session_state["restored_completed_search"] = True
     except Exception:
         pass
@@ -1888,7 +1893,7 @@ if run:
             save_persistent_namespace(
                 database_url,
                 "ordinary_last_completed",
-                {"signature": current_run_signature, "results": results, "debug": debug},
+                {"signature": current_run_signature, "results": results, "debug": debug, "data_version": get_data_version()},
             )
         except Exception:
             pass
