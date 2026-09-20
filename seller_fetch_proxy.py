@@ -4,10 +4,7 @@ import re
 from fastapi import FastAPI, HTTPException, Query
 from curl_cffi import requests as curl_requests
 
-from src.public_seller_inventory import (
-    build_profile_page_url,
-    extract_public_profile_items,
-)
+from src.public_seller_inventory import extract_public_profile_items
 
 app = FastAPI(title="FlipFynd Seller Fetch Proxy")
 _TOTAL_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
@@ -28,7 +25,10 @@ def seller_page(
     base = f"https://www.tradera.com/profile/items/{seller_id}/"
     if alias_clean:
         base += alias_clean
-    url = build_profile_page_url(base, page)
+    # Tradera's current seller profile does not honor the old paging token
+    # reliably. Use its ordinary page query first; the response URL and item
+    # fingerprints below verify whether the requested page was actually served.
+    url = base + ("&" if "?" in base else "?") + f"page={page}"
     try:
         response = curl_requests.get(
             url,
