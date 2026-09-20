@@ -110,10 +110,14 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     packaging = 3.0
     total = round(price + freight, 2)
     margin = round(reference - total - fee - packaging, 2)
-    enough_comps_for_find = len(rows) >= 2
+    single_comp_signal = bool(len(rows) == 1 and margin > 0)
+    possible_find = bool(margin > 0)
     return {
-        **out, "status": "POSSIBLE_FIND" if margin > 0 and enough_comps_for_find else ("SINGLE_COMP_REVIEW" if margin > 0 else "NO_MARGIN"),
-        "possible_find": bool(margin > 0 and enough_comps_for_find), "purchase_price": price,
+        **out,
+        "status": "POSSIBLE_FIND_WEAK" if single_comp_signal else ("POSSIBLE_FIND" if possible_find else "NO_MARGIN"),
+        "possible_find": possible_find,
+        "weak_find_signal": single_comp_signal,
+        "purchase_price": price,
         "shipping": freight, "shipping_known": shipping["known"],
         "total_cost": total, "reference_asking_price": reference, "observed_asking_price": observed_reference,
         "reference_method": reference_method,
@@ -121,7 +125,7 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         "comparison_count": len(rows), "comparisons": rows[:5],
         "asking_evidence_strength": (
             "STRONG_ACTIVE_CONTEXT" if len(rows) >= 3
-            else "LIMITED_ACTIVE_CONTEXT"
+            else ("MODERATE_ACTIVE_CONTEXT" if len(rows) == 2 else "WEAK_SINGLE_ACTIVE_CONTEXT")
         ),
         "fx_date": (fx or {}).get("date"), "fx_source": (fx or {}).get("source"),
         "fetched_at": (context or {}).get("fetched_at"),
