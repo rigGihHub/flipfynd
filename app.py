@@ -6221,10 +6221,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         quick_limit=60,
                         full_limit=8,
                         database_url=DATABASE_URL,
-                        # Let the durable checkpoint store be authoritative.
-                        # Passing the visible previous result here could replay
-                        # an older page-10 checkpoint forever after a rerun.
-                        resume_checkpoint=None,
+                        # The visible result is the freshest checkpoint from
+                        # the immediately preceding block. Pass it explicitly so
+                        # continuation survives DB/session checkpoint lag.
+                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
