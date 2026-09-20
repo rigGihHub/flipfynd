@@ -269,7 +269,7 @@ def _partial_result_from_saved(
         "diagnostic_code": (
             str(public_error.get("diagnostic_code"))
             if isinstance(public_error, dict) and public_error.get("diagnostic_code")
-            else "FF-SELLER-NO-NEW-IDS"
+            else "FF-SELLER-BATCH-COMPLETE"
             if public_status == "OK" and loaded > 0 and resume_required is False
             else "FF-SELLER-FETCH-INTERRUPTED" if resume_required else "FF-SELLER-PARTIAL"
         ),
@@ -499,21 +499,22 @@ def resolve_seller_top5(
             pages_this_run += int(page_result.get("pages_read") or 0)
             current_page = int(page_result.get("next_page") or (current_page + 1))
             exhausted = bool(page_result.get("exhausted"))
+            checkpoint = {
+                "next_page": current_page,
+                "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run,
+                "items": stored_items,
+                "total_listing_estimate": total_listing_estimate,
+            }
             save_checkpoint(
                 key,
-                {
-                    "next_page": current_page,
-                    "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run,
-                    "items": stored_items,
-                    "total_listing_estimate": total_listing_estimate,
-                },
+                checkpoint,
                 session=session,
                 database_url=database_url,
             )
             if exhausted:
                 break
 
-        total_pages_read = int(checkpoint.get("pages_read") or 0) + pages_this_run
+        total_pages_read = int(checkpoint.get("pages_read") or 0)
         api_status = (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK")
 
         if public_failure:
