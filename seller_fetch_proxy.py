@@ -61,8 +61,21 @@ def seller_page(
     if page <= 1:
         url = base
     else:
+        # Tradera only exposes a sliding pagination window. For later
+        # pages, seed from the preceding page so the requested link is visible.
+        seed_url = base
+        if page > 2:
+            # The paging token's s-value is the inventory size. Obtain it from
+            # page 1, then open the preceding page before resolving the target.
+            root = curl_requests.get(
+                base, impersonate="chrome", timeout=15,
+                headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
+            )
+            prev_href = _page_href(root.text or "", page - 1)
+            if prev_href:
+                seed_url = urljoin(str(root.url), prev_href)
         seed = curl_requests.get(
-            base, impersonate="chrome", timeout=15,
+            seed_url, impersonate="chrome", timeout=15,
             headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
         )
         seed_html = seed.text or ""
