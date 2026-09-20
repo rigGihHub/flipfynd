@@ -6071,11 +6071,33 @@ if not st.session_state.get("seller_top5_result") and DATABASE_URL:
         if isinstance(_saved_seller, dict) and isinstance(_saved_seller.get("result"), dict):
             _saved_alias = str(_saved_seller.get("alias") or "").strip()
             _saved_profile = str(_saved_seller.get("profile_url") or "").strip()
+            _saved_result = dict(_saved_seller["result"])
+            # The compact seller_last_result may lag behind the per-seller
+            # durable checkpoint. On a fresh browser session, merge the newer
+            # checkpoint before restoring the UI so leaving for a Tradera ad
+            # can never rewind thousands of already saved listings.
+            try:
+                _restore_alias = _saved_alias or str(_saved_result.get("seller") or "").strip()
+                _restore_profile = _saved_profile
+                if _restore_profile:
+                    _restore_key = _seller_top5_controller._checkpoint_key(_restore_alias, _restore_profile)
+                    _durable_cp = _seller_top5_controller.load_checkpoint(
+                        _restore_key, session=st.session_state, database_url=DATABASE_URL
+                    )
+                    _saved_cp = _saved_result.get("public_checkpoint") or {}
+                    if isinstance(_durable_cp, dict) and int(_durable_cp.get("next_page") or 0) > int(_saved_cp.get("next_page") or 0):
+                        _saved_result["public_checkpoint"] = _durable_cp
+                        _saved_result["public_next_page"] = int(_durable_cp.get("next_page") or 1)
+                        _saved_result["public_pages_read"] = max(0, int(_durable_cp.get("next_page") or 1) - 1)
+                        _saved_result["inventory_count"] = len(_durable_cp.get("items") or {})
+                        _saved_result["total_listing_estimate"] = _durable_cp.get("total_listing_estimate")
+            except Exception:
+                pass
             if _saved_alias and not st.session_state.get("seller_top5_alias"):
                 st.session_state["seller_top5_alias"] = _saved_alias
             if _saved_profile and not st.session_state.get("seller_top5_profile_url"):
                 st.session_state["seller_top5_profile_url"] = _saved_profile
-            st.session_state["seller_top5_result"] = _saved_seller["result"]
+            st.session_state["seller_top5_result"] = _saved_result
     except Exception:
         pass
 
