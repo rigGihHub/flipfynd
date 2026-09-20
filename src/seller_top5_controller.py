@@ -18,7 +18,7 @@ from src.seller_card_domain import seller_item_domain_check
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
-PUBLIC_BATCH_PAGES = 3
+PUBLIC_BATCH_PAGES = 9
 _CHECKPOINT_SCHEMA = "v3"
 
 
@@ -377,6 +377,8 @@ def resolve_seller_top5(
             save_checkpoint(key, checkpoint, session=session, database_url=database_url)
 
         start_page = max(1, int(checkpoint.get("next_page") or 1))
+        # Read several checkpointed pages per click. Each page is saved
+        # immediately, so a timeout/session loss resumes from the next page.
         batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
         current_page = start_page
         pages_this_run = 0
