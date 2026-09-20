@@ -13,6 +13,7 @@ import time
 import traceback
 
 from src.persistent_search_jobs import claim_next_job, update_job
+from src.public_seller_inventory import crawl_public_seller_inventory
 
 POLL_SECONDS = max(1, int(os.getenv("FLIPFYND_WORKER_POLL_SECONDS", "3")))
 
@@ -24,9 +25,19 @@ def execute_job(job: dict):
     if kind == "healthcheck":
         return {"ok": True, "worker": "flipfynd", "payload": payload}
 
-    # Do not silently mark unknown work as successful. Seller crawling is wired
-    # in as a dedicated executor next, after its Streamlit-only analysis
-    # dependencies have been separated.
+    if kind == "seller_inventory_crawl":
+        profile_url = str(payload.get("profile_url") or "").strip()
+        if not profile_url:
+            raise ValueError("seller_inventory_crawl requires profile_url")
+        return crawl_public_seller_inventory(
+            profile_url,
+            start_page=int(payload.get("start_page") or 1),
+            max_pages=int(payload.get("max_pages") or 120),
+            timeout=int(payload.get("timeout") or 8),
+            fallback_alias=str(payload.get("seller") or "").strip() or None,
+            paging_size=payload.get("paging_size"),
+        )
+
     raise RuntimeError(f"Unsupported background job kind: {kind}")
 
 
