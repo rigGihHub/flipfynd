@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.40-durable-seller-resume"
+RUNTIME_BUILD = "2026-09-20.41-checkpoint-observability"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -315,7 +315,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.37"
+APP_VERSION = "v0.14.38"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
