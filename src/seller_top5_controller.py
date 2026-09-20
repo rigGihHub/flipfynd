@@ -267,7 +267,9 @@ def _partial_result_from_saved(
     result.update({
         "seller": alias,
         "diagnostic_code": (
-            "FF-SELLER-NO-NEW-IDS"
+            str(public_error.get("diagnostic_code"))
+            if isinstance(public_error, dict) and public_error.get("diagnostic_code")
+            else "FF-SELLER-NO-NEW-IDS"
             if public_status == "OK" and loaded > 0 and resume_required is False
             else "FF-SELLER-FETCH-INTERRUPTED" if resume_required else "FF-SELLER-PARTIAL"
         ),
