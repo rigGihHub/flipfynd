@@ -29,7 +29,24 @@ def seller_page(
     # Tradera's current seller profile does not honor the old paging token
     # reliably. Use its ordinary page query first; the response URL and item
     # fingerprints below verify whether the requested page was actually served.
-    url = base + ("&" if "?" in base else "?") + f"page={page}"
+    # The HTML exposes Tradera's real paging contract, e.g.
+    # paging=2.a0.s9529 where s is the seller inventory size (not page size).
+    # For this endpoint we can derive that total from page 1 on each request
+    # and then request the desired page using the same contract.
+    if page <= 1:
+        url = base
+    else:
+        seed = curl_requests.get(
+            base, impersonate="chrome", timeout=15,
+            headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
+        )
+        seed_html = seed.text or ""
+        paging_match = re.search(r"paging=(?:%3A|:)?2\\.a0\\.s(?P<size>\\d+)", seed_html, re.I)
+        if not paging_match:
+            paging_match = re.search(r"paging=2\\.a0\\.s(?P<size>\\d+)", seed_html.replace("&amp;", "&"), re.I)
+        if not paging_match:
+            raise HTTPException(status_code=502, detail="paging_contract_not_found")
+        url = base + ("&" if "?" in base else "?") + f"paging={page}.a0.s{paging_match.group('size')}"
     try:
         response = curl_requests.get(
             url,
