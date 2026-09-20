@@ -365,11 +365,18 @@ def resolve_seller_top5(
         parsed_profile = parse_profile_url(profile_text) or {}
         seller_id = str(parsed_profile.get("seller_id") or "").strip() or None
         key = _checkpoint_key(alias, profile_text)
-        checkpoint = dict(resume_checkpoint) if isinstance(resume_checkpoint, dict) else None
-        if not checkpoint:
+        # One source of truth per click: the checkpoint embedded in the
+        # currently visible result. Only fall back to durable storage when no
+        # explicit continuation was supplied (e.g. fresh app/session restore).
+        if isinstance(resume_checkpoint, dict):
+            checkpoint = dict(resume_checkpoint)
+        else:
             checkpoint = load_checkpoint(key, session=session, database_url=database_url)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}, "total_listing_estimate": None}
+        # pages_read must describe unique pages represented by the cursor, not
+        # accumulate repeated blocks from stale checkpoints.
+        checkpoint["pages_read"] = max(0, int(checkpoint.get("next_page") or 1) - 1)
 
         raw_checkpoint_items = (checkpoint.get("items") or {}).values() if isinstance(checkpoint.get("items"), dict) else []
         stored_items = _sanitize_public_items(raw_checkpoint_items, seller_alias=alias, seller_id=seller_id)
