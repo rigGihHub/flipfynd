@@ -486,6 +486,13 @@ def resolve_seller_top5(
                     "found_count": len(stored_items),
                     "page_count": len(page_items),
                 })
+                public_failure = {
+                    "status": "NO_NEW_IDS",
+                    "error": f"Sida {current_page} gav 0 nya annons-ID:n.",
+                    "navigation_links": page_result.get("navigation_links") or [],
+                }
+                # Do not count or advance a repeated page as successful work.
+                break
             stored_items.update(page_items)
             pages_this_run += int(page_result.get("pages_read") or 0)
             current_page = int(page_result.get("next_page") or (current_page + 1))
