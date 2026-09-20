@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.45-worker-ui-contract"
+RUNTIME_BUILD = "2026-09-20.46-seller-job-enqueue"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -315,7 +315,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.42"
+APP_VERSION = "v0.14.43"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6109,6 +6109,31 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         if not alias and not seller_top5_profile_url_resolved:
             st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
         else:
+            # Public seller profiles can be crawled by the persistent worker.
+            # Queue that I/O-heavy part first so leaving the browser does not
+            # cancel inventory discovery. Ranking remains on the existing path
+            # until the headless analyser is fully separated.
+            if seller_top5_profile_url_resolved and jobs_available():
+                import hashlib as _seller_hashlib
+                _seller_sig = _seller_hashlib.sha256(
+                    (str(alias).casefold() + "|" + seller_top5_profile_url_resolved).encode("utf-8")
+                ).hexdigest()
+                _active = latest_active_job(job_kind="seller_inventory_crawl", signature=_seller_sig)
+                if not _active:
+                    _active = create_job(
+                        job_kind="seller_inventory_crawl",
+                        signature=_seller_sig,
+                        payload={
+                            "seller": alias,
+                            "profile_url": seller_top5_profile_url_resolved,
+                            "start_page": 1,
+                            "max_pages": 120,
+                        },
+                    )
+                st.session_state["seller_background_job_signature"] = _seller_sig
+                st.session_state["seller_background_job_id"] = _active.get("job_id")
+                st.info("Säljarens annonser har lagts i bakgrundskön. Du kan lämna sidan utan att kön försvinner.")
+
             creds = _resolve_tradera_api_credentials()
             sport_key = "all"
             local_market = get_data(get_data_version())
