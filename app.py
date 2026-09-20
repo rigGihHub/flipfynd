@@ -222,7 +222,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.54-native-seller-page"
+RUNTIME_BUILD = "2026-09-20.55-seller-error-codes"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -322,7 +322,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.51"
+APP_VERSION = "v0.14.52"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6324,10 +6324,19 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             _inventory_line = f"{_saved} inlästa · cirka {int(_remaining_est or 0)} kvar · {_pages} sidor lästa"
         else:
             _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
+        _diag_code = str(seller_top5_result.get("diagnostic_code") or "FF-SELLER-PARTIAL")
         if seller_top5_result.get("resume_required"):
             st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
         else:
             st.info(f"Delstopp efter ett sökblock · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
+        st.code(
+            f"{_diag_code} | status={seller_top5_result.get('public_status')} | "
+            f"saved={_saved} | pages={_pages} | next={_next} | "
+            f"estimate={seller_top5_result.get('total_listing_estimate')} | "
+            f"resume={bool(seller_top5_result.get('resume_required'))}",
+            language=None,
+        )
+        st.caption("Felsökningskod – skicka hela raden om säljsökningen fastnar.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
     if seller_top5_result and not (seller_top5_result.get("rows") or []):
