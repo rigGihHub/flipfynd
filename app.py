@@ -6223,7 +6223,18 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
 
             try:
                 try:
-                    _visible_cp = (_seller_previous_result.get("public_checkpoint") or {}) if isinstance(_seller_previous_result, dict) else {}
+                    # Read continuation state at click-time. Streamlit reruns can
+                    # make the earlier module-scope snapshot stale/empty.
+                    _click_result = st.session_state.get("seller_top5_result") or {}
+                    if not isinstance(_click_result, dict) or not (_click_result.get("public_checkpoint") or {}):
+                        try:
+                            _click_saved = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
+                            _click_persisted = (_click_saved or {}).get("result") if isinstance(_click_saved, dict) else {}
+                            if isinstance(_click_persisted, dict):
+                                _click_result = _click_persisted
+                        except Exception:
+                            pass
+                    _visible_cp = (_click_result.get("public_checkpoint") or {}) if isinstance(_click_result, dict) else {}
                     _controller_start_debug = {
                         "source": "visible_result",
                         "next_page": int(_visible_cp.get("next_page") or 1),
@@ -6245,7 +6256,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         # The visible result is the freshest checkpoint from
                         # the immediately preceding block. Pass it explicitly so
                         # continuation survives DB/session checkpoint lag.
-                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
+                        resume_checkpoint=_visible_cp,
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
