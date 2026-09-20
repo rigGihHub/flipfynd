@@ -155,9 +155,16 @@ def select_asking_price_research(rows, *, limit=24):
         # relaxed route when player + card number + one of season/set is known.
         # eBay candidate matching still decides whether a returned listing is
         # eligible as price evidence.
-        core = bool(identity.get("player_name") and identity.get("card_number"))
-        context = bool(identity.get("season") or identity.get("set_name"))
-        if not (core and context):
+        has_player = bool(identity.get("player_name"))
+        has_number = bool(identity.get("card_number"))
+        has_season = bool(identity.get("season"))
+        has_set = bool(identity.get("set_name"))
+        # Exact card number is strongest. For listings where sellers omit it,
+        # still allow research when player + season + set are all known; the
+        # downstream eBay matcher remains responsible for price-evidence safety.
+        exact_route = has_player and has_number and (has_season or has_set)
+        descriptive_route = has_player and has_season and has_set
+        if not (exact_route or descriptive_route):
             continue
         integrity = assess_listing_integrity(item)
         if not integrity["eligible_physical_single_card"] or integrity["reprint_risk"] or identity.get("is_lot"):
@@ -183,7 +190,13 @@ def select_asking_price_research(rows, *, limit=24):
         sold_hint = int(_number(row.get("sold_comps")) or 0)
         # Lower tuple is researched first: cheap remains useful, but a strong
         # identity/discovery signal can beat piles of generic 10 kr base cards.
-        route_score = total_cost - min(45.0, discovery * 0.35) - min(12.0, freshness) - min(15.0, sold_hint * 3.0)
+        title_fold = str(item.get("titel") or item.get("title") or "").casefold()
+        variant_bonus = 0.0
+        if re.search(r"\b(?:rookie|\brc\b|refractor|prizm|parallel|rainbow|color wheel|silver|gold|red|blue|green|ssp|sp)\b", title_fold):
+            variant_bonus += 10.0
+        if re.search(r"(?<!\d)\d{1,4}\s*/\s*\d{1,4}(?!\d)|\b(?:auto|autograph|patch|relic|jersey|game[- ]used)\b", title_fold):
+            variant_bonus += 18.0
+        route_score = total_cost - min(45.0, discovery * 0.35) - min(12.0, freshness) - min(15.0, sold_hint * 3.0) - variant_bonus
         eligible.append((route_score, total_cost, -sold_hint, row))
     eligible.sort(key=lambda pair: (pair[0], pair[1], pair[2]))
     # Do not let one cheap price band consume every slot. Spread the economic
