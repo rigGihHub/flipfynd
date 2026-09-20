@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.46-seller-job-enqueue"
+RUNTIME_BUILD = "2026-09-20.47-repeat-seller-search"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -315,7 +315,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.43"
+APP_VERSION = "v0.14.44"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6103,7 +6103,18 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
     _seller_previous_result = _seller_existing_result
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
-    _seller_button_label = "Fortsätt söka" if _seller_continue_inventory else "🔎 Hitta säljarens bästa kort"
+    _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
+    if _seller_continue_inventory:
+        _seller_button_label = "🔎 Sök vidare – läs nästa annonser"
+    elif _seller_has_saved_inventory:
+        _seller_button_label = "🔄 Sök igen – uppdatera säljaren"
+    else:
+        _seller_button_label = "🔎 Hitta säljarens bästa kort"
+    if _seller_has_saved_inventory:
+        st.caption(
+            f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
+            "Nästa sökning behåller dem och fortsätter/uppdaterar samma säljare."
+        )
     if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
