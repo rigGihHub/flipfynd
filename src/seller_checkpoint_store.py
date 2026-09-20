@@ -24,13 +24,9 @@ def _namespace(key: str) -> str:
 
 
 def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None:
-    if session is not None:
-        try:
-            value = session.get(key)
-            if isinstance(value, dict):
-                return dict(value)
-        except Exception:
-            pass
+    # Durable storage is authoritative when configured. A restored browser
+    # session may contain an older checkpoint than a previous run already saved
+    # to Postgres; reading session state first could then rewind the seller crawl.
     if database_url:
         try:
             from src.persistent_store import load_namespace
@@ -41,6 +37,13 @@ def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None
                         session[key] = value
                     except Exception:
                         pass
+                return dict(value)
+        except Exception:
+            pass
+    if session is not None:
+        try:
+            value = session.get(key)
+            if isinstance(value, dict):
                 return dict(value)
         except Exception:
             pass
