@@ -440,6 +440,23 @@ def resolve_seller_top5(
                 public_failure = page_result
                 break
 
+            # Prefer the dedicated Render fetcher for continuation pages. Direct
+            # Streamlit->Tradera requests can return stale/normalized profile
+            # pages even with HTTP 200, while the proxy uses browser-like TLS.
+            if current_page > 1:
+                try:
+                    proxy_page = fetch_proxy_seller_inventory_batch(
+                        profile_text,
+                        start_page=current_page,
+                        max_pages=1,
+                        progress_callback=combined_progress,
+                        fallback_alias=alias,
+                    )
+                    if proxy_page.get("ok"):
+                        page_result = proxy_page
+                except Exception:
+                    pass
+
             resolved_alias = str(((page_result.get("seller") or {}).get("alias")) or "").strip()
             if resolved_alias:
                 alias = resolved_alias
