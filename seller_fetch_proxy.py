@@ -41,37 +41,31 @@ def seller_page(
             base, impersonate="chrome", timeout=15,
             headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
         )
-        seed_html = seed.text or ""
-        decoded_seed = html_lib.unescape(seed_html).replace("\\u0026", "&")
-        paging_match = re.search(r"paging=(?:%3A|:)?2\\.a0\\.s(?P<size>\\d+)", seed_html, re.I)
-        if not paging_match:
-            paging_match = re.search(r"paging=2\\.a0\\.s(?P<size>\\d+)", seed_html.replace("&amp;", "&"), re.I)
-        if not paging_match:
-            token_probe = re.search(r"[0-9]+[.]a0[.]s[0-9]+", decoded_seed, re.I)
-            paging_pos = token_probe.start() if token_probe else decoded_seed.lower().find("paging=")
-            paging_excerpt = (
-                decoded_seed[max(0, paging_pos - 80): paging_pos + 220]
-                if paging_pos >= 0 else ""
+        seed_html = html_lib.unescape(seed.text or "")
+        # Follow the exact page link emitted by Tradera instead of rebuilding
+        # its paging token. Attribute order is not guaranteed, so locate an
+        # anchor containing the requested aria-label and then extract href.
+        anchor_match = re.search(
+            rf"<a\\b[^>]*aria-label=[\"']Sida {page}[\"'][^>]*>",
+            seed_html, re.I,
+        )
+        if not anchor_match:
+            anchor_match = re.search(
+                rf"<a\\b[^>]*href=[\"'][^\"']*paging={page}\\.a0\\.s\\d+[^\"']*[\"'][^>]*>",
+                seed_html, re.I,
             )
-            paging_excerpt = re.sub(r"\\s+", " ", paging_excerpt)
+        href_match = re.search(r"href=[\"']([^\"']+)[\"']", anchor_match.group(0), re.I) if anchor_match else None
+        if not href_match:
             detail = {
-                "code": "FF-SELLER-PAGING-CONTRACT-NOT-FOUND",
+                "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
                 "requested_page": page,
                 "seed_status": seed.status_code,
                 "seed_url": str(seed.url),
-                "seed_html_length": len(seed_html),
-                "has_paging_literal": "paging=" in seed_html,
-                "paging_excerpt": paging_excerpt,
             }
             print(f"SELLER_PAGING_ERROR {detail}", flush=True)
             raise HTTPException(status_code=502, detail=detail)
-        paging_size = paging_match.group("size")
-        url = base + ("&" if "?" in base else "?") + f"paging={page}.a0.s{paging_size}"
-        print(
-            f"SELLER_PAGING_CONTRACT seller={seller_id} page={page} "
-            f"size={paging_size} url={url}",
-            flush=True,
-        )
+        url = urljoin(str(seed.url), html_lib.unescape(href_match.group(1)))
+        print(f"SELLER_PAGE_LINK seller={seller_id} page={page} url={url}", flush=True)
     try:
         response = curl_requests.get(
             url,
