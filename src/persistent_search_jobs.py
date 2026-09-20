@@ -103,6 +103,38 @@ def update_job(job_id: str, *, status: str | None = None, progress: int | None =
     return get_job(job_id)
 
 
+def claim_next_job(*, job_kind: str | None = None):
+    """Atomically claim one queued job for an external worker.
+
+    SKIP LOCKED lets multiple workers poll safely without executing the same
+    search twice. This is the hand-off that makes work independent of a
+    Streamlit websocket.
+    """
+    if not ensure_schema():
+        return None
+    with psycopg.connect(_dsn()) as conn:
+        with conn.transaction():
+            sql = """SELECT job_id FROM flipfynd_search_jobs
+                     WHERE status='QUEUED'"""
+            args = []
+            if job_kind:
+                sql += " AND job_kind=%s"
+                args.append(job_kind)
+            sql += " ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1"
+            row = conn.execute(sql, args).fetchone()
+            if not row:
+                return None
+            job_id = row[0]
+            conn.execute(
+                """UPDATE flipfynd_search_jobs
+                   SET status='RUNNING', progress=GREATEST(progress,1),
+                       error=NULL, updated_at=NOW()
+                   WHERE job_id=%s""",
+                (job_id,),
+            )
+    return get_job(job_id)
+
+
 def latest_completed_job(*, job_kind: str, signature: str | None = None):
     if not available():
         return None
