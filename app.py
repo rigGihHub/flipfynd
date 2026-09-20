@@ -6223,6 +6223,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
 
             try:
                 try:
+                    _visible_cp = (_seller_previous_result.get("public_checkpoint") or {}) if isinstance(_seller_previous_result, dict) else {}
+                    _controller_start_debug = {
+                        "source": "visible_result",
+                        "next_page": int(_visible_cp.get("next_page") or 1),
+                        "pages_read": int(_visible_cp.get("pages_read") or 0),
+                        "items": len(_visible_cp.get("items") or {}),
+                    }
+                    st.session_state["seller_controller_start_debug"] = _controller_start_debug
                     top5 = resolve_seller_top5(
                         alias,
                         local_market,
@@ -6349,6 +6357,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             f"resume={bool(seller_top5_result.get('resume_required'))}",
             language=None,
         )
+        _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
+        if _start_dbg:
+            st.code(
+                f"FF-CONTROLLER-START | source={_start_dbg.get('source')} | "
+                f"next={_start_dbg.get('next_page')} | pages={_start_dbg.get('pages_read')} | "
+                f"items={_start_dbg.get('items')}",
+                language=None,
+            )
         st.caption("Felsökningskod – skicka hela raden om säljsökningen fastnar.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
