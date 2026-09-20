@@ -222,7 +222,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.52-overlap-tolerant"
+RUNTIME_BUILD = "2026-09-20.53-proxy-continuation"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -322,7 +322,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.49"
+APP_VERSION = "v0.14.50"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
