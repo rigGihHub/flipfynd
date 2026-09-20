@@ -41,7 +41,12 @@ def seller_page(
             base, impersonate="chrome", timeout=15,
             headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
         )
-        seed_html = html_lib.unescape(seed.text or "")\n        # Next.js embeds parts of the rendered markup as JSON strings. Decode\n        # only HTML-relevant unicode escapes before searching for anchors.\n        seed_html = (seed_html.replace("\\\\u003c", "<").replace("\\\\u003e", ">")\n                     .replace("\\\\u0026", "&").replace("\\\\u0022", '"')\n                     .replace("\\\\u0027", "'"))
+        seed_html = html_lib.unescape(seed.text or "")
+        # Next.js embeds parts of the rendered markup as JSON strings. Decode
+        # only HTML-relevant unicode escapes before searching for anchors.
+        seed_html = (seed_html.replace("\\\\u003c", "<").replace("\\\\u003e", ">")
+                     .replace("\\\\u0026", "&").replace("\\\\u0022", '"')
+                     .replace("\\\\u0027", "'"))
         # Follow the exact page link emitted by Tradera instead of rebuilding
         # its paging token. Attribute order is not guaranteed, so locate an
         # anchor containing the requested aria-label and then extract href.
