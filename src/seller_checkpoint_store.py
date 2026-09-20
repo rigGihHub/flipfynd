@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 _ROOT = Path('/tmp/flipfynd_seller_checkpoints')
@@ -65,6 +66,7 @@ def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None
 
 def save_checkpoint(key: str, value: dict, *, session=None, database_url=None) -> None:
     payload = dict(value or {})
+    payload["checkpoint_saved_at"] = datetime.now(timezone.utc).isoformat()
     if session is not None:
         try:
             session[key] = payload
