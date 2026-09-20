@@ -44,9 +44,12 @@ def seller_page(
         seed_html = html_lib.unescape(seed.text or "")
         # Next.js embeds parts of the rendered markup as JSON strings. Decode
         # only HTML-relevant unicode escapes before searching for anchors.
-        seed_html = (seed_html.replace("\\\\u003c", "<").replace("\\\\u003e", ">")
-                     .replace("\\\\u0026", "&").replace("\\\\u0022", '"')
-                     .replace("\\\\u0027", "'"))
+        # The response contains JSON-escaped markup (literal backslash-u).
+        # Normalize both single- and double-escaped forms.
+        for _ in range(2):
+            seed_html = (seed_html.replace("\\u003c", "<").replace("\\u003e", ">")
+                         .replace("\\u0026", "&").replace("\\u0022", '"')
+                         .replace("\\u0027", "'").replace("\\\"", '"'))
         # Follow the exact page link emitted by Tradera instead of rebuilding
         # its paging token. Attribute order is not guaranteed, so locate an
         # anchor containing the requested aria-label and then extract href.
