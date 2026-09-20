@@ -42,6 +42,7 @@ def seller_page(
             headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
         )
         seed_html = seed.text or ""
+        decoded_seed = html_lib.unescape(seed_html).replace("\\u0026", "&")
         paging_match = re.search(r"paging=(?:%3A|:)?2\\.a0\\.s(?P<size>\\d+)", seed_html, re.I)
         if not paging_match:
             paging_match = re.search(r"paging=2\\.a0\\.s(?P<size>\\d+)", seed_html.replace("&amp;", "&"), re.I)
