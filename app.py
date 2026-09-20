@@ -6578,7 +6578,14 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             elif row.get("seller_deep_route") == "HIDDEN_FIND_EXPLORATION":
                 st.caption("Dolt fynd-urval: annonsen djupanalyserades trots svag rubrik. Detta är inte i sig en köpsignal.")
             if row.get("url"):
-                st.link_button("Öppna annonsen ↗", row.get("url"), use_container_width=True)
+                _ad_url = str(row.get("url") or "").replace('"', "%22")
+                st.markdown(
+                    f'<a href="{_ad_url}" target="_blank" rel="noopener noreferrer" '
+                    f'style="display:block;text-align:center;padding:.55rem .75rem;'
+                    f'border:1px solid rgba(128,128,128,.45);border-radius:.5rem;'
+                    f'text-decoration:none;font-weight:600;">Öppna annonsen ↗</a>',
+                    unsafe_allow_html=True,
+                )
             st.divider()
         for empty_rank in range(len(rows) + 1, 6):
             st.caption(f"#{empty_rank} — Ingen kandidat klarade kvalitetsgränsen ännu")
