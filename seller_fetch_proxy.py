@@ -118,7 +118,6 @@ def seller_page(
             "requested_url": url,
             "response_url": str(response.url),
             "html_length": len(html),
-        "navigation_links": nav_links,
             "has_item_path": "/item/" in html,
             "html_prefix": re.sub(r"\\s+", " ", html[:180]),
         })
