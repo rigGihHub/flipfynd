@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import html as html_lib
 from urllib.parse import urljoin
 from fastapi import FastAPI, HTTPException, Query
 from curl_cffi import requests as curl_requests
