@@ -6235,6 +6235,12 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         except Exception:
                             pass
                     _visible_cp = (_click_result.get("public_checkpoint") or {}) if isinstance(_click_result, dict) else {}
+                    # Streamlit can hot-reload app.py while retaining an older
+                    # imported controller module. Reload it on each explicit
+                    # seller-search click so continuation code matches GitHub.
+                    import importlib as _seller_importlib
+                    import src.seller_top5_controller as _seller_controller_live
+                    _seller_controller_live = _seller_importlib.reload(_seller_controller_live)
                     _controller_start_debug = {
                         "source": "visible_result",
                         "next_page": int(_visible_cp.get("next_page") or 1),
@@ -6242,7 +6248,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         "items": len(_visible_cp.get("items") or {}),
                     }
                     st.session_state["seller_controller_start_debug"] = _controller_start_debug
-                    top5 = resolve_seller_top5(
+                    top5 = _seller_controller_live.resolve_seller_top5(
                         alias,
                         local_market,
                         analyze_fn=_cached_seller_analysis,
