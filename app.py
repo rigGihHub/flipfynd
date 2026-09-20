@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-19.35-mispricing-sweep"
+RUNTIME_BUILD = "2026-09-20.36-mispricing-sweep10"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -1768,7 +1768,7 @@ if run:
         # A running Streamlit process may retain the pre-v0.14.34 helper.
         # Encode scope in an existing argument, so both signatures work and
         # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-mispricing-sweep-20260919-29"
+        ANALYSIS_ENGINE_VERSION = "ordinary-v2-mispricing-sweep10-20260920-30"
         scoped_data_version = json.dumps(
             [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION],
             separators=(",", ":"),
@@ -2251,6 +2251,15 @@ if st.session_state.get("results") is not None:
                     statuses = (st.session_state.get("debug") or {}).get("price_research_status_counts") or {}
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))
+                    target = int(current_debug.get("mispricing_sweep_target") or 0)
+                    eligible = int(price_funnel.get("searchable_identity") or 0)
+                    usable = int(price_funnel.get("usable_reference") or 0)
+                    finds = int(price_funnel.get("possible_find") or 0)
+                    if eligible:
+                        st.caption(
+                            f"Fyndsvep: målet är att prisundersöka upp till {target or eligible} av {eligible} "
+                            f"sökbara kort. {usable} fick användbart jämförpris och {finds} gav positiv fyndmarginal."
+                        )
 
             actual_find_count = sum(
                 1 for row in top_rows
