@@ -20,7 +20,10 @@ def render_asking_price_opportunity(opportunity):
     data = opportunity or {}
     if data.get("status") not in {"POSSIBLE_FIND", "NO_MARGIN"}:
         return
-    st.markdown("**Möjligt fynd · begärda priser**" if data.get("possible_find") else "**Ingen marginal mot begärda priser**")
+    if data.get("possible_find"):
+        st.markdown("**Möjligt fynd · svagt underlag (1 exakt jämförelse)**" if data.get("weak_find_signal") else "**Möjligt fynd · begärda priser**")
+    else:
+        st.markdown("**Ingen marginal mot begärda priser**")
     shipping_label = "frakt" if data["shipping_known"] else "antagen frakt"
     st.write(
         f"Inköp {data['purchase_price']:.0f} kr + {shipping_label} {data['shipping']:.0f} kr "
@@ -37,7 +40,9 @@ def render_asking_price_opportunity(opportunity):
         f"**Möjlig nettovinst {data['net_margin']:+g} kr**{roi_text}"
     )
     st.caption(
-        "Detta är ett scenario mot aktiva begärda priser, inte ett verifierat marknadsvärde eller en genomförd försäljning."
+        ("Endast en exakt aktiv jämförelse: signalen kan vara intressant men är osäker och fastställer inte marknadsvärdet."
+         if data.get("weak_find_signal")
+         else "Detta är ett scenario mot aktiva begärda priser, inte ett verifierat marknadsvärde eller en genomförd försäljning.")
     )
     st.caption(data["note"])
     if data.get("fx_date"):
