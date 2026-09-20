@@ -61,36 +61,29 @@ def seller_page(
     if page <= 1:
         url = base
     else:
-        # Tradera only exposes a sliding pagination window. For later
-        # pages, seed from the preceding page so the requested link is visible.
+        # Tradera exposes only a sliding pagination window. Walk the real
+        # next-page links sequentially until the requested page is reached.
         seed_url = base
-        if page > 2:
-            # The paging token's s-value is the inventory size. Obtain it from
-            # page 1, then open the preceding page before resolving the target.
-            root = curl_requests.get(
-                base, impersonate="chrome", timeout=15,
+        seed = None
+        for target_page in range(2, page + 1):
+            seed = curl_requests.get(
+                seed_url, impersonate="chrome", timeout=15,
                 headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
             )
-            prev_href = _page_href(root.text or "", page - 1)
-            if prev_href:
-                seed_url = urljoin(str(root.url), prev_href)
-        seed = curl_requests.get(
-            seed_url, impersonate="chrome", timeout=15,
-            headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
-        )
-        seed_html = seed.text or ""
-        href = _page_href(seed_html, page)
-        if not href:
-            detail = {
-                "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
-                "requested_page": page,
-                "seed_status": seed.status_code,
-                "seed_url": str(seed.url),
-            }
-            print(f"SELLER_PAGING_ERROR {detail}", flush=True)
-            raise HTTPException(status_code=502, detail=detail)
-        url = urljoin(str(seed.url), href)
-        print(f"SELLER_PAGE_LINK seller={seller_id} page={page} url={url}", flush=True)
+            next_href = _page_href(seed.text or "", target_page)
+            if not next_href:
+                detail = {
+                    "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
+                    "requested_page": page,
+                    "missing_target_page": target_page,
+                    "seed_status": seed.status_code,
+                    "seed_url": str(seed.url),
+                }
+                print(f"SELLER_PAGING_ERROR {detail}", flush=True)
+                raise HTTPException(status_code=502, detail=detail)
+            seed_url = urljoin(str(seed.url), next_href)
+        url = seed_url
+        print(f"SELLER_PAGE_CHAIN seller={seller_id} page={page} url={url}", flush=True)
     try:
         response = curl_requests.get(
             url,
