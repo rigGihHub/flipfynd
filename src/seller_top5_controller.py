@@ -407,75 +407,30 @@ def resolve_seller_top5(
         total_listing_estimate = checkpoint.get("total_listing_estimate")
 
         for _ in range(batch_pages):
+            # For public seller continuation, the Render proxy is the
+            # authoritative fetch path. Passing current_page through unchanged
+            # guarantees page 10 stays page 10 instead of being rebuilt by the
+            # legacy direct Tradera URL helper.
             try:
-                page_result = _fetch_public(
-                    public_fetcher,
+                page_result = fetch_proxy_seller_inventory_batch(
                     profile_text,
                     start_page=current_page,
-                    public_pages=1,
+                    max_pages=1,
                     progress_callback=combined_progress,
-                    seller_alias=alias,
-                    paging_size=total_listing_estimate,
+                    fallback_alias=alias,
                 )
             except Exception as exc:
-                page_result = {"ok": False, "status": "FETCH_EXCEPTION", "error": str(exc), "items": []}
-
-            if not page_result.get("ok") and str(page_result.get("status") or "") == "NO_LISTINGS_IN_HTML" and stored_items:
-                # With one-page checkpointed reads the first empty page is the
-                # normal end-of-profile signal. Previously it was treated as a
-                # fetch failure, so a fully crawled seller could remain stuck
-                # forever in INVENTORY_PARTIAL and ask for another click.
-                exhausted = True
-                break
-
-            if not page_result.get("ok"):
-                # Streamlit Cloud can be blocked/reset by Tradera even when the
-                # public profile is healthy. Retry the same single page through
-                # the dedicated browser-like Render fetcher before giving up.
-                try:
-                    proxy_result = fetch_proxy_seller_inventory_batch(
-                        profile_text,
-                        start_page=current_page,
-                        max_pages=1,
-                        progress_callback=combined_progress,
-                        fallback_alias=alias,
-                    )
-                except Exception as exc:
-                    proxy_result = {
-                        "ok": False,
-                        "status": "PROXY_FETCH_EXCEPTION",
-                        "error": str(exc),
-                        "items": [],
-                        "next_page": current_page,
-                    }
-                if proxy_result.get("ok"):
-                    page_result = proxy_result
-                else:
-                    page_result = dict(page_result)
-                    page_result["direct_fetch_error"] = page_result.get("error")
-                    page_result["proxy_status"] = proxy_result.get("status")
-                    page_result["proxy_error"] = proxy_result.get("error")
+                page_result = {
+                    "ok": False,
+                    "status": "PROXY_FETCH_EXCEPTION",
+                    "error": str(exc),
+                    "items": [],
+                    "next_page": current_page,
+                }
 
             if not page_result.get("ok"):
                 public_failure = page_result
                 break
-
-            # Prefer the dedicated Render fetcher for continuation pages. Direct
-            # Streamlit->Tradera requests can return stale/normalized profile
-            # pages even with HTTP 200, while the proxy uses browser-like TLS.
-            if current_page > 1:
-                try:
-                    proxy_page = fetch_proxy_seller_inventory_batch(
-                        profile_text,
-                        start_page=current_page,
-                        max_pages=1,
-                        progress_callback=combined_progress,
-                        fallback_alias=alias,
-                    )
-                    if proxy_page.get("ok"):
-                        page_result = proxy_page
-                except Exception:
-                    pass
 
             resolved_alias = str(((page_result.get("seller") or {}).get("alias")) or "").strip()
             if resolved_alias:
