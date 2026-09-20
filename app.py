@@ -222,7 +222,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.49-pagination-fix"
+RUNTIME_BUILD = "2026-09-20.50-durable-resume-authority"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -322,7 +322,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.46"
+APP_VERSION = "v0.14.47"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6221,7 +6221,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         quick_limit=60,
                         full_limit=8,
                         database_url=DATABASE_URL,
-                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
+                        # Let the durable checkpoint store be authoritative.
+                        # Passing the visible previous result here could replay
+                        # an older page-10 checkpoint forever after a rerun.
+                        resume_checkpoint=None,
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
