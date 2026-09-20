@@ -135,6 +135,21 @@ def claim_next_job(*, job_kind: str | None = None):
     return get_job(job_id)
 
 
+def latest_job(*, job_kind: str, signature: str | None = None):
+    """Return newest job regardless of state for UI progress/recovery."""
+    if not available():
+        return None
+    sql = "SELECT job_id FROM flipfynd_search_jobs WHERE job_kind=%s"
+    args = [job_kind]
+    if signature:
+        sql += " AND signature=%s"
+        args.append(signature)
+    sql += " ORDER BY updated_at DESC LIMIT 1"
+    with psycopg.connect(_dsn()) as conn:
+        row = conn.execute(sql, args).fetchone()
+    return get_job(row[0]) if row else None
+
+
 def latest_completed_job(*, job_kind: str, signature: str | None = None):
     if not available():
         return None
