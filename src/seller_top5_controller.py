@@ -391,6 +391,12 @@ def resolve_seller_top5(
             save_checkpoint(key, checkpoint, session=session, database_url=database_url)
 
         start_page = max(1, int(checkpoint.get("next_page") or 1))
+        print(
+            f"SELLER_CONTROLLER_START alias={alias} start_page={start_page} "
+            f"checkpoint_next={checkpoint.get('next_page')} items={len(stored_items)} "
+            f"resume_supplied={isinstance(resume_checkpoint, dict)}",
+            flush=True,
+        )
         # Read several checkpointed pages per click. Each page is saved
         # immediately, so a timeout/session loss resumes from the next page.
         batch_pages = min(PUBLIC_BATCH_PAGES, max(1, int(public_pages or PUBLIC_BATCH_PAGES)))
