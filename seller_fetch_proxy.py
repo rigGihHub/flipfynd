@@ -46,6 +46,12 @@ def seller_page(
         if not paging_match:
             paging_match = re.search(r"paging=2\\.a0\\.s(?P<size>\\d+)", seed_html.replace("&amp;", "&"), re.I)
         if not paging_match:
+            paging_pos = decoded_seed.lower().find("paging")
+            paging_excerpt = (
+                decoded_seed[max(0, paging_pos - 80): paging_pos + 220]
+                if paging_pos >= 0 else ""
+            )
+            paging_excerpt = re.sub(r"\\s+", " ", paging_excerpt)
             detail = {
                 "code": "FF-SELLER-PAGING-CONTRACT-NOT-FOUND",
                 "requested_page": page,
@@ -53,6 +59,7 @@ def seller_page(
                 "seed_url": str(seed.url),
                 "seed_html_length": len(seed_html),
                 "has_paging_literal": "paging=" in seed_html,
+                "paging_excerpt": paging_excerpt,
             }
             print(f"SELLER_PAGING_ERROR {detail}", flush=True)
             raise HTTPException(status_code=502, detail=detail)
