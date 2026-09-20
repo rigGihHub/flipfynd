@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urljoin
 from fastapi import FastAPI, HTTPException, Query
 from curl_cffi import requests as curl_requests
 
@@ -65,15 +66,28 @@ def seller_page(
             "requested_url": url,
             "response_url": str(response.url),
             "html_length": len(html),
+        "navigation_links": nav_links,
             "has_item_path": "/item/" in html,
             "html_prefix": re.sub(r"\\s+", " ", html[:180]),
         })
 
     item_ids = [str(x.get("tradera_item_id") or "") for x in items if x.get("tradera_item_id")]
+    # Capture navigation/cursor evidence from the real HTML instead of
+    # assuming a page-number contract.
+    nav_links = []
+    for match in re.finditer(r'href=["\\\']([^"\\\']+)["\\\']', html, re.I):
+        href = match.group(1)
+        if "paging=" in href or "page=" in href or "cursor" in href.lower():
+            absolute = urljoin(str(response.url), href)
+            if absolute not in nav_links:
+                nav_links.append(absolute)
+            if len(nav_links) >= 12:
+                break
     print(
         f"SELLER_PAGE seller={seller_id} requested_page={page} "
         f"count={len(items)} first_id={item_ids[0] if item_ids else '-'} "
-        f"last_id={item_ids[-1] if item_ids else '-'} source_url={response.url}",
+        f"last_id={item_ids[-1] if item_ids else '-'} source_url={response.url} "
+        f"nav_links={nav_links[:4]}",
         flush=True,
     )
 
