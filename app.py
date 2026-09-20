@@ -222,7 +222,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.48-import-compat"
+RUNTIME_BUILD = "2026-09-20.49-pagination-fix"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -322,7 +322,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.45"
+APP_VERSION = "v0.14.46"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6324,7 +6324,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         if seller_top5_result.get("resume_required"):
             st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
         else:
-            st.info(f"Delstopp efter tre profilsidor · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
+            st.info(f"Delstopp efter ett sökblock · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
     if seller_top5_result and not (seller_top5_result.get("rows") or []):
