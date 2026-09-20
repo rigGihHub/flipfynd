@@ -215,7 +215,7 @@ st.set_page_config(
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.37-single-comp-signal"
+RUNTIME_BUILD = "2026-09-20.38-fetch-retry"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
