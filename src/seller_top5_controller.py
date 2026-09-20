@@ -266,6 +266,11 @@ def _partial_result_from_saved(
     result = dict(ranked)
     result.update({
         "seller": alias,
+        "diagnostic_code": (
+            "FF-SELLER-NO-NEW-IDS"
+            if public_status == "OK" and loaded > 0 and resume_required is False
+            else "FF-SELLER-FETCH-INTERRUPTED" if resume_required else "FF-SELLER-PARTIAL"
+        ),
         "rows": rows,
         "status": "INVENTORY_PARTIAL",
         "inventory_count": loaded,
