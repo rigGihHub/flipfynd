@@ -111,12 +111,24 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     total = round(price + freight, 2)
     margin = round(reference - total - fee - packaging, 2)
     single_comp_signal = bool(len(rows) == 1 and margin > 0)
-    possible_find = bool(margin > 0)
+    # Active asking prices are not realised sales. A lone listing may signal
+    # something worth researching, but it must never become a purchase-ready
+    # find by itself. Two exact active comps can support a weak possible-find;
+    # three or more provide materially better market context.
+    evidence_sufficient = len(rows) >= 2
+    possible_find = bool(margin > 0 and evidence_sufficient)
     return {
         **out,
-        "status": "POSSIBLE_FIND_WEAK" if single_comp_signal else ("POSSIBLE_FIND" if possible_find else "NO_MARGIN"),
+        "status": (
+            "RESEARCH_SINGLE_ACTIVE" if single_comp_signal
+            else "POSSIBLE_FIND" if possible_find
+            else "NO_MARGIN" if margin <= 0
+            else "INSUFFICIENT_ACTIVE_EVIDENCE"
+        ),
         "possible_find": possible_find,
         "weak_find_signal": single_comp_signal,
+        "research_signal": bool(margin > 0 and not evidence_sufficient),
+        "evidence_sufficient_for_possible_find": evidence_sufficient,
         "purchase_price": price,
         "shipping": freight, "shipping_known": shipping["known"],
         "total_cost": total, "reference_asking_price": reference, "observed_asking_price": observed_reference,
