@@ -508,6 +508,12 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             continue
         key = _identity_key(source or qrow)
         fallback = _fallback_row(qrow, alias)
+        # Quick analysis is routing evidence, never enough for a Top 5 resale
+        # recommendation. Only retain it when it still qualifies as an explicit
+        # research candidate; a quick BUY label cannot bypass deep-analysis
+        # readiness or manufacture a find.
+        if seller_result_tier(fallback) != "RESEARCH":
+            continue
         opportunity_key = _card_opportunity_key(fallback)
         if key in completed_full_keys or key in selected_keys or opportunity_key in selected_opportunities or _explicit_condition_risk(fallback):
             continue
