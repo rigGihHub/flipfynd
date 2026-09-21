@@ -178,3 +178,15 @@ def latest_active_job(*, job_kind: str, signature: str | None = None):
     with psycopg.connect(_dsn()) as conn:
         row=conn.execute(sql,args).fetchone()
     return get_job(row[0]) if row else None
+
+
+def create_or_get_active_job(*, job_kind: str, payload: dict, signature: str) -> dict:
+    """Idempotently enqueue work for one logical search.
+
+    Streamlit reruns must not create duplicate crawls. Reuse the newest queued
+    or running job for the same signature; otherwise create a new one.
+    """
+    active = latest_active_job(job_kind=job_kind, signature=signature)
+    if active:
+        return active
+    return create_job(job_kind=job_kind, payload=payload, signature=signature)
