@@ -1,9 +1,4 @@
-"""Small local checkpoint store for Seller Top 5 public-profile inventory.
-
-The public seller inventory is public data. Checkpoints are written to the app
-container as a resilience aid so a dropped Streamlit websocket/session does not
-force the user to restart from page 1. Session state is mirrored when available.
-"""
+"""Durable monotonic checkpoint store for Seller Top 5 inventory."""
 from __future__ import annotations
 
 import hashlib
@@ -24,28 +19,37 @@ def _namespace(key: str) -> str:
     return f'seller_checkpoint::{digest}'
 
 
+def _progress(value: dict | None) -> tuple[int, int, int]:
+    if not isinstance(value, dict):
+        return (0, 0, 0)
+    items = value.get("items") or {}
+    return (
+        max(1, int(value.get("next_page") or 1)),
+        len(items) if isinstance(items, dict) else 0,
+        max(0, int(value.get("pages_read") or 0)),
+    )
+
+
+def furthest_checkpoint(*values) -> dict | None:
+    candidates = [dict(v) for v in values if isinstance(v, dict)]
+    return max(candidates, key=_progress) if candidates else None
+
+
 def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None:
-    # Durable storage is authoritative when configured. A restored browser
-    # session may contain an older checkpoint than a previous run already saved
-    # to Postgres; reading session state first could then rewind the seller crawl.
+    durable = session_value = local_value = None
     if database_url:
         try:
             from src.persistent_store import load_namespace
             value = load_namespace(database_url, _namespace(key), None)
             if isinstance(value, dict):
-                if session is not None:
-                    try:
-                        session[key] = value
-                    except Exception:
-                        pass
-                return dict(value)
+                durable = dict(value)
         except Exception:
             pass
     if session is not None:
         try:
             value = session.get(key)
             if isinstance(value, dict):
-                return dict(value)
+                session_value = dict(value)
         except Exception:
             pass
     try:
@@ -53,19 +57,22 @@ def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None
         if path.exists():
             value = json.loads(path.read_text(encoding='utf-8'))
             if isinstance(value, dict):
-                if session is not None:
-                    try:
-                        session[key] = value
-                    except Exception:
-                        pass
-                return value
+                local_value = dict(value)
     except Exception:
         pass
-    return None
+    chosen = furthest_checkpoint(durable, session_value, local_value)
+    if chosen is not None and session is not None:
+        try:
+            session[key] = chosen
+        except Exception:
+            pass
+    return chosen
 
 
 def save_checkpoint(key: str, value: dict, *, session=None, database_url=None) -> None:
-    payload = dict(value or {})
+    incoming = dict(value or {})
+    existing = load_checkpoint(key, session=session, database_url=database_url)
+    payload = furthest_checkpoint(existing, incoming) or incoming
     payload["checkpoint_saved_at"] = datetime.now(timezone.utc).isoformat()
     if session is not None:
         try:
