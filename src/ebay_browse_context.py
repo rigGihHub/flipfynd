@@ -77,8 +77,15 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
             timeout=timeout,
         )
-        if not token_response.ok:
-            err = requests.HTTPError(f"EBAY_TOKEN_HTTP_{token_response.status_code}", response=token_response)
+        token_ok = getattr(token_response, "ok", None)
+        if token_ok is None:
+            try:
+                token_response.raise_for_status()
+                token_ok = True
+            except Exception:
+                token_ok = False
+        if not token_ok:
+            err = requests.HTTPError(f"EBAY_TOKEN_HTTP_{getattr(token_response, 'status_code', 'unknown')}", response=token_response)
             setattr(err, "ebay_stage", "TOKEN")
             raise err
         token_data = token_response.json()
@@ -94,8 +101,15 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
         timeout=timeout,
     )
-    if not response.ok:
-        err = requests.HTTPError(f"EBAY_BROWSE_HTTP_{response.status_code}", response=response)
+    response_ok = getattr(response, "ok", None)
+    if response_ok is None:
+        try:
+            response.raise_for_status()
+            response_ok = True
+        except Exception:
+            response_ok = False
+    if not response_ok:
+        err = requests.HTTPError(f"EBAY_BROWSE_HTTP_{getattr(response, 'status_code', 'unknown')}", response=response)
         setattr(err, "ebay_stage", "BROWSE")
         raise err
     payload = response.json()
@@ -141,7 +155,25 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         target_graded = bool((identity or {}).get("grading_company") or (identity or {}).get("grade"))
         candidate_graded = bool(parsed.get("grading_company") or parsed.get("grade")
                                 or re.search(r"\b(?:PSA|BGS|BVG|SGC|CGC|CSG|KSA|TAG)\b", str(row.get("title") or ""), re.I))
-        extra_serial = bool(parsed.get("serial_number") and not (identity or {}).get("serial_denominator"))
+        target_auto = bool((identity or {}).get("is_auto"))
+        candidate_auto = bool(parsed.get("is_auto"))
+        target_patch = bool((identity or {}).get("is_patch"))
+        candidate_patch = bool(parsed.get("is_patch") or parsed.get("is_jersey"))
+        target_parallel = str((identity or {}).get("parallel") or "").strip().casefold()
+        candidate_parallel = str(parsed.get("parallel") or "").strip().casefold()
+        target_serial = str((identity or {}).get("serial_denominator") or "").strip()
+        candidate_serial = str(parsed.get("serial_number") or "").strip()
+        premium_traits_match = bool(
+            target_auto == candidate_auto
+            and target_patch == candidate_patch
+            and (not target_parallel or target_parallel == candidate_parallel)
+            and (not target_serial or target_serial == candidate_serial)
+            # A premium trait present only on the candidate is also a mismatch:
+            # base cards must not inherit auto/patch/parallel/numbered prices.
+            and not (candidate_parallel and not target_parallel)
+            and not (candidate_serial and not target_serial)
+        )
+                extra_serial = bool(parsed.get("serial_number") and not (identity or {}).get("serial_denominator"))
         # A comparison is only economic evidence when the exact card identity
         # is materially present in the listing title. This blocks near-set/card
         # collisions (e.g. parallel names or wrong card numbers) from creating
@@ -156,6 +188,7 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             match["label"] == "STRONG_CANDIDATE" and not match["missing"] and not match["conflicts"]
             and number_present and player_present
             and target_graded == candidate_graded and not extra_serial
+            and premium_traits_match
             and (not target_graded or ((identity or {}).get("grade") and (identity or {}).get("grading_company")))
             and "FIXED_PRICE" in row["buying_options"]
             and integrity["eligible_physical_single_card"] and not integrity["reprint_risk"]
