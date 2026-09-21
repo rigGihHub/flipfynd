@@ -59,3 +59,26 @@ def test_autograph_target_rejects_base_candidate():
         session=TraitSession("2023-24 Upper Deck #451 Connor Bedard")
     )
     assert not any(row["asking_comparison_eligible"] for row in out["rows"])
+
+
+def _eligible_for(identity, title):
+    out = fetch_ebay_active_context(
+        "exact card", identity=identity, client_id="id", client_secret="secret",
+        session=TraitSession(title),
+    )
+    return any(row["asking_comparison_eligible"] for row in out["rows"])
+
+
+def test_wrong_season_cannot_be_price_evidence():
+    identity = {"player_name": "Connor Bedard", "season": "2023-24", "set_name": "Upper Deck", "card_number": "451"}
+    assert not _eligible_for(identity, "2024-25 Upper Deck #451 Connor Bedard")
+
+
+def test_wrong_set_cannot_be_price_evidence():
+    identity = {"player_name": "Connor Bedard", "season": "2023-24", "set_name": "Upper Deck", "card_number": "451"}
+    assert not _eligible_for(identity, "2023-24 OPC Platinum #451 Connor Bedard")
+
+
+def test_wrong_card_number_cannot_be_price_evidence():
+    identity = {"player_name": "Connor Bedard", "season": "2023-24", "set_name": "Upper Deck", "card_number": "451"}
+    assert not _eligible_for(identity, "2023-24 Upper Deck #452 Connor Bedard")
