@@ -19,8 +19,8 @@ def fast_analysis_budget(total_candidates: int, *, context: str = "ordinary") ->
     # Broad ordinary searches need materially more coverage. 160 of ~1,800
     # eligible listings is too little to support a credible "no finds" result.
     # Keep seller scans tighter, but let ordinary discovery inspect up to 480.
-    ceiling = 480 if context == "ordinary" else 180
-    floor = 160 if context == "ordinary" else 80
+    ceiling = 160 if context == "ordinary" else 120
+    floor = 80 if context == "ordinary" else 60
 
     if total <= floor:
         return total
@@ -32,7 +32,7 @@ def fast_analysis_budget(total_candidates: int, *, context: str = "ordinary") ->
     # inspecting only a tiny slice. Keep a meaningful minimum coverage ratio
     # until the hard ceiling is reached.
     if context == "ordinary":
-        budget = min(total, ceiling, max(budget, round(total * 0.20)))
+        budget = min(total, ceiling, budget)
     return budget
 
 
