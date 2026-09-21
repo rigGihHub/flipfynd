@@ -365,13 +365,12 @@ def resolve_seller_top5(
         parsed_profile = parse_profile_url(profile_text) or {}
         seller_id = str(parsed_profile.get("seller_id") or "").strip() or None
         key = _checkpoint_key(alias, profile_text)
-        # One source of truth per click: the checkpoint embedded in the
-        # currently visible result. Only fall back to durable storage when no
-        # explicit continuation was supplied (e.g. fresh app/session restore).
-        if isinstance(resume_checkpoint, dict):
-            checkpoint = dict(resume_checkpoint)
-        else:
-            checkpoint = load_checkpoint(key, session=session, database_url=database_url)
+        # Durable/local/session state and the visible result can temporarily
+        # disagree after a rerun. Always choose the furthest checkpoint; never
+        # let an older visible result rewind a crawl already persisted.
+        durable_checkpoint = load_checkpoint(key, session=session, database_url=database_url)
+        from src.seller_checkpoint_store import furthest_checkpoint
+        checkpoint = furthest_checkpoint(durable_checkpoint, resume_checkpoint)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}, "total_listing_estimate": None}
         # pages_read must describe unique pages represented by the cursor, not
@@ -461,15 +460,28 @@ def resolve_seller_top5(
                     "error": f"Sida {current_page} gav 0 nya annons-ID:n.",
                     "navigation_links": page_result.get("navigation_links") or [],
                 }
-                # Do not count or advance a repeated page as successful work.
-                break
+                # A fully overlapping page is not necessarily EOF: live
+                # inventories can shift between requests. Count the page as
+                # successfully represented and advance, while the bounded
+                # batch prevents an infinite crawl.
+                pages_this_run += int(page_result.get("pages_read") or 1)
+                current_page = int(page_result.get("next_page") or (current_page + 1))
+                checkpoint = {
+                    "next_page": current_page,
+                    "pages_read": max(0, current_page - 1),
+                    "items": stored_items,
+                    "total_listing_estimate": total_listing_estimate,
+                }
+                save_checkpoint(key, checkpoint, session=session, database_url=database_url)
+                public_failure = None
+                continue
             stored_items.update(page_items)
             pages_this_run += int(page_result.get("pages_read") or 0)
             current_page = int(page_result.get("next_page") or (current_page + 1))
             exhausted = bool(page_result.get("exhausted"))
             checkpoint = {
                 "next_page": current_page,
-                "pages_read": int(checkpoint.get("pages_read") or 0) + pages_this_run,
+                "pages_read": max(0, current_page - 1),
                 "items": stored_items,
                 "total_listing_estimate": total_listing_estimate,
             }
