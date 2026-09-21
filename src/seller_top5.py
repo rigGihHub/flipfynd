@@ -491,11 +491,10 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(presentable_full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     selected_opportunities = {_card_opportunity_key(row) for row in selected}
-    # Fill from all valid quick-analysis rows when fewer than five stronger
-    # candidates survive. Fillers remain explicitly non-verified.
-    fallback_pool = qualified_quick_rows + [
-        row for row in all_quick_rows if row not in qualified_quick_rows
-    ]
+    # Never fill Top 5 with generic/zero-merit cards merely to reach five.
+    # Research candidates must have passed the explicit seller-card merit gate;
+    # otherwise the truthful result is fewer than five cards.
+    fallback_pool = qualified_quick_rows
     for qrow in fallback_pool:
         if len(selected) >= 5:
             break
