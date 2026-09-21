@@ -93,3 +93,31 @@ def test_seller_pipeline_does_not_publish_high_risk_buy_label():
     assert not row["deal_readiness"]["ready_for_find"]
     assert row["label"] == "VÄRT ATT UNDERSÖKA"
     assert seller_result_tier(row) == "RESEARCH"
+
+
+def test_positive_profit_without_verified_risk_cannot_get_verified_profit_rank():
+    from src.seller_top5 import _seller_opportunity_rank_key
+    unsafe = {
+        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 3,
+        "risk_adjusted_profit": 500, "valuation_confidence": 90,
+        "rank_score": 99, "player_market_score": 99,
+    }
+    safe = {
+        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 1,
+        "risk_adjusted_profit": 50, "valuation_confidence": 70, "risk_score": 20,
+        "rank_score": 40, "player_market_score": 40,
+    }
+    assert _seller_opportunity_rank_key(safe) > _seller_opportunity_rank_key(unsafe)
+
+
+def test_low_valuation_confidence_cannot_get_verified_profit_rank():
+    from src.seller_top5 import _seller_opportunity_rank_key
+    low_conf = {
+        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 5,
+        "risk_adjusted_profit": 1000, "valuation_confidence": 20, "risk_score": 10,
+    }
+    verified = {
+        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 1,
+        "risk_adjusted_profit": 40, "valuation_confidence": 70, "risk_score": 20,
+    }
+    assert _seller_opportunity_rank_key(verified) > _seller_opportunity_rank_key(low_conf)
