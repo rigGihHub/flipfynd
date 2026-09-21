@@ -190,3 +190,29 @@ def create_or_get_active_job(*, job_kind: str, payload: dict, signature: str) ->
     if active:
         return active
     return create_job(job_kind=job_kind, payload=payload, signature=signature)
+
+
+def seller_job_signature(profile_url: str, seller: str | None = None) -> str:
+    import hashlib
+    raw = (str(profile_url or "").strip() + "|" + str(seller or "").strip().casefold()).encode("utf-8")
+    return "seller_inventory:" + hashlib.sha256(raw).hexdigest()[:24]
+
+
+def ensure_seller_inventory_job(*, profile_url: str, seller: str | None = None,
+                                start_page: int = 1, max_pages: int = 120) -> dict:
+    signature = seller_job_signature(profile_url, seller)
+    return create_or_get_active_job(
+        job_kind="seller_inventory_crawl",
+        signature=signature,
+        payload={
+            "profile_url": str(profile_url).strip(),
+            "seller": str(seller or "").strip(),
+            "start_page": max(1, int(start_page or 1)),
+            "max_pages": max(1, int(max_pages or 120)),
+        },
+    )
+
+
+def seller_inventory_job_status(*, profile_url: str, seller: str | None = None):
+    signature = seller_job_signature(profile_url, seller)
+    return latest_job(job_kind="seller_inventory_crawl", signature=signature)
