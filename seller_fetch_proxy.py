@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import html as html_lib
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from fastapi import FastAPI, HTTPException, Query
 from curl_cffi import requests as curl_requests
 
@@ -33,6 +33,22 @@ def _page_href(markup: str, page: int) -> str | None:
 
 
 app = FastAPI(title="FlipFynd Seller Fetch Proxy")
+# In-process cursor cache: once Tradera exposes the real next-page URL, later
+# requests can jump straight to it instead of replaying pages 1..N. This cache
+# is an acceleration only; correctness still falls back to walking from page 1.
+_PAGE_URL_CACHE: dict[tuple[str, str, int], str] = {}
+
+
+def _cache_key(seller_id: int, alias: str, page: int) -> tuple[str, str, int]:
+    return (str(seller_id), str(alias or "").strip().casefold(), int(page))
+
+
+def _safe_tradera_page_url(value: str) -> bool:
+    try:
+        parsed = urlparse(str(value or ""))
+        return parsed.scheme == "https" and parsed.netloc.lower().endswith("tradera.com") and "/profile/items/" in parsed.path
+    except Exception:
+        return False
 _TOTAL_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
 
 
@@ -61,29 +77,41 @@ def seller_page(
     if page <= 1:
         url = base
     else:
-        # Tradera exposes only a sliding pagination window. Walk the real
-        # next-page links sequentially until the requested page is reached.
-        seed_url = base
-        seed = None
-        for target_page in range(2, page + 1):
-            seed = curl_requests.get(
-                seed_url, impersonate="chrome", timeout=15,
-                headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
-            )
-            next_href = _page_href(seed.text or "", target_page)
-            if not next_href:
-                detail = {
-                    "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
-                    "requested_page": page,
-                    "missing_target_page": target_page,
-                    "seed_status": seed.status_code,
-                    "seed_url": str(seed.url),
-                }
-                print(f"SELLER_PAGING_ERROR {detail}", flush=True)
-                raise HTTPException(status_code=502, detail=detail)
-            seed_url = urljoin(str(seed.url), next_href)
-        url = seed_url
-        print(f"SELLER_PAGE_CHAIN seller={seller_id} page={page} url={url}", flush=True)
+        cached_url = _PAGE_URL_CACHE.get(_cache_key(seller_id, alias_clean, page))
+        if cached_url and _safe_tradera_page_url(cached_url):
+            url = cached_url
+            print(f"SELLER_PAGE_CACHE_HIT seller={seller_id} page={page} url={url}", flush=True)
+        else:
+            # Walk only until the requested page when no trustworthy cursor is
+            # cached. Each discovered page URL is cached, so a sequential crawl
+            # pays this cost once and page N+1 becomes a direct request.
+            seed_url = base
+            seed = None
+            for target_page in range(2, page + 1):
+                known = _PAGE_URL_CACHE.get(_cache_key(seller_id, alias_clean, target_page))
+                if known and _safe_tradera_page_url(known):
+                    seed_url = known
+                    continue
+                seed = curl_requests.get(
+                    seed_url, impersonate="chrome", timeout=15,
+                    headers={"Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8", "Cache-Control": "no-cache"},
+                )
+                next_href = _page_href(seed.text or "", target_page)
+                if not next_href:
+                    detail = {
+                        "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
+                        "requested_page": page,
+                        "missing_target_page": target_page,
+                        "seed_status": seed.status_code,
+                        "seed_url": str(seed.url),
+                    }
+                    print(f"SELLER_PAGING_ERROR {detail}", flush=True)
+                    raise HTTPException(status_code=502, detail=detail)
+                seed_url = urljoin(str(seed.url), next_href)
+                if _safe_tradera_page_url(seed_url):
+                    _PAGE_URL_CACHE[_cache_key(seller_id, alias_clean, target_page)] = seed_url
+            url = seed_url
+            print(f"SELLER_PAGE_CHAIN seller={seller_id} page={page} url={url}", flush=True)
     try:
         response = curl_requests.get(
             url,
@@ -132,6 +160,13 @@ def seller_page(
             "html_prefix": re.sub(r"\\s+", " ", html[:180]),
         })
 
+    # Cache the real next-page URL from the page just fetched. This turns the
+    # normal sequential crawl into roughly one Tradera request per new page.
+    next_href = _page_href(html, page + 1)
+    next_url = urljoin(str(response.url), next_href) if next_href else None
+    if next_url and _safe_tradera_page_url(next_url):
+        _PAGE_URL_CACHE[_cache_key(seller_id, alias_clean, page + 1)] = next_url
+
     item_ids = [str(x.get("tradera_item_id") or "") for x in items if x.get("tradera_item_id")]
     # Capture navigation/cursor evidence from the real HTML instead of
     # assuming a page-number contract.
@@ -164,4 +199,6 @@ def seller_page(
         "source_url": str(response.url),
         "requested_url": url,
         "html_length": len(html),
+        "next_url": next_url,
+        "cursor_cached": bool(next_url),
     }
