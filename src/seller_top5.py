@@ -137,12 +137,17 @@ def _seller_opportunity_rank_key(row: dict):
     """Rank resale economics first; hype/research signals only break ties."""
     decision = str(row.get("decision") or "").upper()
     sold = int(_num(row.get("sold_comps")))
-    identity_ok = bool(row.get("identity_ok"))
+    readiness = assess_deal_readiness(row)
+    identity_ok = bool(readiness["identity_verified"])
     profit = _num(row.get("risk_adjusted_profit"))
     deal = _num(row.get("deal_score"))
-    readiness = assess_deal_readiness(row)
     verified_find = decision.startswith("KÖP") and readiness["ready_for_find"]
-    verified_profit = identity_ok and sold > 0 and profit > 0
+    verified_profit = bool(
+        identity_ok and sold > 0 and profit > 0
+        and readiness["valuation_confidence_score"] >= 55
+        and readiness["risk_score"] is not None
+        and readiness["risk_score"] <= 65
+    )
     asking = row.get("asking_price_opportunity") or {}
     asking_find = bool(asking.get("possible_find"))
     research = seller_result_tier(row) == "RESEARCH"
