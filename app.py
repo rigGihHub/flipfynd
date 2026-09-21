@@ -122,13 +122,18 @@ from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
 from src.ordinary_analysis_pipeline_v2 import analyze_data as shared_analyze_data
 try:
-    from src.persistent_search_jobs import available as jobs_available, create_job, latest_active_job, latest_completed_job, latest_job
+    from src.persistent_search_jobs import (
+        available as jobs_available, create_job, latest_active_job, latest_completed_job, latest_job,
+        ensure_seller_inventory_job, seller_inventory_job_status,
+    )
 except ImportError:
     # Streamlit Cloud can briefly run app.py with an older cached imported
     # module during rolling deploys. Keep the whole app alive; latest_job is
     # optional until the module catches up.
     from src.persistent_search_jobs import available as jobs_available, create_job, latest_active_job, latest_completed_job
     latest_job = lambda **kwargs: None
+    ensure_seller_inventory_job = lambda **kwargs: None
+    seller_inventory_job_status = lambda **kwargs: None
 from src.ordinary_search_job_contract import build_ordinary_search_job_payload, unpack_completed_ordinary_job
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
@@ -6157,6 +6162,26 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
             "Nästa sökning behåller dem och fortsätter/uppdaterar samma säljare."
         )
+    if seller_top5_profile_url_resolved and jobs_available():
+        try:
+            _bg_job = seller_inventory_job_status(
+                profile_url=seller_top5_profile_url_resolved,
+                seller=str(seller_top5_alias or "").strip(),
+            )
+            if _bg_job:
+                _bg_status = str(_bg_job.get("status") or "")
+                _bg_result = _bg_job.get("result") or {}
+                _bg_checkpoint = _bg_result.get("checkpoint") or {}
+                _bg_saved = int(_bg_result.get("inventory_count") or len(_bg_checkpoint.get("items") or {}))
+                _bg_next = int(_bg_checkpoint.get("next_page") or 1)
+                if _bg_status in {"QUEUED", "RUNNING"}:
+                    st.info(f"Bakgrundssökning pågår · {_bg_saved} unika annonser sparade · fortsätter från sida {_bg_next}")
+                elif _bg_status == "COMPLETED":
+                    st.success(f"Bakgrundsinläsning klar · {_bg_saved} unika annonser sparade")
+                elif _bg_status == "FAILED":
+                    st.warning("Bakgrundsinläsningen avbröts. Sparat checkpoint finns kvar och nästa körning kan fortsätta.")
+        except Exception:
+            pass
     if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
@@ -6167,24 +6192,15 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             # cancel inventory discovery. Ranking remains on the existing path
             # until the headless analyser is fully separated.
             if seller_top5_profile_url_resolved and jobs_available():
-                import hashlib as _seller_hashlib
-                _seller_sig = _seller_hashlib.sha256(
-                    (str(alias).casefold() + "|" + seller_top5_profile_url_resolved).encode("utf-8")
-                ).hexdigest()
-                _active = latest_active_job(job_kind="seller_inventory_crawl", signature=_seller_sig)
-                if not _active:
-                    _active = create_job(
-                        job_kind="seller_inventory_crawl",
-                        signature=_seller_sig,
-                        payload={
-                            "seller": alias,
-                            "profile_url": seller_top5_profile_url_resolved,
-                            "start_page": 1,
-                            "max_pages": 120,
-                        },
-                    )
-                st.session_state["seller_background_job_signature"] = _seller_sig
-                st.session_state["seller_background_job_id"] = _active.get("job_id")
+                _resume_page = int(((_seller_previous_result.get("public_checkpoint") or {}).get("next_page")) or 1)
+                _active = ensure_seller_inventory_job(
+                    profile_url=seller_top5_profile_url_resolved,
+                    seller=alias,
+                    start_page=_resume_page,
+                    max_pages=120,
+                )
+                if _active:
+                    st.session_state["seller_background_job_id"] = _active.get("job_id")
                 st.info("Säljarens annonser har lagts i bakgrundskön. Du kan lämna sidan utan att kön försvinner.")
 
             creds = _resolve_tradera_api_credentials()
