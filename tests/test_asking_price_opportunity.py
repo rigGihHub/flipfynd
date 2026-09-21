@@ -224,3 +224,21 @@ render_asking_price_shortlist(st.session_state["results"])
     assert "Möjlig nettovinst +10 kr" in text
     assert "32 kr totalt" in text
     assert len(app.get("link_button")) == 2
+
+
+def test_single_expensive_active_listing_is_research_signal_not_find():
+    out = build_asking_price_opportunity(ITEM, _context(500))
+    assert out["net_margin"] > 0
+    assert out["research_signal"]
+    assert out["weak_find_signal"]
+    assert not out["possible_find"]
+    assert out["status"] == "RESEARCH_SINGLE_ACTIVE"
+
+
+def test_two_exact_active_prices_can_support_possible_find():
+    context = _context(80)
+    context["rows"] += _context(90, url="https://www.ebay.com/itm/456")["rows"]
+    out = build_asking_price_opportunity(ITEM, context)
+    assert out["comparison_count"] == 2
+    assert out["evidence_sufficient_for_possible_find"]
+    assert out["possible_find"]
