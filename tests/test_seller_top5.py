@@ -186,3 +186,24 @@ def test_card_specific_rarity_beats_common_star_base_when_evidence_tier_is_equal
     # Rarity keeps this ahead of a common base card for research, but cannot
     # inflate it into strong economic opportunity without comps or margin.
     assert out["rows"][0]["seller_opportunity_score"] <= 25
+
+
+def test_quick_buy_fallback_cannot_bypass_deep_evidence_gate(monkeypatch):
+    import src.seller_top5 as top
+    source = {"titel": "2023-24 Upper Deck #451 Connor Bedard", "pris": 10, "tradera_item_id": "q1"}
+    quick = {
+        "source_item": source, "title": source["titel"], "price": 10,
+        "decision": "KÖP", "identity_ok": True, "sold_comps": 2,
+        "valuation_confidence": 90, "risk_adjusted_profit": 100,
+        "rank_score": 99, "player_market_score": 99,
+    }
+    monkeypatch.setattr(top, "_quick_scan_inventory", lambda *a, **k: {
+        "rows": [quick], "analysed_count": 1, "failed_count": 0,
+        "batch_count": 1, "domain_rejected_count": 0, "inventory_unique_count": 1,
+        "fast_pool_count": 1, "coverage_complete": True, "sport_counts": {"hockey": 1},
+    })
+    monkeypatch.setattr(top, "select_dynamic_seller_deep_rows", lambda *a, **k: [])
+    monkeypatch.setattr(top, "_select_hidden_find_exploration", lambda *a, **k: [])
+    monkeypatch.setattr("src.asking_price_opportunity.select_asking_price_research", lambda *a, **k: [])
+    result = top.build_seller_top5("seller", [source], analyze_fn=lambda *a, **k: None)
+    assert result["rows"] == []
