@@ -180,13 +180,24 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         # inflated references.
         target_number = str((identity or {}).get("card_number") or "").strip().lstrip("#")
         number_present = bool(target_number and re.search(rf"(?<![A-Za-z0-9])#?{re.escape(target_number)}(?![A-Za-z0-9])", str(row.get("title") or ""), re.I))
-        target_player = str((identity or {}).get("player_name") or "").strip()
+        target_season = str((identity or {}).get("season") or "").strip()
+        candidate_season = str(parsed.get("season") or "").strip()
+        target_set = str((identity or {}).get("set_name") or "").strip().casefold()
+        candidate_set = str(parsed.get("set_name") or "").strip().casefold()
+        target_number_norm = str((identity or {}).get("card_number") or "").strip().lstrip("#").casefold()
+        candidate_number_norm = str(parsed.get("card_number") or "").strip().lstrip("#").casefold()
+        core_identity_match = bool(
+            (not target_season or target_season == candidate_season)
+            and (not target_set or target_set == candidate_set)
+            and (not target_number_norm or target_number_norm == candidate_number_norm)
+        )
+                target_player = str((identity or {}).get("player_name") or "").strip()
         player_tokens = [tok for tok in re.findall(r"[A-Za-zÀ-ÿ0-9]+", target_player.casefold()) if len(tok) >= 3]
         title_fold = str(row.get("title") or "").casefold()
         player_present = bool(player_tokens and all(tok in title_fold for tok in player_tokens))
         row["asking_comparison_eligible"] = bool(
             match["label"] == "STRONG_CANDIDATE" and not match["missing"] and not match["conflicts"]
-            and number_present and player_present
+            and number_present and player_present and core_identity_match
             and target_graded == candidate_graded and not extra_serial
             and premium_traits_match
             and (not target_graded or ((identity or {}).get("grade") and (identity or {}).get("grading_company")))
