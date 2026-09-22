@@ -28,6 +28,7 @@ def test_seller_badge_renders_without_new_module_export(monkeypatch, risk, expec
             "title": "Connor McDavid Young Guns", "price": 100,
             "decision": "KÖP", "risk_score": risk, "identity_ok": True,
             "sold_comps": 3, "valuation_confidence": 80,
+            "risk_adjusted_profit": 100,
             "analysis_level": "full",
         }],
     }

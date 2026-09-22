@@ -7,6 +7,7 @@ def _row(**updates):
         "title": "2015 Upper Deck Young Guns Connor McDavid #201",
         "decision": "KÖP", "identity_ok": True, "sold_comps": 3,
         "valuation_confidence": 75, "risk_score": 35,
+        "risk_adjusted_profit": 100,
     }
     row.update(updates)
     return row

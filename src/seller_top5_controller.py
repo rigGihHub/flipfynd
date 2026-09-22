@@ -11,7 +11,7 @@ from typing import Callable, Iterable
 from urllib.parse import quote
 
 from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_checkpoint
-from src.public_seller_inventory import fetch_public_seller_inventory_batch, parse_profile_url
+from src.public_seller_inventory import parse_profile_url
 from src.seller_proxy_inventory import fetch_proxy_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
 from src.seller_card_domain import seller_item_domain_check
@@ -311,7 +311,7 @@ def resolve_seller_top5(
     credentials=None,
     profile_url: str | None = None,
     inventory_fetcher: Callable = discover_active_seller_inventory,
-    public_fetcher: Callable = fetch_public_seller_inventory_batch,
+    public_fetcher: Callable = fetch_proxy_seller_inventory_batch,
     quick_limit: int = 60,
     full_limit: int = 10,
     public_pages: int = 120,
@@ -411,12 +411,14 @@ def resolve_seller_top5(
             # guarantees page 10 stays page 10 instead of being rebuilt by the
             # legacy direct Tradera URL helper.
             try:
-                page_result = fetch_proxy_seller_inventory_batch(
+                page_result = _fetch_public(
+                    public_fetcher,
                     profile_text,
                     start_page=current_page,
-                    max_pages=1,
+                    public_pages=1,
                     progress_callback=combined_progress,
-                    fallback_alias=alias,
+                    seller_alias=alias,
+                    paging_size=total_listing_estimate,
                 )
             except Exception as exc:
                 page_result = {

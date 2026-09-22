@@ -173,7 +173,7 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             and not (candidate_parallel and not target_parallel)
             and not (candidate_serial and not target_serial)
         )
-                extra_serial = bool(parsed.get("serial_number") and not (identity or {}).get("serial_denominator"))
+        extra_serial = bool(parsed.get("serial_number") and not (identity or {}).get("serial_denominator"))
         # A comparison is only economic evidence when the exact card identity
         # is materially present in the listing title. This blocks near-set/card
         # collisions (e.g. parallel names or wrong card numbers) from creating
@@ -191,7 +191,7 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             and (not target_set or target_set == candidate_set)
             and (not target_number_norm or target_number_norm == candidate_number_norm)
         )
-                target_player = str((identity or {}).get("player_name") or "").strip()
+        target_player = str((identity or {}).get("player_name") or "").strip()
         player_tokens = [tok for tok in re.findall(r"[A-Za-zÀ-ÿ0-9]+", target_player.casefold()) if len(tok) >= 3]
         title_fold = str(row.get("title") or "").casefold()
         player_present = bool(player_tokens and all(tok in title_fold for tok in player_tokens))

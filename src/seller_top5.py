@@ -142,11 +142,18 @@ def _seller_opportunity_rank_key(row: dict):
     profit = _num(row.get("risk_adjusted_profit"))
     deal = _num(row.get("deal_score"))
     verified_find = decision.startswith("KÖP") and readiness["ready_for_find"]
+    valuation_confidence = max(
+        _num(row.get("valuation_confidence")),
+        _num(row.get("valuation_confidence_score")),
+    )
     verified_profit = bool(
         identity_ok and sold > 0 and profit > 0
-        and readiness["valuation_confidence_score"] >= 55
+        and valuation_confidence >= 55
         and readiness["risk_score"] is not None
         and readiness["risk_score"] <= 65
+    )
+    evidence_positive_profit = bool(
+        identity_ok and sold > 0 and profit > 0 and valuation_confidence >= 55
     )
     asking = row.get("asking_price_opportunity") or {}
     asking_find = bool(asking.get("possible_find"))
@@ -156,13 +163,13 @@ def _seller_opportunity_rank_key(row: dict):
     # Top 5 is a resale list. A card with zero/negative expected net profit must
     # never outrank a card with verified positive economics merely because the
     # player, rookie tag or collector signals look attractive.
-    tier = 4 if verified_find else 3 if verified_profit else 2 if asking_find else 1 if research else 0
+    tier = 4 if verified_find else 3 if verified_profit else 2 if evidence_positive_profit else 1 if asking_find else 1 if research else 0
     return (
         tier,
-        profit if verified_profit else 0.0,
-        sold if verified_profit else 0,
-        _num(row.get("valuation_confidence")) if verified_profit else 0.0,
-        deal if verified_profit else 0.0,
+        profit if (verified_profit or evidence_positive_profit) else 0.0,
+        sold if (verified_profit or evidence_positive_profit) else 0,
+        valuation_confidence if (verified_profit or evidence_positive_profit) else 0.0,
+        deal if (verified_profit or evidence_positive_profit) else 0.0,
         _num(asking.get("net_margin")) if asking_find else 0.0,
         _seller_opportunity_score(row),
         merit["score"],
@@ -499,7 +506,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     # Never fill Top 5 with generic/zero-merit cards merely to reach five.
     # Research candidates must have passed the explicit seller-card merit gate;
     # otherwise the truthful result is fewer than five cards.
-    fallback_pool = qualified_quick_rows
+    fallback_pool = qualified_quick_rows if (full_rows or failed > 0) else []
     for qrow in fallback_pool:
         if len(selected) >= 5:
             break

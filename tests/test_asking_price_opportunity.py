@@ -21,13 +21,21 @@ def _context(price=50, **updates):
     return {"rows": [row]}
 
 
-def test_small_profitable_card_is_a_possible_find_without_sold():
+def _two_context(low=80, high=90, **updates):
+    context = _context(low, **updates)
+    context["rows"] += _context(high, url="https://www.ebay.com/itm/456", **updates)["rows"]
+    return context
+
+
+def test_single_active_price_is_research_signal_not_possible_find():
     out = build_asking_price_opportunity(ITEM, _context())
-    assert out["possible_find"]
+    assert not out["possible_find"]
+    assert out["research_signal"]
+    assert out["weak_find_signal"]
     assert out["total_cost"] == 32
-    assert out["selling_fee"] == 5
+    assert out["selling_fee"] == 4.25
     assert out["packaging"] == 3
-    assert out["net_margin"] == 10
+    assert out["net_margin"] == 3.25
     assert not out["creates_sold_evidence"]
 
 
@@ -40,7 +48,8 @@ def test_cheapest_listing_controls_margin_not_expensive_outlier():
     context = _context(30)
     context["rows"] += _context(500, url="https://www.ebay.com/itm/456")["rows"]
     out = build_asking_price_opportunity(ITEM, context)
-    assert out["reference_asking_price"] == 30
+    assert out["observed_asking_price"] == 30
+    assert out["reference_asking_price"] == 25.5
     assert not out["possible_find"]
 
 
@@ -54,7 +63,7 @@ def test_unknown_shipping_is_charged_and_labeled():
     out = build_asking_price_opportunity({**ITEM, "frakt": None}, _context())
     assert out["shipping"] == 29
     assert not out["shipping_known"]
-    assert out["net_margin"] == 3
+    assert out["net_margin"] == -3.75
 
 
 def test_free_shipping_is_preserved():
@@ -66,8 +75,9 @@ def test_free_shipping_is_preserved():
 def test_foreign_currency_requires_real_fx():
     assert not build_asking_price_opportunity(ITEM, _context(5, currency="USD"))["possible_find"]
     out = build_asking_price_opportunity(ITEM, _context(5, currency="USD"), fx={"date": "2026-09-16", "rates_to_sek": {"USD": 10}})
-    assert out["reference_asking_price"] == 50
-    assert out["net_margin"] == 10
+    assert out["observed_asking_price"] == 50
+    assert out["reference_asking_price"] == 42.5
+    assert out["net_margin"] == 3.25
 
 
 @pytest.mark.parametrize("price", [float("nan"), float("inf"), -1, True, "oops"])
@@ -101,7 +111,8 @@ class Session:
 def test_api_prices_require_matching_card_without_extra_premium_traits(suffix):
     context = fetch_ebay_active_context(TITLE, identity=IDENTITY, client_id="id", client_secret="secret", session=Session(TITLE + suffix))
     out = build_asking_price_opportunity(ITEM, context)
-    assert out["possible_find"] is (suffix == "")
+    assert out.get("research_signal", False) is (suffix == "")
+    assert out.get("comparison_count", 0) == (1 if suffix == "" else 0)
 
 
 @pytest.mark.parametrize("options", [[], ["AUCTION"]])
@@ -120,7 +131,7 @@ def test_ecb_cross_rate_and_stale_rate_rejection():
 
 def test_sold_and_buy_fields_are_unchanged(monkeypatch):
     monkeypatch.setattr("src.asking_price_opportunity.configured_credentials", lambda: ("id", "secret"))
-    monkeypatch.setattr("src.asking_price_opportunity.fetch_configured_ebay_active_context", lambda *a: _context())
+    monkeypatch.setattr("src.asking_price_opportunity.fetch_configured_ebay_active_context", lambda *a: _two_context())
     original = {**ITEM, "beslut": "SKIP", "sold_comparable_count": 0, "marknadsvarde": None}
     out = attach_asking_price_opportunity(original)
     assert out["asking_price_opportunity"]["possible_find"]
@@ -131,7 +142,7 @@ def test_sold_and_buy_fields_are_unchanged(monkeypatch):
 
 
 def test_economic_comparison_outranks_collector_signal_without_margin():
-    possible = {"decision": "SKIP", "asking_price_opportunity": build_asking_price_opportunity(ITEM, _context())}
+    possible = {"decision": "SKIP", "asking_price_opportunity": build_asking_price_opportunity(ITEM, _two_context())}
     collector = {"decision": "UNDERSÖK", "rank_score": 99, "collector_signal_score": 40}
     assert _seller_opportunity_rank_key(possible) > _seller_opportunity_rank_key(collector)
 
@@ -158,13 +169,13 @@ def test_seller_pipeline_keeps_base_card_with_asking_margin(monkeypatch):
     def analyze(item, mode="fast", **kwargs):
         out = {"beslut": "SKIP", "sold_comparable_count": 0, "rank_score": 0}
         if mode == "full":
-            out["asking_price_opportunity"] = build_asking_price_opportunity(item, _context())
+            out["asking_price_opportunity"] = build_asking_price_opportunity(item, _two_context())
         return out
     result = build_seller_top5("seller", [ITEM], analyze_fn=analyze)
     assert len(result["rows"]) == 1
     row = result["rows"][0]
     assert row["seller_deep_route"] == "ASKING_PRICE_RESEARCH"
-    assert row["asking_price_opportunity"]["net_margin"] == 10
+    assert row["asking_price_opportunity"]["net_margin"] == 26.2
     assert row["label"] == "MÖJLIGT FYND · BEGÄRDA PRISER"
     assert row["sold_comps"] == 0
 
@@ -173,7 +184,7 @@ def test_full_analyzer_attaches_comparison_but_fast_does_not(monkeypatch):
     import src.analyzer as analyzer
     monkeypatch.setattr(analyzer, "analyze_core", lambda *a, **k: {"beslut": "SKIP"})
     monkeypatch.setattr("src.asking_price_opportunity.configured_credentials", lambda: ("id", "secret"))
-    monkeypatch.setattr("src.asking_price_opportunity.fetch_configured_ebay_active_context", lambda *a: _context())
+    monkeypatch.setattr("src.asking_price_opportunity.fetch_configured_ebay_active_context", lambda *a: _two_context())
     assert analyzer.analyze_item_full(ITEM)["asking_price_opportunity"]["possible_find"]
     assert "asking_price_opportunity" not in analyzer.analyze_item_fast(ITEM)
 
@@ -216,14 +227,14 @@ import streamlit as st
 from src.asking_price_ui import render_asking_price_shortlist
 render_asking_price_shortlist(st.session_state["results"])
 ''')
-    app.session_state["results"] = [{**ITEM, "asking_price_opportunity": build_asking_price_opportunity(ITEM, _context())}]
+    app.session_state["results"] = [{**ITEM, "asking_price_opportunity": build_asking_price_opportunity(ITEM, _two_context())}]
     app.run()
     assert not app.exception
     text = "\n".join(element.value for element in app.markdown)
     assert "Möjliga fynd mot begärda priser" in text
-    assert "Möjlig nettovinst +10 kr" in text
+    assert "Möjlig nettovinst +26.2 kr" in text
     assert "32 kr totalt" in text
-    assert len(app.get("link_button")) == 2
+    assert len(app.get("link_button")) == 3
 
 
 def test_single_expensive_active_listing_is_research_signal_not_find():

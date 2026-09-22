@@ -40,7 +40,8 @@ def test_full_bridge_preserves_risk_and_buy_boundary(risk, tier):
 
 def _compact(**updates):
     row = {"title": _item()["titel"], "decision": "KÖP", "identity_ok": True,
-           "sold_comps": 3, "valuation_confidence": 80}
+           "sold_comps": 3, "valuation_confidence": 80,
+           "risk_adjusted_profit": 100}
     row.update(updates)
     return row
 

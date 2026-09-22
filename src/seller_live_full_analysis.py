@@ -89,6 +89,9 @@ def full_analyze_live_seller_item(
         total_cost = merged.get("total_acquisition_cost")
     if total_cost is None:
         total_cost = _price(merged)
+    if merged.get("risk_adjusted_profit") in (None, "") and max_price not in (None, "") and total_cost not in (None, ""):
+        merged["risk_adjusted_profit"] = round(_num(max_price) - _num(total_cost), 2)
+        risk_adjusted_profit = _num(merged.get("risk_adjusted_profit"))
 
     ebay_context = merged.get("ebay_active_context")
     try:
