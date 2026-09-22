@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-LATEST_MAX_PAGES = 5
+LATEST_MAX_PAGES = 3
 
 
 def newest_first_url(url):

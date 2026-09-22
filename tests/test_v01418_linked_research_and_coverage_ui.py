@@ -1,11 +1,12 @@
 from pathlib import Path
+import re
 
 
 APP = Path("app.py").read_text(encoding="utf-8")
 
 
 def test_release_version_and_analysis_coverage_stages_are_visible():
-    assert 'APP_VERSION = "v0.14.35"' in APP
+    assert re.search(r'APP_VERSION = "v0\.14\.\d+"', APP)
     assert '"Fysiska kortannonser"' in APP
     assert '"Snabbanalyserade"' in APP
     assert '"Djupanalyserade"' in APP

@@ -261,8 +261,9 @@ def _postprocess_fallback_result(result, total_limit):
         reverse=True,
     )
     limit = max(0, int(total_limit or 0))
-    # The Top 5 is a relative shortlist, not a BUY list. Fill remaining slots
-    # from the best analysed research candidates and keep their UNDERSÖK status.
+    # Top 5 may contain fewer than five rows. Weak ordinary cards are not
+    # restored as filler because that makes "Bästa alternativen" look stronger
+    # than the evidence supports.
     suppressed.sort(
         key=lambda r: (
             _n(r.get("investigate_score"), 0),
@@ -274,19 +275,10 @@ def _postprocess_fallback_result(result, total_limit):
         reverse=True,
     )
     selected=list(kept[:limit])
-    weak_fill=0
-    for row in suppressed:
-        if len(selected) >= limit:
-            break
-        row=dict(row)
-        row["decision"]="UNDERSÖK"
-        row["tier"]="REMAINDER"
-        selected.append(row)
-        weak_fill += 1
     out["rows"] = selected
-    out["suppressed_weak_ordinary_count"] = max(0,len(suppressed)-weak_fill)
-    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in suppressed[weak_fill:weak_fill+10]]
-    out["fallback_weak_fill_count"] = weak_fill
+    out["suppressed_weak_ordinary_count"] = len(suppressed)
+    out["suppressed_weak_ordinary_titles"] = [r.get("title") for r in suppressed[:10]]
+    out["fallback_weak_fill_count"] = 0
     if suppressed:
         note = str(out.get("note") or "").strip()
         out["note"] = (note + " Ordinära lågpotentialkort utan tydlig kortspecifik edge döljs från 'Bästa alternativen'.").strip()

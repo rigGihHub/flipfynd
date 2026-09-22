@@ -1506,7 +1506,7 @@ fetch_scope = st.radio(
 )
 fetch_category = selected_fetch_category(fetch_scope)
 if st.button(
-    "🔄 Uppdatera och läs in fler annonser" if _has_data else "📥 Läs in annonser",
+    "🔄 Uppdatera senaste annonser" if _has_data else "📥 Läs in senaste annonser",
     type="primary",
     use_container_width=True,
     disabled=_fetch_status == "running",

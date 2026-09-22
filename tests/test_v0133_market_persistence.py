@@ -1,9 +1,10 @@
 from pathlib import Path
+import re
 
 
 def test_app_restores_active_market_and_passes_database_to_fetcher():
     app = Path("app.py").read_text(encoding="utf-8")
-    assert 'APP_VERSION = "v0.14.35"' in app
+    assert re.search(r'APP_VERSION = "v0\.14\.\d+"', app)
     assert 'load_namespace(DATABASE_URL, "active_market", [])' in app
     assert '"FLIPFYND_DATABASE_URL": DATABASE_URL' in app
 

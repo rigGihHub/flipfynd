@@ -135,12 +135,17 @@ def _opportunity_research_priority(item: dict) -> tuple:
 
 def select_comp_research_targets(items: Iterable[dict] | None, *, limit: int = 20) -> list[dict]:
     """Spend comp-research budget on unique identities most likely to affect Top 5."""
-    rows = [x for x in (items or []) if isinstance(x, dict) and research_identity_ready(x)]
+    all_rows = [x for x in (items or []) if isinstance(x, dict)]
+    rows = [x for x in all_rows if research_identity_ready(x)]
+    if not rows:
+        rows = all_rows
     rows.sort(key=_opportunity_research_priority, reverse=True)
     selected, seen = [], set()
     for row in rows:
         identity = identity_from_item(row, research=not identity_ready(row))
         marker = tuple(str(identity.get(k) or "").casefold() for k in ("player_name","set_name","season","card_number","parallel"))
+        if not any(marker):
+            marker = ("title", _clean(row.get("titel") or row.get("title")), _clean(row.get("lank") or row.get("url")))
         if marker in seen: continue
         seen.add(marker); selected.append(row)
         if len(selected) >= max(0, int(limit)): break

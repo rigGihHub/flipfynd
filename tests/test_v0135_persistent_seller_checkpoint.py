@@ -29,7 +29,8 @@ def test_cleared_database_checkpoint_is_not_restored(monkeypatch, tmp_path):
 
 def test_app_passes_visible_result_checkpoint_back_to_controller():
     app = __import__("pathlib").Path("app.py").read_text(encoding="utf-8")
-    assert app.count('resume_checkpoint=_seller_previous_result.get("public_checkpoint")') == 2
+    assert "resume_checkpoint=_visible_cp" in app
+    assert 'resume_checkpoint=_seller_previous_result.get("public_checkpoint")' in app
     assert '_seller_display_rows = (_find_rows + _research_rows)[:5]' in app
 
 

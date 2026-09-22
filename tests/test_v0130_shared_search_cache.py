@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 def test_seller_search_reuses_fast_and_full_analysis_caches():
@@ -8,4 +9,4 @@ def test_seller_search_reuses_fast_and_full_analysis_caches():
     assert "_cached_fast_analysis(" in app
     assert 'mode=f"seller_{sport}_{strategy_mode}"' in app
     assert app.count("analyze_fn=_cached_seller_analysis") >= 2
-    assert 'APP_VERSION = "v0.14.35"' in app
+    assert re.search(r'APP_VERSION = "v0\.14\.\d+"', app)

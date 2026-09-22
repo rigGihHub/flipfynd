@@ -322,11 +322,11 @@ def build_decision_tiers(candidates, total_limit=5, require_verified_economic_ed
     else:
         rows.sort(key=lambda r:(tier_order[r["tier"]],r["potential"],r["certainty"],r["sold_comps"]),reverse=True)
     selected=_select_diverse(rows,total_limit)
-    # Top 5 is a presentation contract, not a BUY threshold. If filtering or
-    # diversity leaves fewer than five while analysed candidates exist, fill
-    # from the strongest remaining rows and label them as remainder/research.
+    # Outside the strict economic-edge mode, older views may still ask for a
+    # relative Top N of an already filtered pool. In strict mode, never fill
+    # with weak ordinary rows just to reach five cards.
     target=min(max(0,int(total_limit or 0)),len(all_rows))
-    if len(selected) < target:
+    if not require_verified_economic_edge and len(selected) < target:
         for r in all_rows:
             if len(selected) >= target:
                 break

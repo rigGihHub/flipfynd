@@ -254,6 +254,12 @@ def build_card_explanation(item: dict) -> dict:
     strengths.extend(item.get("rookie_window_reasons") or [])
     strengths.extend(item.get("rookie_importance_reasons") or [])
 
+    collector_label = item.get("collector_worth_label")
+    collector_score = item.get("collector_worth_score")
+    if collector_label:
+        suffix = f" ({float(collector_score):.0f}/100)" if isinstance(collector_score, (int, float)) else ""
+        evidence.append(f"Samlarprofil: {collector_label}{suffix}")
+
     hierarchy_label = item.get("card_hierarchy_tier_label")
     hierarchy_role = item.get("card_hierarchy_role_label")
     hierarchy_score = item.get("card_hierarchy_score")
@@ -316,7 +322,7 @@ def build_card_explanation(item: dict) -> dict:
     cautions.extend(item.get("collector_worth_cautions") or [])
     if item.get("nonstandard_value_signals"):
         cautions.append("Ovanlig historia/error/variant är bara en researchsignal tills exakt version och faktisk marknadspremie är verifierad")
-    cautions.extend(item.get("collector_worth_hobby_traps") or [])
+    cautions.extend(f"Samlarfälla: {trap}" for trap in (item.get("collector_worth_hobby_traps") or []))
     cautions.extend(item.get("card_hierarchy_hobby_traps") or [])
     cautions.extend(item.get("player_card_hierarchy_cautions") or [])
     cautions.extend(item.get("player_card_hierarchy_hobby_traps") or [])

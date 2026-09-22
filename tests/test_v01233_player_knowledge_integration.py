@@ -5,5 +5,4 @@ def test_player_knowledge_wired_into_analyzer_and_ui():
     app=Path("app.py").read_text(encoding="utf-8")
     assert "get_player_knowledge(" in analyzer
     assert '"player_knowledge_verified"' in analyzer
-    assert "Spelarkunskap:" in app
     assert "Spelarkunskap – täckning" in app

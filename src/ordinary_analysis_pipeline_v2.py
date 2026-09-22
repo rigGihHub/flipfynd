@@ -17,6 +17,7 @@ from src.discovery_engine import build_discovery_map, select_discovery_indices
 from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_indices
 from src.find_more_cards import select_second_pass_indices
 from src.top5_verification_budget import add_top5_verification_indices
+from src.latest_market import latest_analysis_items
 from src.pricing import total_acquisition_cost
 from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 from src.ebay_browse_context import configured_credentials
@@ -65,11 +66,9 @@ def analyze_data(
             if len(bucket) < cap:
                 bucket.append(row)
         return [row for bucket in buckets.values() for row in bucket]
-    market_data = _bounded(rows)
-    # Stability first: do not depend on a separately hot-reloaded latest-market
-    # module in the interactive path. The saved dataset is already newest-first;
-    # bounded per-category analysis keeps the CPU guard.
-    data = _bounded(rows)
+    analysis_rows = rows if include_older else latest_analysis_items(rows)
+    market_data = _bounded(analysis_rows)
+    data = _bounded(analysis_rows)
     debug = {
         "total_items": raw_total_items,
         "performance_items": len(data),

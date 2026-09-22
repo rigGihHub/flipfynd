@@ -21,7 +21,7 @@ def test_main_and_seller_search_use_shared_budget_contract():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    app = (root / "app.py").read_text(encoding="utf-8")
+    pipeline = (root / "src" / "ordinary_analysis_pipeline_v2.py").read_text(encoding="utf-8")
     seller = (root / "src" / "seller_top5.py").read_text(encoding="utf-8")
-    assert 'fast_analysis_budget(len(fast_pool_source), context="ordinary")' in app
+    assert 'fast_analysis_budget(len(fast_pool_source), context="ordinary")' in pipeline
     assert 'fast_analysis_budget(len(unique_inventory), context="seller")' in seller
