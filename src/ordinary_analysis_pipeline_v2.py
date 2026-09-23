@@ -411,11 +411,15 @@ def analyze_data(
         for item in full_by_index.values()
     )
     if not first_pass_has_buy and len(candidates) > len(full_index_set):
+        # The first pass normally fills dynamic_deep_cap. Give the no-BUY
+        # rescue pass its own small allowance; using the same cap here made
+        # the existing market/discovery sweep unreachable in practice.
+        rescue_hard_cap = min(len(candidates), dynamic_deep_cap + 15)
         market_sweep_indices = select_market_sweep_indices(
             candidates,
             full_index_set,
             extra_limit=3,
-            total_hard_cap=dynamic_deep_cap,
+            total_hard_cap=rescue_hard_cap,
             max_per_player=2,
         )
         after_sweep = full_index_set.union(market_sweep_indices)
@@ -423,15 +427,15 @@ def analyze_data(
             candidates,
             after_sweep,
             extra_limit=8,
-            total_hard_cap=dynamic_deep_cap,
+            total_hard_cap=rescue_hard_cap,
             max_per_player=2,
         )
-        remaining_room = max(0, dynamic_deep_cap - len(full_index_set) - len(market_sweep_indices) - len(discovery_indices))
+        remaining_room = max(0, rescue_hard_cap - len(full_index_set) - len(market_sweep_indices) - len(discovery_indices))
         fallback_indices = select_second_pass_indices(
             len(candidates),
             after_sweep.union(discovery_indices),
             extra_limit=min(4, remaining_room),
-            total_hard_cap=dynamic_deep_cap,
+            total_hard_cap=rescue_hard_cap,
         )
         extra_indices = market_sweep_indices + discovery_indices + fallback_indices
         debug["market_sweep_deepened"] = len(market_sweep_indices)
