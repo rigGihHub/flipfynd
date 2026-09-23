@@ -347,7 +347,7 @@ def analyze_data(
         # The first pass normally fills dynamic_deep_cap. Give the no-BUY
         # rescue pass its own bounded allowance instead of making this path
         # unreachable whenever the first cap is full.
-        rescue_hard_cap = min(len(candidates), dynamic_deep_cap + 28)
+        rescue_hard_cap = min(len(candidates), dynamic_deep_cap + 15)
         market_sweep_indices = select_market_sweep_indices(
             candidates,
             full_index_set,
