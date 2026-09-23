@@ -45,3 +45,15 @@ def test_last_listing_is_always_represented_when_pool_is_bounded():
     rows = [{"titel": f"Plain card {i}", "lank": f"u{i}", "pris": 20 + i} for i in range(1000)]
     selected = select_fast_analysis_pool(rows, cap=100, exploration_fraction=0.25)
     assert rows[-1] in selected
+
+
+def test_newest_pages_receive_a_first_pass_slot_even_with_weak_titles():
+    rows = [
+        {"titel": f"Strong catalog card {i}", "lank": f"u{i}", "pris": 100, "sida": 20}
+        for i in range(300)
+    ]
+    rows.append({"titel": "Kort", "lank": "new", "pris": 100, "sida": 1})
+
+    selected = select_fast_analysis_pool(rows, cap=40)
+
+    assert rows[-1] in selected

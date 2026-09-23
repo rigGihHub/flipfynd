@@ -23,6 +23,18 @@ def _stable_key(item):
     return hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()
 
 
+def _newest_page(item):
+    """Return the verified market-page position, where page 1 is newest."""
+    for key in ("sida", "page", "tradera_page", "page_number"):
+        try:
+            value = int(item.get(key))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if value >= 1:
+            return value
+    return None
+
+
 def _priority(item):
     title = _title(item).casefold()
     signals = collector_signals(item)
@@ -56,15 +68,31 @@ def select_fast_analysis_pool(items, *, cap=480, exploration_fraction=0.20):
     merit_count = cap - exploration_count
     priorities = {id(item): _priority(item) for item in valid}
     ranked = sorted(valid, key=lambda item: priorities[id(item)], reverse=True)
+    protected = []
+    protected_ids = set()
+    # Reserve a small first-pass lane for fresh listings. Tradera results are
+    # newest-first, but global merit sorting can otherwise starve page 1-2
+    # listings when their titles are still sparse. This is discovery coverage
+    # only; it creates no value or BUY decision.
+    freshness_budget = min(max(1, cap // 20), merit_count)
+    fresh = [
+        item for item in valid
+        if (_newest_page(item) or 10**9) <= 2
+    ]
+    fresh.sort(key=lambda item: (_newest_page(item) or 10**9, _stable_key(item)))
+    for item in fresh[:freshness_budget]:
+        if id(item) not in protected_ids:
+            protected.append(item)
+            protected_ids.add(id(item))
+
     # Reserve representation for the most important card-specific value
     # drivers.  Without this, a broad search can crowd every autograph out of
     # the bounded pass even though the same cards appear with an autograph-only
     # filter.  This is discovery coverage only; it creates no value or BUY.
-    protected = []
-    protected_ids = set()
     signal_names = ("autograph", "one_of_one", "serial_numbered", "patch_relic", "case_hit_ssp")
     per_signal = max(1, min(8, cap // 20))
     protected_budget = min(merit_count, max(1, cap // 4)) if merit_count else 0
+    protected_budget = max(0, protected_budget - len(protected))
     for signal_name in signal_names:
         if len(protected) >= protected_budget:
             break
