@@ -41,6 +41,7 @@ from src.premium_valuation import build_exact_premium_valuation
 from src.decision_confidence_audit import audit_decision_confidence
 from src.decision_conflict_audit import audit_decision_conflicts
 from src.capital_efficiency import build_capital_efficiency
+from src.normal_evidence_scenarios import build_normal_evidence_scenario_range
 
 
 HOCKEY_SETS = {
@@ -3171,7 +3172,17 @@ def analyze_core(
             "exakta premiumförsäljningar som matchar kortets set/program och kända premiumegenskaper "
             "behövs för ett pris som ska visas som realistiskt."
         )
+
         risks.append("premiumkort saknar tillräckliga verifierade sold comps för säker prisvisning")
+
+    evidence_scenario_range = build_normal_evidence_scenario_range(
+        valuation_basis=comp_valuation_basis,
+        comparable_details=comparable_details,
+        total_cost=analysis_total_cost,
+        identity_verified=bool(exact_identity_gate.get("supports_exact_comp_search")),
+        premium_identity=premium_identity,
+        premium_exact_comps=premium_comp_hunter.get("exact") or [],
+    )
 
     liquidity_analysis = compute_liquidity_evidence(
         liquidity,
@@ -4007,6 +4018,7 @@ def analyze_core(
         "flip_scenario_summary": flip_scenarios.get("summary"),
         "flip_scenario_resilient": flip_scenarios.get("resilient_flip", False),
         "flip_scenario_note": flip_scenarios.get("note"),
+        "evidence_scenario_range": evidence_scenario_range,
 
         "sport":
             sport,
