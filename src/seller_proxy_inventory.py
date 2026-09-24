@@ -7,6 +7,16 @@ import requests
 from src.public_seller_inventory import parse_profile_url
 
 DEFAULT_PROXY_URL = "https://flipfynd-seller-fetcher.onrender.com"
+DEFAULT_PROXY_TIMEOUT_SECONDS = 60
+
+
+def _proxy_timeout(value=None) -> int:
+    """Allow cold-start tolerance without making long hangs unbounded."""
+    raw = value if value is not None else os.getenv("FLIPFYND_SELLER_PROXY_TIMEOUT")
+    try:
+        return max(10, min(120, int(raw))) if raw not in (None, "") else DEFAULT_PROXY_TIMEOUT_SECONDS
+    except (TypeError, ValueError):
+        return DEFAULT_PROXY_TIMEOUT_SECONDS
 
 
 def fetch_proxy_seller_inventory_batch(
@@ -14,7 +24,7 @@ def fetch_proxy_seller_inventory_batch(
     *,
     start_page: int = 1,
     max_pages: int = 1,
-    timeout: int = 25,
+    timeout: int | None = None,
     progress_callback=None,
     fallback_alias: str | None = None,
 ) -> dict:
@@ -31,6 +41,7 @@ def fetch_proxy_seller_inventory_batch(
     alias = str(parsed.get("alias") or fallback_alias or "").strip()
     base = str(os.getenv("FLIPFYND_SELLER_PROXY_URL") or DEFAULT_PROXY_URL).rstrip("/")
 
+    request_timeout = _proxy_timeout(timeout)
     page = max(1, int(start_page or 1))
     page_limit = max(1, int(max_pages or 1))
     all_items = {}
@@ -54,12 +65,17 @@ def fetch_proxy_seller_inventory_batch(
         if alias:
             params["alias"] = alias
         try:
-            response = requests.get(f"{base}/seller/{quote(seller_id)}", params=params, timeout=timeout)
+            response = requests.get(
+                f"{base}/seller/{quote(seller_id)}",
+                params=params,
+                timeout=request_timeout,
+            )
         except requests.RequestException as exc:
             return {
                 "ok": False,
-                "status": "PROXY_REQUEST_FAILED",
+                "status": "PROXY_TIMEOUT" if isinstance(exc, requests.Timeout) else "PROXY_REQUEST_FAILED",
                 "error": str(exc),
+                "timeout_seconds": request_timeout,
                 "items": list(all_items.values()),
                 "next_page": page,
                 "pages_read": pages_read,
