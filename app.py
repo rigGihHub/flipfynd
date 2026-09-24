@@ -4859,6 +4859,27 @@ if st.session_state.get("results") is not None:
                         )
 
                 flip_scenarios = item.get("flip_scenarios") or []
+                evidence_scenarios = item.get("evidence_scenario_range") or {}
+                if evidence_scenarios.get("available"):
+                    st.write("**Evidensbaserat scenariointervall**")
+                    st.caption(
+                        "Observerade Exact SOLD-priser – inga sannolikheter eller påslag. "
+                        "Detta ändrar inte köpgrinden."
+                    )
+                    cols = st.columns(3)
+                    for scenario, col in zip(evidence_scenarios.get("scenarios") or [], cols):
+                        with col:
+                            st.markdown(f"**{scenario.get('label', 'Scenario')}**")
+                            st.metric("Observerat säljpris", f"{scenario.get('resale_price', 0):.0f} kr")
+                            if scenario.get("net_profit") is not None:
+                                st.metric("Nettovinst efter kostnader", f"{scenario['net_profit']:.0f} kr")
+                            st.caption(scenario.get("basis") or "Exact SOLD")
+                    st.caption(
+                        f"{evidence_scenarios.get('priced_count', 0)} prissatta oberoende observationer • "
+                        f"kvalitetsstatus {evidence_scenarios.get('quality_guard_status', 'ok')}"
+                    )
+                elif evidence_scenarios.get("status") in {"BLOCKED", "INSUFFICIENT_DATA"} and item.get("comp_valuation_basis") == "sold":
+                    st.caption("Scenariointervall låst: Exact SOLD-underlaget är ännu inte tillräckligt stabilt för ett beslutsscenario.")
                 if flip_scenarios:
                     st.write("**🎬 Flip Scenario Engine**")
                     st.caption(item.get("flip_scenario_summary") or "Tre scenarier baserade på befintlig värdering.")
