@@ -4,7 +4,6 @@ import time
 import re
 from src.analyzer import analyze_item
 from src.analysis_cache import build_analysis_signature, get_cached_analysis, set_cached_analysis
-from src.fast_analysis_pool import select_fast_analysis_pool
 from src.analysis_budget import fast_analysis_budget
 from src.card_listing_integrity import assess_listing_integrity
 from src.card_market_knowledge import detect_market_attention
@@ -18,6 +17,7 @@ from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_
 from src.find_more_cards import select_second_pass_indices
 from src.top5_verification_budget import add_top5_verification_indices
 from src.latest_market import latest_analysis_items
+from src.analysis_scope import select_recent_archive_fast_pool
 from src.pricing import total_acquisition_cost
 from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 from src.ebay_browse_context import configured_credentials
@@ -57,7 +57,7 @@ def analyze_data(
         rows.sort(key=_freshness_key, reverse=True)
     # Self-contained bounded preparation: avoid any hot-reloaded fetcher module
     # attributes in the interactive analysis path.
-    cap = 1500
+    cap = 5000
     def _bounded(source):
         buckets = {}
         for row in source:
@@ -66,7 +66,11 @@ def analyze_data(
             if len(bucket) < cap:
                 bucket.append(row)
         return [row for bucket in buckets.values() for row in bucket]
-    analysis_rows = rows if include_older else latest_analysis_items(rows)
+    latest_scope = latest_analysis_items(rows)
+    # Recent listings stay first, but a bounded archive lane is selected below.
+    # Cheap filtering may safely inspect the full saved market; expensive fast
+    # and full analysis remain under their existing hard budgets.
+    analysis_rows = rows
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
@@ -216,11 +220,13 @@ def analyze_data(
     debug["integrity_eligible_candidates"] = len(integrity_eligible)
     debug["integrity_rejected_candidates"] = len(fast_pool_source) - len(integrity_eligible)
     fast_pool_budget = fast_analysis_budget(len(fast_pool_source), context="ordinary")
-    fast_pool_source = select_fast_analysis_pool(
+    fast_pool_source, scope_debug = select_recent_archive_fast_pool(
         integrity_eligible,
+        latest_scope,
         cap=fast_pool_budget,
-        exploration_fraction=0.25,
+        include_older=include_older,
     )
+    debug.update(scope_debug)
     debug["fast_pool_budget"] = fast_pool_budget
     debug["fast_pool_selected"] = len(fast_pool_source)
     debug["fast_pool_skipped"] = max(0, debug["cheap_filtered_candidates"] - len(fast_pool_source))
