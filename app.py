@@ -140,7 +140,7 @@ from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.asking_price_ui import render_asking_price_opportunity, render_asking_price_shortlist
-from src.seller_profit_display import build_seller_net_profit_summary
+from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
@@ -2217,32 +2217,10 @@ if st.session_state.get("results") is not None:
                 require_verified_economic_edge=True,
             )
             opportunity_top5 = build_opportunity_top5(st.session_state.get("results") or [], limit=5)
-            top_rows = list(opportunity_top5.get("rows") or [])
-            # Last-resort UI invariant: never render a known negative-margin
-            # candidate as a Top-5 find. This protects the product even if an
-            # older imported ranking module survives a Streamlit hot reload.
             top_rows = [
-                row for row in top_rows
-                if row.get("practical_margin") is None or float(row.get("practical_margin") or 0) > 0
+                row for row in (opportunity_top5.get("rows") or [])
+                if not known_negative_net_profit(row)
             ]
-            # User-facing Top 5 is always filled with the five strongest analysed
-            # candidates. Known negative-margin rows may appear only as clearly
-            # labelled "Bäst av resten"; they never become KÖP or "fynd".
-            if len(top_rows) < 5:
-                ranked_all = list((build_opportunity_top5(st.session_state.get("results") or [], limit=max(25, len(st.session_state.get("results") or []))).get("rows") or []))
-                seen_top = {(row.get("url") or str(row.get("title") or "").casefold()) for row in top_rows}
-                for row in ranked_all:
-                    marker = row.get("url") or str(row.get("title") or "").casefold()
-                    if marker in seen_top:
-                        continue
-                    fallback = dict(row)
-                    if fallback.get("practical_margin") is not None and float(fallback.get("practical_margin") or 0) <= 0:
-                        fallback["tier"] = "REMAINDER"
-                        fallback["decision"] = "UNDERSÖK"
-                    top_rows.append(fallback)
-                    seen_top.add(marker)
-                    if len(top_rows) >= 5:
-                        break
             rescued_count = sum(1 for row in top_rows if row.get("candidate_rescue"))
 
             current_debug = st.session_state.get("debug") or {}
@@ -2337,12 +2315,6 @@ if st.session_state.get("results") is not None:
                         "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
                     })
                 st.dataframe(table_rows, use_container_width=True, hide_index=True)
-                negative_count = sum(1 for row in top_rows if row.get("best_of_bad_market"))
-                if negative_count:
-                    st.warning(
-                        f"{negative_count} av fem kandidater har redan negativ prisindikation och visas bara eftersom "
-                        "det saknas bättre prisbedömda alternativ. De är inte fynd – kontrollera kandidater utan prisdata först."
-                    )
                 st.caption("Prisindikation används för fyndjakt. SOLD ger starkare bekräftelse när det finns, men krävs inte för UNDERSÖK.")
                 for rank, row in enumerate(top_rows, start=1):
                     with st.expander(f"#{rank} · {row.get('title') or 'Okänt kort'}", expanded=False):
@@ -6468,7 +6440,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         _ranked_rows = seller_top5_result.get("rows") or []
         _find_rows = [row for row in _ranked_rows if seller_result_tier(row) == "FIND"]
         _research_rows = [row for row in _ranked_rows if seller_result_tier(row) == "RESEARCH"]
-        _seller_display_rows = (_find_rows + _research_rows)[:5]
+        _seller_display_rows = [
+            row for row in (_find_rows + _research_rows)
+            if not known_negative_net_profit(row)
+        ][:5]
         if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
             st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
             st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
