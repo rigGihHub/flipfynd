@@ -139,6 +139,8 @@ def full_analyze_live_seller_item(
         "decision": decision,
         "price": _price(merged),
         "total_cost": total_cost,
+        "net_profit_estimate": merged.get("net_profit_estimate"),
+        "valuation_display_safe": merged.get("valuation_display_safe") is True,
         "max_price": max_price,
         "identity_ok": identity_ok,
         "identity_score": identity_score,
