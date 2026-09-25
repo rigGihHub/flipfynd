@@ -31,7 +31,7 @@ def test_app_passes_visible_result_checkpoint_back_to_controller():
     app = __import__("pathlib").Path("app.py").read_text(encoding="utf-8")
     assert "resume_checkpoint=_visible_cp" in app
     assert 'resume_checkpoint=_seller_previous_result.get("public_checkpoint")' in app
-    assert '_seller_display_rows = (_find_rows + _research_rows)[:5]' in app
+    assert 'if not known_negative_net_profit(row)' in app
 
 
 def test_furthest_checkpoint_wins_even_if_session_is_stale(monkeypatch, tmp_path):
