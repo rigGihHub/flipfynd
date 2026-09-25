@@ -167,20 +167,15 @@ def select_asking_price_research(rows, *, limit=24):
     for row in rows:
         item = row.get("source_item") or row
         identity = asking_research_identity(item)
-        # Full exact identity is ideal, but discovery may use a controlled
-        # relaxed route when player + card number + one of season/set is known.
-        # eBay candidate matching still decides whether a returned listing is
-        # eligible as price evidence.
+        # The downstream eBay evidence gate requires player + exact card number
+        # and season/set context. Routing looser identities here only consumed
+        # network/deep-analysis slots that could never produce a usable price.
         has_player = bool(identity.get("player_name"))
         has_number = bool(identity.get("card_number"))
         has_season = bool(identity.get("season"))
         has_set = bool(identity.get("set_name"))
-        # Exact card number is strongest. For listings where sellers omit it,
-        # still allow research when player + season + set are all known; the
-        # downstream eBay matcher remains responsible for price-evidence safety.
         exact_route = has_player and has_number and (has_season or has_set)
-        descriptive_route = has_player and has_season and has_set
-        if not (exact_route or descriptive_route):
+        if not exact_route:
             continue
         integrity = assess_listing_integrity(item)
         if not integrity["eligible_physical_single_card"] or integrity["reprint_risk"] or identity.get("is_lot"):
