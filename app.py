@@ -1583,6 +1583,14 @@ def render_search_pipeline(debug, sport_label, max_price, search):
     for idx, (label, value) in enumerate(stages):
         cols[idx % 3].metric(label, value)
 
+    latest_selected = int(debug.get("latest_fast_selected", 0) or 0)
+    archive_selected = int(debug.get("archive_fast_selected", 0) or 0)
+    if debug.get("automatic_archive_coverage"):
+        st.caption(
+            f"Analysurval: {latest_selected} från senaste hämtningen + "
+            f"{archive_selected} äldre sparade annonser. Äldre annonser får en reserverad chans utan att analysbudgeten ökas."
+        )
+
     sport_count = int(debug.get("after_sport", 0) or 0)
     if sport_count and int(debug.get("valid_price", 0) or 0) == 0:
         st.error("Alla annonser för vald sport saknar ett användbart pris. Det pekar på ett inläsnings-/parserfel, inte på dina sökfilter.")
@@ -1664,8 +1672,8 @@ with st.form("analysis_form"):
     )
     effective_search = normalize_sport_category_search(search, sport)
     st.caption(
-        "Sökningen fokuserar på senaste snabba hämtningen. "
-        "Under Avancerade filter kan du även ta med äldre sparade annonser."
+        "Sökningen prioriterar senaste annonserna och reserverar automatiskt en del av analysen för äldre sparade annonser. "
+        "Under Avancerade filter kan du låta hela arkivet konkurrera på samma villkor."
     )
     if str(search or "").strip() and not str(effective_search or "").strip():
         st.caption(
@@ -1677,7 +1685,7 @@ with st.form("analysis_form"):
         include_older = st.checkbox(
             "Ta med äldre sparade annonser",
             value=False,
-            help="Normalt analyseras senaste snabba hämtningen per sport. Äldre data används om en sådan hämtning saknas.",
+            help="Normalt prioriteras senaste annonserna och en begränsad del av äldre lagret granskas automatiskt. Slå på för ett bredare arkivurval.",
         )
         a1, a2 = st.columns(2)
         with a1:
