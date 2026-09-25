@@ -1,1 +1,12 @@
-ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmltcG9ydCByZQoKCmRlZiB0ZXN0X3NlbGxlcl9zZWFyY2hfcmV1c2VzX2Zhc3RfYW5kX2Z1bGxfYW5hbHlzaXNfY2FjaGVzKCk6CiAgICBhcHAgPSBQYXRoKCJhcHAucHkiKS5yZWFkX3RleHQoZW5jb2Rpbmc9InV0Zi04IikKCiAgICBhc3NlcnQgImRlZiBfY2FjaGVkX3NlbGxlcl9hbmFseXNpcyIgaW4gYXBwCiAgICBhc3NlcnQgIl9jYWNoZWRfZmFzdF9hbmFseXNpcygiIGluIGFwcAogICAgYXNzZXJ0ICdtb2RlPWYic2VsbGVyX3Y1X3ByaWNpbmdfdHJ1dGhfe3Nwb3J0fV97c3RyYXRlZ3lfbW9kZX0iJyBpbiBhcHAKICAgIGFzc2VydCBhcHAuY291bnQoImFuYWx5emVfZm49X2NhY2hlZF9zZWxsZXJfYW5hbHlzaXMiKSA+PSAyCiAgICBhc3NlcnQgcmUuc2VhcmNoKHInQVBQX1ZFUlNJT04gPSAidjBcLjE0XC5cZCsiJywgYXBwKQo=
+from pathlib import Path
+import re
+
+
+def test_seller_search_reuses_fast_and_full_analysis_caches():
+    app = Path("app.py").read_text(encoding="utf-8")
+
+    assert "def _cached_seller_analysis" in app
+    assert "_cached_fast_analysis(" in app
+    assert 'mode=f"seller_v5_pricing_truth_{sport}_{strategy_mode}"' in app
+    assert app.count("analyze_fn=_cached_seller_analysis") >= 2
+    assert re.search(r'APP_VERSION = "v0\.14\.\d+"', app)
