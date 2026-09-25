@@ -140,6 +140,7 @@ from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier
 from src.asking_price_ui import render_asking_price_opportunity, render_asking_price_shortlist
+from src.seller_profit_display import build_seller_net_profit_summary
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
@@ -6547,6 +6548,15 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                     st.markdown(badge)
             else:
                 st.markdown(badge)
+            _profit = build_seller_net_profit_summary(row)
+            if _profit["available"]:
+                st.markdown(
+                    f"**{_profit['label']}: {_profit['value']:+.0f} kr** · "
+                    f"{_profit['basis']}"
+                )
+            else:
+                st.markdown("**Nettovinst: ej beräkningsbar**")
+                st.caption(_profit["basis"].capitalize() + ".")
             render_asking_price_opportunity(row.get("asking_price_opportunity"))
             _opportunity_score = float(row.get("seller_opportunity_score") or _rank_score)
             st.caption(f"Granskningsprioritet {_opportunity_score:.0f}/100")
