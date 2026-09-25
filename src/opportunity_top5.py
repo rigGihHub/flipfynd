@@ -425,7 +425,9 @@ def build_opportunity_top5(items, limit=5):
             "weak_single_find": weak_single_find,
             "evidence_quality": evidence_quality,
             "asking_comparison_count": asking_count,
-            "asking_net_margin": asking_margin if asking_positive else None,
+            # Keep negative margins visible in the UI. They are not findings,
+            # but hiding them makes the economics look better than they are.
+            "asking_net_margin": asking_margin if isinstance(asking_context, dict) and "net_margin" in asking_context else None,
             "generic_lot": generic_lot,
             "freshness_score": round(freshness, 1),
             "primary_blocker": None if buy else ("Marknadsvärde/SOLD ännu inte verifierat" if not valuation_safe or sold < 2 else "Ekonomiskt övertag inte verifierat"),
