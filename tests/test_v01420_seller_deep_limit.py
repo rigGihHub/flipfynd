@@ -14,3 +14,12 @@ def test_app_and_seller_workflow_use_release_limit():
     seller = Path("src/seller_top5.py").read_text(encoding="utf-8")
     assert re.search(r'APP_VERSION = "v0\.14\.\d+"', app)
     assert "SELLER_DEEP_ANALYSIS_CAP = 30" in seller
+
+
+def test_seller_ui_has_app_local_fail_closed_money_guard():
+    app = Path("app.py").read_text(encoding="utf-8")
+
+    assert 'SELLER_PRESENTATION_CONTRACT = "positive-price-nonnegative-profit-v2"' in app
+    assert "def _seller_ui_row_is_safe(row):" in app
+    assert "_seller_ui_row_is_safe(row)" in app
+    assert "float(value) < 0" in app

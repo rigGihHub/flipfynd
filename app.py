@@ -328,7 +328,50 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.61"
+APP_VERSION = "v0.14.62"
+SELLER_PRESENTATION_CONTRACT = "positive-price-nonnegative-profit-v2"
+
+
+def _seller_ui_row_is_safe(row):
+    """Fail closed before seller cards are rendered by this app process.
+
+    Streamlit can hot-reload app.py while retaining imported modules. Keep the
+    final money-safety check local so cached analyser code cannot bypass it.
+    """
+    if not isinstance(row, dict):
+        return False
+
+    source = row.get("source_item") if isinstance(row.get("source_item"), dict) else {}
+    price_keys = ("price", "pris", "current_price")
+    price_container = row if any(key in row for key in price_keys) else source
+    positive_price = False
+    for key in price_keys:
+        value = price_container.get(key)
+        if value in (None, "") or isinstance(value, bool):
+            continue
+        try:
+            positive_price = float(value) > 0
+        except (TypeError, ValueError):
+            continue
+        break
+    if not positive_price:
+        return False
+
+    asking = row.get("asking_price_opportunity")
+    if not isinstance(asking, dict):
+        asking = {}
+    margin_values = (asking.get("net_margin"), row.get("asking_net_margin"))
+    if row.get("valuation_display_safe") is True or str(row.get("practical_price_source") or "").upper() == "VERIFIED":
+        margin_values += (row.get("net_profit_estimate"), row.get("estimated_net_profit"))
+    for value in margin_values:
+        if value in (None, "") or isinstance(value, bool):
+            continue
+        try:
+            if float(value) < 0:
+                return False
+        except (TypeError, ValueError):
+            continue
+    return True
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -6454,7 +6497,11 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         _ranked_rows = seller_top5_result.get("rows") or []
         _safe_ranked_rows = [
             row for row in _ranked_rows
-            if not known_negative_net_profit(row) and seller_has_positive_purchase_price(row)
+            if (
+                _seller_ui_row_is_safe(row)
+                and not known_negative_net_profit(row)
+                and seller_has_positive_purchase_price(row)
+            )
         ]
         _find_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "FIND"]
         _research_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "RESEARCH"]
