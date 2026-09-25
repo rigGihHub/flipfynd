@@ -6238,7 +6238,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                 progress_percent = max(0, min(100, int(progress_percent)))
                 done = int((info or {}).get("done") or 0)
                 total = int((info or {}).get("total") or 0)
-                if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                if phase in {"starting", "fetching", "fetch_retry", "page_complete", "exhausted"}:
                     progress_text = f"{progress_percent}% · {found} annonser hittade"
                 elif phase.startswith("filter"):
                     progress_text = f"{progress_percent}% · Filtrerar kort" + (f" · {done}/{total}" if total else "")
@@ -6255,6 +6255,12 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                 seller_progress_bar.progress(progress_percent, text=progress_text)
                 if phase == "fetching":
                     seller_progress_line.caption(f"Sida {page} · {found} annonser")
+                elif phase == "fetch_retry":
+                    attempt = int((info or {}).get("attempt") or 1)
+                    maximum = int((info or {}).get("max_attempts") or 3)
+                    seller_progress_line.caption(
+                        f"Tillfälligt hämtningsfel på sida {page} · försöker automatiskt igen {attempt}/{maximum}"
+                    )
                 elif phase == "page_complete":
                     seller_progress_line.caption(f"Sida {page} klar · {found} annonser")
                 elif phase == "exhausted":
@@ -6457,7 +6463,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
         elif _find_rows:
             st.markdown(f"### 🏆 Verifierade fynd · {seller_name}")
-        elif _research_rows:
+        elif _seller_display_rows:
             st.markdown(f"### 🔎 Kandidater värda fortsatt kontroll · {seller_name}")
             st.caption("Inga verifierade fynd ännu. Dessa kort har kortspecifika signaler men är inte köpklara.")
         else:
@@ -6494,7 +6500,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         if not rows:
             st.info("Inget kort klarade kvalitetsgränsen ännu. Top 5 uppdateras när fler sidor läses.")
         elif len(rows) < 5:
-            st.caption(f"Topplistan innehåller {len(rows)} kort eftersom färre än fem giltiga, unika kortannonser kunde läsas.")
+            st.caption(
+                f"Topplistan innehåller {len(rows)} kort eftersom bara {len(rows)} "
+                "klarade pris-, kvalitets- och evidensgränsen hittills."
+            )
         _find_rank = 0
         _research_rank = 0
         _research_heading_shown = False
@@ -6525,12 +6534,12 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                     _research_heading_shown = True
             st.markdown(f"#### {_position_label} · {title}")
             _rank_score = float(row.get("rank_score") or 0)
-            if price is not None:
-                try:
+            try:
+                if price is not None and float(price) > 0:
                     st.markdown(f"**{float(price):.0f} kr** · {badge}")
-                except (TypeError, ValueError):
+                else:
                     st.markdown(badge)
-            else:
+            except (TypeError, ValueError):
                 st.markdown(badge)
             _profit = build_seller_net_profit_summary(row)
             if _profit["available"]:

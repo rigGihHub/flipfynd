@@ -19,6 +19,7 @@ from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
 PUBLIC_BATCH_PAGES = 9
+PUBLIC_PAGE_ATTEMPTS = 3
 _CHECKPOINT_SCHEMA = "v3"
 
 
@@ -135,6 +136,25 @@ def _fetch_public(public_fetcher, profile_url, *, start_page, public_pages, prog
     return public_fetcher(str(profile_url).strip(), **kwargs)
 
 
+def _transient_public_failure(result: dict) -> bool:
+    """Return whether retrying the same page can reasonably succeed."""
+    status = str((result or {}).get("status") or "").upper()
+    if status in {
+        "PROXY_TIMEOUT", "PROXY_REQUEST_FAILED", "REQUEST_FAILED",
+        "PROXY_FETCH_EXCEPTION", "FETCH_EXCEPTION", "RATE_LIMITED",
+        "TIMEOUT",
+    }:
+        return True
+    if status != "HTTP_ERROR":
+        return False
+    http_status = (result or {}).get("http_status") or (result or {}).get("status_code")
+    try:
+        return int(http_status) == 429 or int(http_status) >= 500
+    except (TypeError, ValueError):
+        error = str((result or {}).get("error") or "").casefold()
+        return any(token in error for token in ("429", "timeout", "timed out", "502", "503", "504"))
+
+
 def _streamlit_session_state():
     try:
         import streamlit as st
@@ -243,6 +263,7 @@ def _partial_result_from_saved(
     fallback_reason: str,
     resume_required: bool,
     total_listing_estimate: int | None = None,
+    public_retry_count: int = 0,
 ):
     """Rank every saved page with the ordinary FlipFynd Seller Top 5 engine.
 
@@ -289,6 +310,7 @@ def _partial_result_from_saved(
         "api_status": api_status,
         "total_listing_estimate": total_listing_estimate,
         "remaining_listing_estimate": remaining,
+        "public_retry_count": int(public_retry_count or 0),
         # Mirror the continuation state in the visible result. Streamlit keeps
         # this object reliably between button clicks even when an auxiliary
         # checkpoint backend is unavailable.
@@ -403,6 +425,7 @@ def resolve_seller_top5(
         pages_this_run = 0
         exhausted = False
         public_failure = None
+        public_retry_count = 0
         total_listing_estimate = checkpoint.get("total_listing_estimate")
 
         for _ in range(batch_pages):
@@ -410,24 +433,36 @@ def resolve_seller_top5(
             # authoritative fetch path. Passing current_page through unchanged
             # guarantees page 10 stays page 10 instead of being rebuilt by the
             # legacy direct Tradera URL helper.
-            try:
-                page_result = _fetch_public(
-                    public_fetcher,
-                    profile_text,
-                    start_page=current_page,
-                    public_pages=1,
-                    progress_callback=combined_progress,
-                    seller_alias=alias,
-                    paging_size=total_listing_estimate,
-                )
-            except Exception as exc:
-                page_result = {
-                    "ok": False,
-                    "status": "PROXY_FETCH_EXCEPTION",
-                    "error": str(exc),
-                    "items": [],
-                    "next_page": current_page,
-                }
+            for attempt in range(1, PUBLIC_PAGE_ATTEMPTS + 1):
+                try:
+                    page_result = _fetch_public(
+                        public_fetcher,
+                        profile_text,
+                        start_page=current_page,
+                        public_pages=1,
+                        progress_callback=combined_progress,
+                        seller_alias=alias,
+                        paging_size=total_listing_estimate,
+                    )
+                except Exception as exc:
+                    page_result = {
+                        "ok": False,
+                        "status": "PROXY_FETCH_EXCEPTION",
+                        "error": str(exc),
+                        "items": [],
+                        "next_page": current_page,
+                    }
+                if page_result.get("ok") or not _transient_public_failure(page_result) or attempt >= PUBLIC_PAGE_ATTEMPTS:
+                    break
+                public_retry_count += 1
+                combined_progress({
+                    "phase": "fetch_retry",
+                    "page": current_page,
+                    "attempt": attempt + 1,
+                    "max_attempts": PUBLIC_PAGE_ATTEMPTS,
+                    "found_count": len(stored_items),
+                    "status": page_result.get("status"),
+                })
 
             if not page_result.get("ok"):
                 public_failure = page_result
@@ -516,6 +551,7 @@ def resolve_seller_top5(
                 fallback_reason="PUBLIC_PROFILE_INTERRUPTED",
                 resume_required=True,
                 total_listing_estimate=total_listing_estimate,
+                public_retry_count=public_retry_count,
             )
 
         if not exhausted:
@@ -541,6 +577,7 @@ def resolve_seller_top5(
                 fallback_reason="NO_API_CREDENTIALS" if not creds else "API_FAILED",
                 resume_required=False,
                 total_listing_estimate=total_listing_estimate,
+                public_retry_count=public_retry_count,
             )
 
         clear_checkpoint(key, session=session, database_url=database_url)
@@ -559,6 +596,7 @@ def resolve_seller_top5(
         result["public_inventory_complete"] = True
         result["fallback_reason"] = "NO_API_CREDENTIALS" if not creds else "API_FAILED"
         result["api_status"] = api_status
+        result["public_retry_count"] = public_retry_count
         return result
 
     # Only use the local market when no public profile URL was supplied.

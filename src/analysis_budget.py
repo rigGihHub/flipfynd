@@ -36,4 +36,23 @@ def fast_analysis_budget(total_candidates: int, *, context: str = "ordinary") ->
     return budget
 
 
-__all__ = ["fast_analysis_budget"]
+def seller_deep_analysis_budget(card_inventory_count: int) -> int:
+    """Bound full seller analysis while keeping large inventories credible.
+
+    Eight deep analyses is enough for a small seller, but not for hundreds of
+    card listings.  The ceiling remains deliberately low because full analysis
+    may perform market-data requests.
+    """
+    total = max(0, int(card_inventory_count or 0))
+    if total <= 0:
+        return 0
+    if total <= 80:
+        return min(total, 8)
+    if total <= 250:
+        return 16
+    if total <= 600:
+        return 24
+    return 30
+
+
+__all__ = ["fast_analysis_budget", "seller_deep_analysis_budget"]

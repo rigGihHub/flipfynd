@@ -15,7 +15,9 @@ def _price(item):
     for key in ("pris","price","current_price"):
         value=item.get(key)
         if value is not None:
-            try:return float(value)
+            try:
+                parsed=float(value)
+                return parsed if parsed > 0 else None
             except (TypeError,ValueError):pass
     return None
 

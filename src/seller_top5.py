@@ -18,11 +18,12 @@ from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
 from src.seller_card_merit import assess_seller_card_merit
 from src.fast_analysis_pool import select_fast_analysis_pool
-from src.analysis_budget import fast_analysis_budget
+from src.analysis_budget import fast_analysis_budget, seller_deep_analysis_budget
 from src.deal_readiness import assess_deal_readiness
 
 
 HIDDEN_FIND_EXPLORATION_SLOTS = 4
+SELLER_DEEP_ANALYSIS_CAP = 30
 
 
 def _emit(callback, **payload):
@@ -39,6 +40,22 @@ def _num(value, default=0.0):
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _positive_purchase_price(row: dict) -> float | None:
+    source = row.get("source_item") or {}
+    for container in (row, source):
+        for key in ("price", "pris", "current_price"):
+            value = container.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                parsed = float(value)
+            except (TypeError, ValueError):
+                continue
+            if parsed > 0:
+                return parsed
+    return None
 
 
 def _identity_key(item: dict) -> str:
@@ -230,6 +247,10 @@ def _seller_presentation_label(row: dict) -> dict:
 
 def seller_result_tier(row: dict) -> str:
     """Separate actual finds from research candidates and weak filler."""
+    # Purchase economics cannot be evaluated without a real positive asking
+    # price.  Never present parser/missing-price zeroes as research or finds.
+    if _positive_purchase_price(row) is None:
+        return "WEAK"
     decision = str(row.get("decision") or "SKIP").upper()
     readiness = assess_deal_readiness(row)
     if decision.startswith("KÖP") and readiness["ready_for_find"]:
@@ -383,10 +404,8 @@ def _select_hidden_find_exploration(rows: list[dict], *, exclude_keys=None, slot
         except (TypeError, ValueError):
             quality = None
         underdescribed = bool(warnings or blockers or (quality is not None and quality < 55) or len(title) < 36)
-        if not underdescribed:
-            continue
         candidates.append((
-            len(warnings) + len(blockers) + (2 if quality is not None and quality < 55 else 0) + (1 if len(title) < 36 else 0),
+            len(warnings) + len(blockers) + (2 if quality is not None and quality < 55 else 0) + (1 if len(title) < 36 else 0) + (1 if underdescribed else 0),
             -_num(row.get("price"), 10**12),
             position,
             row,
@@ -443,6 +462,10 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     )
 
     all_quick_rows = list(quick.get("rows") or [])
+    deep_budget = min(
+        SELLER_DEEP_ANALYSIS_CAP,
+        max(int(full_limit or 8), seller_deep_analysis_budget(len(inventory))),
+    )
     from src.asking_price_opportunity import select_asking_price_research
     asking_candidates = select_asking_price_research(all_quick_rows)
     asking_keys = {_identity_key(row.get("source_item") or row) for row in asking_candidates}
@@ -453,16 +476,24 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     merit_candidates = select_dynamic_seller_deep_rows(
         [row for row in qualified_quick_rows if _identity_key(row.get("source_item") or row) not in asking_keys],
         base_limit=max(int(full_limit or 8), 8),
-        max_cap=20,
+        max_cap=deep_budget,
     )
     merit_keys = {_identity_key(row.get("source_item") or row) for row in merit_candidates}
     exploration_candidates = _select_hidden_find_exploration(
         all_quick_rows,
         exclude_keys=merit_keys | asking_keys,
-        slots=HIDDEN_FIND_EXPLORATION_SLOTS,
+        slots=max(HIDDEN_FIND_EXPLORATION_SLOTS, deep_budget - len(asking_candidates) - len(merit_candidates)),
     )
-    merit_keep = max(0, 20 - len(exploration_candidates) - len(asking_candidates))
-    candidates = asking_candidates + merit_candidates[:merit_keep] + exploration_candidates
+    candidates = []
+    candidate_keys = set()
+    for candidate in asking_candidates + merit_candidates + exploration_candidates:
+        key = _identity_key(candidate.get("source_item") or candidate)
+        if not key or key in candidate_keys:
+            continue
+        candidates.append(candidate)
+        candidate_keys.add(key)
+        if len(candidates) >= deep_budget:
+            break
     candidate_limit = len(candidates)
     full_rows = []
     completed_full_keys = set()
@@ -546,7 +577,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "full_candidate_limit": candidate_limit,
         "hidden_find_exploration_count": len(exploration_candidates),
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v3-ordinary-evidence-opportunity-overlay",
+        "seller_analysis_contract": "v4-priced-adaptive-deep-analysis",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
         "duplicate_opportunities_removed": duplicate_opportunities_removed,

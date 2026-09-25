@@ -27,7 +27,8 @@ def _price(item: dict):
         value = item.get(key)
         if value not in (None, ""):
             try:
-                return float(value)
+                parsed = float(value)
+                return parsed if parsed > 0 else None
             except (TypeError, ValueError):
                 pass
     return None
@@ -67,6 +68,8 @@ def full_analyze_live_seller_item(
         merged.update(result)
     merged = apply_seller_metadata(merged, prepared)
 
+    purchase_price = _price(merged)
+
     decision = str(merged.get("beslut") or merged.get("decision") or "SKIP")
     decision_upper = decision.upper()
     sold = int(_num(merged.get("sold_comparable_count") or merged.get("sold_comps")))
@@ -88,7 +91,12 @@ def full_analyze_live_seller_item(
     if total_cost is None:
         total_cost = merged.get("total_acquisition_cost")
     if total_cost is None:
-        total_cost = _price(merged)
+        total_cost = purchase_price
+    try:
+        if total_cost is not None and float(total_cost) <= 0:
+            total_cost = None
+    except (TypeError, ValueError):
+        total_cost = None
     if merged.get("risk_adjusted_profit") in (None, "") and max_price not in (None, "") and total_cost not in (None, ""):
         merged["risk_adjusted_profit"] = round(_num(max_price) - _num(total_cost), 2)
         risk_adjusted_profit = _num(merged.get("risk_adjusted_profit"))
@@ -137,7 +145,7 @@ def full_analyze_live_seller_item(
         "title": _title(merged),
         "url": merged.get("lank") or merged.get("url") or merged.get("link"),
         "decision": decision,
-        "price": _price(merged),
+        "price": purchase_price,
         "total_cost": total_cost,
         "net_profit_estimate": merged.get("net_profit_estimate"),
         "valuation_display_safe": merged.get("valuation_display_safe") is True,

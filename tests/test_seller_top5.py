@@ -86,7 +86,7 @@ def test_fast_preselection_prefers_ordinary_rank_over_cheap_mediocre_card():
     })
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=20, full_limit=10)
     assert out["rows"][0]["title"] == "Elite rookie patch /25"
-    assert out["seller_analysis_contract"] == "v3-ordinary-evidence-opportunity-overlay"
+    assert out["seller_analysis_contract"] == "v4-priced-adaptive-deep-analysis"
 
 
 def test_verified_buy_ranks_before_equal_rank_skip_via_quick_preselection_stability():
@@ -102,6 +102,36 @@ def test_empty_inventory_is_explicit():
     out = build_seller_top5("seller1", [], analyze_fn=_fake_analyze)
     assert out["status"] == "NO_ITEMS"
     assert out["rows"] == []
+
+
+def test_zero_price_listing_is_never_presented_as_research_or_find():
+    item = {
+        "titel": "2005-06 Upper Deck Exclusive 97/100 #123 Player Name",
+        "lank": "zero-price",
+        "pris": 0,
+        "sold": 2,
+        "decision": "UNDERSÖK",
+        "rank": 95,
+    }
+    out = build_seller_top5("seller1", [item], analyze_fn=_fake_analyze)
+    assert out["rows"] == []
+
+
+def test_large_seller_gets_twenty_four_bounded_full_analyses():
+    items = [
+        {
+            "titel": f"2023-24 Upper Deck Exclusive {i}/100 #{i} Player {i}",
+            "lank": f"large-{i}",
+            "pris": 20 + (i % 30),
+            "decision": "UNDERSÖK",
+            "rank": 40 + (i % 20),
+        }
+        for i in range(452)
+    ]
+    out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, full_limit=8)
+    assert out["card_inventory_count"] == 452
+    assert out["full_candidate_limit"] == 24
+    assert out["full_analysed"] == 24
 
 
 def test_large_inventory_scans_beyond_first_batch():
@@ -121,7 +151,7 @@ def test_large_inventory_scans_beyond_first_batch():
     assert out["fast_pool_count"] < out["card_inventory_count"]
     assert out["quick_analysed"] == out["fast_pool_count"]
     assert out["coverage_complete"] is True
-    assert 1 <= out["full_candidate_limit"] <= 15
+    assert 1 <= out["full_candidate_limit"] <= 16
 
 
 def test_duplicate_inventory_rows_are_only_quick_scanned_once():
