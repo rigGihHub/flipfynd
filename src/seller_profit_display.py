@@ -60,3 +60,9 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
         "label": "Nettovinst",
         "basis": "ej beräkningsbar med tillräckligt underlag",
     }
+
+
+def known_negative_net_profit(row: dict | None) -> bool:
+    """Whether the available economics prove that buying loses money."""
+    summary = build_seller_net_profit_summary(row)
+    return summary["available"] and summary["value"] < 0
