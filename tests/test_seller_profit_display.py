@@ -39,3 +39,8 @@ def test_unsafe_valuation_is_explicitly_unavailable():
     })
     assert result["available"] is False
     assert "ej beräkningsbar" in result["basis"]
+
+
+def test_known_negative_profit_is_not_a_recommendation():
+    assert known_negative_net_profit({"asking_net_margin": -1}) is True
+    assert known_negative_net_profit({"asking_net_margin": 0}) is False
