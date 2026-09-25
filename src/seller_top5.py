@@ -20,6 +20,7 @@ from src.seller_card_merit import assess_seller_card_merit
 from src.fast_analysis_pool import select_fast_analysis_pool
 from src.analysis_budget import fast_analysis_budget, seller_deep_analysis_budget
 from src.deal_readiness import assess_deal_readiness
+from src.seller_profit_display import known_negative_net_profit
 
 
 HIDDEN_FIND_EXPLORATION_SLOTS = 4
@@ -44,7 +45,11 @@ def _num(value, default=0.0):
 
 def seller_has_positive_purchase_price(row: dict) -> bool:
     source = row.get("source_item") or {}
-    for container in (row, source):
+    # A full-analysis summary is authoritative when it explicitly carries a
+    # price.  Do not rescue an invalid displayed 0 with a different nested
+    # source value: that conflict itself makes the candidate unsafe to show.
+    containers = (row,) if any(key in row for key in ("price", "pris", "current_price")) else (source,)
+    for container in containers:
         for key in ("price", "pris", "current_price"):
             value = container.get(key)
             if value in (None, ""):
@@ -247,6 +252,8 @@ def _seller_presentation_label(row: dict) -> dict:
 
 def seller_result_tier(row: dict) -> str:
     """Separate actual finds from research candidates and weak filler."""
+    if known_negative_net_profit(row):
+        return "WEAK"
     decision = str(row.get("decision") or "SKIP").upper()
     readiness = assess_deal_readiness(row)
     if decision.startswith("KÖP") and readiness["ready_for_find"]:

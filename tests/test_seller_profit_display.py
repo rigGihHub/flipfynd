@@ -44,3 +44,8 @@ def test_unsafe_valuation_is_explicitly_unavailable():
 def test_known_negative_profit_is_not_a_recommendation():
     assert known_negative_net_profit({"asking_net_margin": -1}) is True
     assert known_negative_net_profit({"asking_net_margin": 0}) is False
+
+
+def test_nested_negative_asking_margin_is_not_a_recommendation():
+    row = {"asking_price_opportunity": {"status": "NO_MARGIN", "net_margin": -62.83}}
+    assert known_negative_net_profit(row) is True

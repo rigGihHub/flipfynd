@@ -117,6 +117,25 @@ def test_zero_price_listing_is_never_presented_as_research_or_find():
     assert out["rows"] == []
 
 
+def test_explicit_zero_summary_price_is_not_rescued_by_nested_source_price():
+    from src.seller_top5 import seller_has_positive_purchase_price
+
+    assert seller_has_positive_purchase_price({"price": 0, "source_item": {"pris": 99}}) is False
+
+
+def test_negative_asking_margin_is_not_a_research_candidate():
+    from src.seller_top5 import seller_result_tier
+
+    row = {
+        "title": "2023-24 Upper Deck Clear Cut Young Guns #498",
+        "price": 99,
+        "decision": "UNDERSÖK",
+        "collector_signal_score": 20,
+        "asking_price_opportunity": {"status": "NO_MARGIN", "net_margin": -62.83},
+    }
+    assert seller_result_tier(row) == "WEAK"
+
+
 def test_large_seller_gets_twenty_four_bounded_full_analyses():
     items = [
         {

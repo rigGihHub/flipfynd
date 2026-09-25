@@ -328,7 +328,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.60"
+APP_VERSION = "v0.14.61"
 
 FETCH_SCOPE_MAP = {
     "🏒 Hockey": "Hockey - NHL",
@@ -1112,7 +1112,7 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
     signature = build_analysis_signature(
         item,
         data_size=inventory_size,
-        mode=f"seller_{sport}_{strategy_mode}",
+        mode=f"seller_v5_pricing_truth_{sport}_{strategy_mode}",
     )
     cached = get_cached_analysis(signature)
     if cached:
@@ -6452,12 +6452,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
         _ranked_rows = seller_top5_result.get("rows") or []
-        _find_rows = [row for row in _ranked_rows if seller_result_tier(row) == "FIND"]
-        _research_rows = [row for row in _ranked_rows if seller_result_tier(row) == "RESEARCH"]
-        _seller_display_rows = [
-            row for row in (_find_rows + _research_rows)
+        _safe_ranked_rows = [
+            row for row in _ranked_rows
             if not known_negative_net_profit(row) and seller_has_positive_purchase_price(row)
-        ][:5]
+        ]
+        _find_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "FIND"]
+        _research_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "RESEARCH"]
+        _seller_display_rows = (_find_rows + _research_rows)[:5]
         if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
             st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
             st.caption("Preliminär lista · uppdateras när fler annonser hittas.")

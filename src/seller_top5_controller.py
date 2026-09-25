@@ -544,7 +544,10 @@ def resolve_seller_top5(
                 progress_callback=progress_callback,
                 ui=ui,
                 public_status=public_failure.get("status") or "FETCH_FAILED",
-                public_error=public_failure.get("error"),
+                # Preserve the structured diagnostic code. Passing only the
+                # nested error made the UI headline fall back to the generic
+                # FF-SELLER-FETCH-INTERRUPTED code.
+                public_error=public_failure,
                 pages_read=total_pages_read,
                 next_page=current_page,
                 api_status=api_status,

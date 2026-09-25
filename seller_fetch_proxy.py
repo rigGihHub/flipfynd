@@ -50,6 +50,32 @@ def _safe_tradera_page_url(value: str) -> bool:
     except Exception:
         return False
 _TOTAL_RE = re.compile(r"(?P<count>\d[\d\s\u00a0.]*)\s+Annonser", re.I)
+_TRADERA_PAGE_SIZE = 80
+
+
+def _total_listing_count(markup: str) -> int | None:
+    match = _TOTAL_RE.search(markup or "")
+    if not match:
+        return None
+    try:
+        return int(re.sub(r"[^0-9]", "", match.group("count")))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_exhausted_page(markup: str, page: int, item_count: int) -> bool:
+    """Use both inventory count and page shape to distinguish EOF from errors."""
+    if _page_href(markup, int(page) + 1):
+        return False
+    total = _total_listing_count(markup)
+    represented_capacity = max(1, int(page)) * _TRADERA_PAGE_SIZE
+    return bool(
+        item_count > 0
+        and (
+            item_count < _TRADERA_PAGE_SIZE
+            or (total is not None and represented_capacity >= total)
+        )
+    )
 
 
 @app.get("/health")
@@ -98,6 +124,33 @@ def seller_page(
                 )
                 next_href = _page_href(seed.text or "", target_page)
                 if not next_href:
+                    seed_items = extract_public_profile_items(
+                        seed.text or "", seller_alias=alias_clean or None,
+                        seller_id=str(seller_id),
+                    )
+                    seed_page = max(1, target_page - 1)
+                    if seed.status_code == 200 and _is_exhausted_page(
+                        seed.text or "", seed_page, len(seed_items)
+                    ):
+                        total = _total_listing_count(seed.text or "")
+                        print(
+                            f"SELLER_END seller={seller_id} requested_page={page} "
+                            f"last_page={seed_page} last_count={len(seed_items)} total={total}",
+                            flush=True,
+                        )
+                        return {
+                            "ok": True,
+                            "seller_id": str(seller_id),
+                            "alias": alias_clean or None,
+                            "page": page,
+                            "next_page": page,
+                            "items": [],
+                            "parsed_count": 0,
+                            "total_listing_estimate": total,
+                            "exhausted": True,
+                            "end_reason": "NO_NEXT_PAGE_AFTER_FINAL_PARTIAL_PAGE",
+                            "source_url": str(seed.url),
+                        }
                     detail = {
                         "code": "FF-SELLER-PAGE-LINK-NOT-FOUND",
                         "requested_page": page,
@@ -141,13 +194,7 @@ def seller_page(
         seller_alias=alias_clean or None,
         seller_id=str(seller_id),
     )
-    total = None
-    match = _TOTAL_RE.search(html)
-    if match:
-        try:
-            total = int(re.sub(r"[^0-9]", "", match.group("count")))
-        except Exception:
-            total = None
+    total = _total_listing_count(html)
 
     if not items:
         raise HTTPException(status_code=502, detail={
@@ -164,6 +211,7 @@ def seller_page(
     # normal sequential crawl into roughly one Tradera request per new page.
     next_href = _page_href(html, page + 1)
     next_url = urljoin(str(response.url), next_href) if next_href else None
+    exhausted = _is_exhausted_page(html, page, len(items))
     if next_url and _safe_tradera_page_url(next_url):
         _PAGE_URL_CACHE[_cache_key(seller_id, alias_clean, page + 1)] = next_url
 
@@ -201,4 +249,6 @@ def seller_page(
         "html_length": len(html),
         "next_url": next_url,
         "cursor_cached": bool(next_url),
+        "exhausted": exhausted,
+        "end_reason": "NO_NEXT_PAGE_AFTER_FINAL_PARTIAL_PAGE" if exhausted else None,
     }

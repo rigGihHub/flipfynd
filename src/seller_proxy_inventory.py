@@ -47,6 +47,7 @@ def fetch_proxy_seller_inventory_batch(
     all_items = {}
     total_estimate = None
     pages_read = 0
+    exhausted = False
 
     for _ in range(page_limit):
         if callable(progress_callback):
@@ -116,8 +117,15 @@ def fetch_proxy_seller_inventory_batch(
                     all_items[key] = item
         if payload.get("total_listing_estimate"):
             total_estimate = int(payload["total_listing_estimate"])
+        if payload.get("exhausted") and not (payload.get("items") or []):
+            exhausted = True
+            page = int(payload.get("next_page") or page)
+            break
         pages_read += 1
         page = int(payload.get("next_page") or (page + 1))
+        if payload.get("exhausted"):
+            exhausted = True
+            break
 
     if callable(progress_callback):
         try:
@@ -141,7 +149,7 @@ def fetch_proxy_seller_inventory_batch(
         "parsed_count": len(all_items),
         "pages_read": pages_read,
         "next_page": page,
-        "exhausted": False,
+        "exhausted": exhausted,
         "inventory_source": "TRADERA_RENDER_PROXY",
         "total_listing_estimate": total_estimate,
     }

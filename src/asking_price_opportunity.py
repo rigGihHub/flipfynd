@@ -83,8 +83,8 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         return {**out, "status": "NO_MATCHED_PRICES_OR_FX"}
     rows.sort(key=lambda row: row["asking_price_sek"])
     price = _number(item.get("pris", item.get("price")))
-    if price is None:
-        return {**out, "status": "PURCHASE_PRICE_MISSING"}
+    if price is None or price <= 0:
+        return {**out, "status": "PURCHASE_PRICE_INVALID"}
     shipping = resolve_shipping(item)
     freight = _number(shipping["shipping"])
     if freight is None:
