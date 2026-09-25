@@ -2328,9 +2328,10 @@ if st.session_state.get("results") is not None:
                         "Kostnad": f"{float(total):.0f} kr" if total is not None else "–",
                         "Prisindikation": f"{float(price_indication):.0f} kr" if price_indication is not None else "–",
                         "Underlag": indication_source,
-                        "Möjlig marginal": (
-                            f"{float(price_indication-total):+.0f} kr"
-                            if price_indication is not None and total is not None else "–"
+                        "Nettovinst": (
+                            f"{build_seller_net_profit_summary(row)['value']:+.0f} kr"
+                            if build_seller_net_profit_summary(row)["available"]
+                            else "Ej beräkningsbar"
                         ),
                         "Fyndpotential": f"{float(row.get('potential') or 0):.0f}/100",
                         "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
