@@ -42,7 +42,7 @@ def _num(value, default=0.0):
         return float(default)
 
 
-def _positive_purchase_price(row: dict) -> float | None:
+def seller_has_positive_purchase_price(row: dict) -> bool:
     source = row.get("source_item") or {}
     for container in (row, source):
         for key in ("price", "pris", "current_price"):
@@ -54,8 +54,8 @@ def _positive_purchase_price(row: dict) -> float | None:
             except (TypeError, ValueError):
                 continue
             if parsed > 0:
-                return parsed
-    return None
+                return True
+    return False
 
 
 def _identity_key(item: dict) -> str:
@@ -247,10 +247,6 @@ def _seller_presentation_label(row: dict) -> dict:
 
 def seller_result_tier(row: dict) -> str:
     """Separate actual finds from research candidates and weak filler."""
-    # Purchase economics cannot be evaluated without a real positive asking
-    # price.  Never present parser/missing-price zeroes as research or finds.
-    if _positive_purchase_price(row) is None:
-        return "WEAK"
     decision = str(row.get("decision") or "SKIP").upper()
     readiness = assess_deal_readiness(row)
     if decision.startswith("KÖP") and readiness["ready_for_find"]:
@@ -404,6 +400,9 @@ def _select_hidden_find_exploration(rows: list[dict], *, exclude_keys=None, slot
         except (TypeError, ValueError):
             quality = None
         underdescribed = bool(warnings or blockers or (quality is not None and quality < 55) or len(title) < 36)
+        merit = assess_seller_card_merit(row)
+        if not underdescribed and (merit.get("mass_market_base") or merit.get("unsupported_base_like")):
+            continue
         candidates.append((
             len(warnings) + len(blockers) + (2 if quality is not None and quality < 55 else 0) + (1 if len(title) < 36 else 0) + (1 if underdescribed else 0),
             -_num(row.get("price"), 10**12),
@@ -533,7 +532,10 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
     full_rows.sort(key=_seller_opportunity_rank_key, reverse=True)
-    presentable_full_rows = [row for row in full_rows if seller_result_tier(row) != "WEAK"]
+    presentable_full_rows = [
+        row for row in full_rows
+        if seller_result_tier(row) != "WEAK" and seller_has_positive_purchase_price(row)
+    ]
     selected, duplicate_opportunities_removed, condition_risks_demoted = _select_diverse_rows(presentable_full_rows, 5)
     selected_keys = {_identity_key(row.get("source_item") or row) for row in selected}
     selected_opportunities = {_card_opportunity_key(row) for row in selected}
@@ -549,6 +551,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             continue
         key = _identity_key(source or qrow)
         fallback = _fallback_row(qrow, alias)
+        if not seller_has_positive_purchase_price(fallback):
+            continue
         # Quick analysis is routing evidence, never enough for a Top 5 resale
         # recommendation. Only retain it when it still qualifies as an explicit
         # research candidate; a quick BUY label cannot bypass deep-analysis

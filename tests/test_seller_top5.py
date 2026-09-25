@@ -6,7 +6,7 @@ def _fake_analyze(item, mode="fast", strategy_mode=None, sport=None, all_items=N
     base = {
         "titel": title,
         "lank": item.get("lank"),
-        "pris": item.get("pris", 0),
+        "pris": item.get("pris", 10),
         "exact_identity_gate_supports_exact_comp_search": item.get("identity_ok", True),
         "exact_identity_gate_score": 90 if item.get("identity_ok", True) else 20,
         "valuation_confidence_score": item.get("valuation", 60),

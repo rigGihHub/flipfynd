@@ -138,7 +138,7 @@ from src.ordinary_search_job_contract import build_ordinary_search_job_payload, 
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
-from src.seller_top5 import build_seller_top5, seller_result_tier
+from src.seller_top5 import build_seller_top5, seller_result_tier, seller_has_positive_purchase_price
 from src.asking_price_ui import render_asking_price_opportunity, render_asking_price_shortlist
 from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
@@ -6456,7 +6456,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         _research_rows = [row for row in _ranked_rows if seller_result_tier(row) == "RESEARCH"]
         _seller_display_rows = [
             row for row in (_find_rows + _research_rows)
-            if not known_negative_net_profit(row)
+            if not known_negative_net_profit(row) and seller_has_positive_purchase_price(row)
         ][:5]
         if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
             st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")

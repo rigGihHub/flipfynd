@@ -1,4 +1,4 @@
-from src.seller_profit_display import build_seller_net_profit_summary
+from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
 
 
 def test_active_price_scenario_shows_negative_net_profit():

@@ -13,4 +13,4 @@ def test_app_and_seller_workflow_use_release_limit():
     app = Path("app.py").read_text(encoding="utf-8")
     seller = Path("src/seller_top5.py").read_text(encoding="utf-8")
     assert re.search(r'APP_VERSION = "v0\.14\.\d+"', app)
-    assert "max_cap=20" in seller
+    assert "SELLER_DEEP_ANALYSIS_CAP = 30" in seller

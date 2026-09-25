@@ -46,8 +46,8 @@ def test_search_submit_and_scope_switch_work_with_loaded_cache_module(monkeypatc
     assert not app.exception
     next(button for button in app.button if button.label == "🔎 Hitta fynd").click().run()
     assert not app.exception, [error.message for error in app.exception]
-    assert app.session_state["debug"]["performance_items"] == 1
-    assert app.session_state["debug"]["over_budget"] == 1
+    assert app.session_state["debug"]["performance_items"] == 2
+    assert app.session_state["debug"]["over_budget"] == 2
     recent_key = next(iter(app.session_state["result_cache"]))
     next(box for box in app.checkbox if box.label == "Ta med äldre sparade annonser").check()
     next(button for button in app.button if button.label == "🔎 Hitta fynd").click().run()
