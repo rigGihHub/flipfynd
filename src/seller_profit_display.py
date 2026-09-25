@@ -33,8 +33,20 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
             "basis": "aktiv jämförelse, inte genomförd försäljning",
         }
 
+    active_margin = _number(row.get("asking_net_margin"))
+    if active_margin is not None:
+        return {
+            "available": True,
+            "value": active_margin,
+            "label": "Nettovinst mot prisindikation",
+            "basis": "aktiva jämförelser, inte genomförda försäljningar",
+        }
+
     net_profit = _number(row.get("net_profit_estimate"))
-    if net_profit is not None and row.get("valuation_display_safe") is True:
+    if net_profit is None:
+        net_profit = _number(row.get("estimated_net_profit"))
+    verified_source = str(row.get("practical_price_source") or "").upper() == "VERIFIED"
+    if net_profit is not None and (row.get("valuation_display_safe") is True or verified_source):
         return {
             "available": True,
             "value": net_profit,
