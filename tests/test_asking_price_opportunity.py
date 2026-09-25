@@ -155,6 +155,18 @@ def test_cheap_base_cards_receive_research_slots_without_sold(monkeypatch):
     assert all(r["seller_deep_route"] == "ASKING_PRICE_RESEARCH" for r in selected)
 
 
+def test_price_research_does_not_waste_slots_on_identity_without_card_number(monkeypatch):
+    monkeypatch.setattr("src.asking_price_opportunity.configured_credentials", lambda: ("id", "secret"))
+    without_number = {
+        "source_item": {
+            "titel": "2023-24 Upper Deck Connor Bedard",
+            "pris": 10,
+            "frakt": 22,
+        }
+    }
+    assert select_asking_price_research([without_number], limit=1) == []
+
+
 def test_missing_credentials_does_not_start_requests(monkeypatch):
     monkeypatch.setattr("src.asking_price_opportunity.configured_credentials", lambda: ("", ""))
     monkeypatch.setattr("src.asking_price_opportunity.fetch_configured_ebay_active_context", lambda *a: pytest.fail("unexpected network"))
