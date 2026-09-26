@@ -86,7 +86,7 @@ def test_fast_preselection_prefers_ordinary_rank_over_cheap_mediocre_card():
     })
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=20, full_limit=10)
     assert out["rows"][0]["title"] == "Elite rookie patch /25"
-    assert out["seller_analysis_contract"] == "v4-priced-adaptive-deep-analysis"
+    assert out["seller_analysis_contract"] == "v5-persistent-coverage-positive-net"
 
 
 def test_verified_buy_ranks_before_equal_rank_skip_via_quick_preselection_stability():
@@ -256,3 +256,29 @@ def test_quick_buy_fallback_cannot_bypass_deep_evidence_gate(monkeypatch):
     monkeypatch.setattr("src.asking_price_opportunity.select_asking_price_research", lambda *a, **k: [])
     result = top.build_seller_top5("seller", [source], analyze_fn=lambda *a, **k: None)
     assert result["rows"] == []
+
+
+def test_repeated_runs_advance_unique_full_analysis_coverage():
+    items = [
+        {
+            "titel": f"2023-24 Upper Deck Exclusive {i}/100 #{i} Player {i}",
+            "tradera_item_id": str(i),
+            "lank": f"large-{i}",
+            "pris": 20 + (i % 30),
+            "decision": "UNDERSÖK",
+            "rank": 40 + (i % 20),
+        }
+        for i in range(452)
+    ]
+    first = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, full_limit=8)
+    second = build_seller_top5(
+        "seller1",
+        items,
+        analyze_fn=_fake_analyze,
+        full_limit=8,
+        analysis_registry=first["analysis_registry"],
+    )
+
+    assert first["full_unique_analysed"] == 24
+    assert second["full_unique_analysed"] > first["full_unique_analysed"]
+    assert second["full_remaining"] < first["full_remaining"]

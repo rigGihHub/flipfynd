@@ -14,6 +14,7 @@ from src.seller_checkpoint_store import clear_checkpoint, load_checkpoint, save_
 from src.public_seller_inventory import parse_profile_url
 from src.seller_proxy_inventory import fetch_proxy_seller_inventory_batch
 from src.seller_top5 import build_seller_top5
+from src.seller_analysis_registry import registry_progress
 from src.seller_card_domain import seller_item_domain_check
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
@@ -91,7 +92,8 @@ def _emit(callback, ui, payload):
             pass
 
 
-def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress_callback=None, ui=None):
+def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source,
+          analysis_registry=None, progress_callback=None, ui=None):
     ui = ui or _SellerProgress(enabled=progress_callback is None)
 
     def combined_progress(payload):
@@ -105,6 +107,7 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source, progress
         sport="all",
         quick_limit=quick_limit,
         full_limit=full_limit,
+        analysis_registry=analysis_registry,
         progress_callback=combined_progress,
     )
     result = dict(result)
@@ -264,6 +267,7 @@ def _partial_result_from_saved(
     resume_required: bool,
     total_listing_estimate: int | None = None,
     public_retry_count: int = 0,
+    analysis_registry=None,
 ):
     """Rank every saved page with the ordinary FlipFynd Seller Top 5 engine.
 
@@ -278,6 +282,7 @@ def _partial_result_from_saved(
         quick_limit=quick_limit,
         full_limit=full_limit,
         source="TRADERA_PUBLIC_PROFILE",
+        analysis_registry=analysis_registry,
         progress_callback=progress_callback,
         ui=ui,
     )
@@ -319,6 +324,7 @@ def _partial_result_from_saved(
             "pages_read": pages_read,
             "items": dict(saved_items),
             "total_listing_estimate": total_listing_estimate,
+            "analysis_registry": ranked.get("analysis_registry") or {},
         },
     })
     return result
@@ -340,6 +346,7 @@ def resolve_seller_top5(
     progress_callback=None,
     database_url=None,
     resume_checkpoint=None,
+    analysis_registry=None,
 ) -> dict:
     alias = str(seller or "").strip()
     profile_text = str(profile_url or "").strip()
@@ -374,6 +381,7 @@ def resolve_seller_top5(
             result = _rank(
                 alias, items, analyze_fn=analyze_fn, quick_limit=quick_limit,
                 full_limit=full_limit, source="TRADERA_API",
+                analysis_registry=analysis_registry,
                 progress_callback=progress_callback, ui=ui,
             )
             result["api_status"] = fetched.get("status") or "OK"
@@ -395,6 +403,11 @@ def resolve_seller_top5(
         checkpoint = furthest_checkpoint(durable_checkpoint, resume_checkpoint)
         if not isinstance(checkpoint, dict):
             checkpoint = {"next_page": 1, "pages_read": 0, "items": {}, "total_listing_estimate": None}
+        checkpoint_registry = checkpoint.get("analysis_registry") if isinstance(checkpoint, dict) else None
+        if isinstance(analysis_registry, dict):
+            if registry_progress(analysis_registry) > registry_progress(checkpoint_registry):
+                checkpoint_registry = analysis_registry
+        checkpoint["analysis_registry"] = checkpoint_registry or {}
         # pages_read must describe unique pages represented by the cursor, not
         # accumulate repeated blocks from stale checkpoints.
         checkpoint["pages_read"] = max(0, int(checkpoint.get("next_page") or 1) - 1)
@@ -407,6 +420,7 @@ def resolve_seller_top5(
                 "pages_read": 0,
                 "items": {},
                 "total_listing_estimate": None,
+                "analysis_registry": checkpoint_registry or {},
             }
             stored_items = {}
             save_checkpoint(key, checkpoint, session=session, database_url=database_url)
@@ -508,6 +522,7 @@ def resolve_seller_top5(
                     "pages_read": max(0, current_page - 1),
                     "items": stored_items,
                     "total_listing_estimate": total_listing_estimate,
+                    "analysis_registry": checkpoint.get("analysis_registry") or {},
                 }
                 save_checkpoint(key, checkpoint, session=session, database_url=database_url)
                 public_failure = None
@@ -521,6 +536,7 @@ def resolve_seller_top5(
                 "pages_read": max(0, current_page - 1),
                 "items": stored_items,
                 "total_listing_estimate": total_listing_estimate,
+                "analysis_registry": checkpoint.get("analysis_registry") or {},
             }
             save_checkpoint(
                 key,
@@ -535,7 +551,7 @@ def resolve_seller_top5(
         api_status = (api_failure or {}).get("status") if api_failure else ("NOT_CONFIGURED" if not creds else "OK")
 
         if public_failure:
-            return _partial_result_from_saved(
+            result = _partial_result_from_saved(
                 alias,
                 stored_items,
                 analyze_fn=analyze_fn,
@@ -555,16 +571,22 @@ def resolve_seller_top5(
                 resume_required=True,
                 total_listing_estimate=total_listing_estimate,
                 public_retry_count=public_retry_count,
+                analysis_registry=checkpoint.get("analysis_registry") or {},
             )
+            checkpoint["analysis_registry"] = result.get("analysis_registry") or {}
+            save_checkpoint(key, checkpoint, session=session, database_url=database_url)
+            return result
 
         if not exhausted:
             save_checkpoint(
                 key,
-                {"next_page": current_page, "pages_read": total_pages_read, "items": stored_items, "total_listing_estimate": total_listing_estimate},
+                {"next_page": current_page, "pages_read": total_pages_read, "items": stored_items,
+                 "total_listing_estimate": total_listing_estimate,
+                 "analysis_registry": checkpoint.get("analysis_registry") or {}},
                 session=session,
                 database_url=database_url,
             )
-            return _partial_result_from_saved(
+            result = _partial_result_from_saved(
                 alias,
                 stored_items,
                 analyze_fn=analyze_fn,
@@ -581,9 +603,12 @@ def resolve_seller_top5(
                 resume_required=False,
                 total_listing_estimate=total_listing_estimate,
                 public_retry_count=public_retry_count,
+                analysis_registry=checkpoint.get("analysis_registry") or {},
             )
+            checkpoint["analysis_registry"] = result.get("analysis_registry") or {}
+            save_checkpoint(key, checkpoint, session=session, database_url=database_url)
+            return result
 
-        clear_checkpoint(key, session=session, database_url=database_url)
         result = _rank(
             alias,
             list(stored_items.values()),
@@ -591,6 +616,7 @@ def resolve_seller_top5(
             quick_limit=quick_limit,
             full_limit=full_limit,
             source="TRADERA_PUBLIC_PROFILE",
+            analysis_registry=checkpoint.get("analysis_registry") or {},
             progress_callback=progress_callback,
             ui=ui,
         )
@@ -600,6 +626,20 @@ def resolve_seller_top5(
         result["fallback_reason"] = "NO_API_CREDENTIALS" if not creds else "API_FAILED"
         result["api_status"] = api_status
         result["public_retry_count"] = public_retry_count
+        result["public_checkpoint"] = {
+            "next_page": current_page,
+            "pages_read": total_pages_read,
+            "items": dict(stored_items),
+            "total_listing_estimate": total_listing_estimate,
+            "analysis_registry": result.get("analysis_registry") or {},
+            "complete": True,
+        }
+        save_checkpoint(
+            key,
+            result["public_checkpoint"],
+            session=session,
+            database_url=database_url,
+        )
         return result
 
     # Only use the local market when no public profile URL was supplied.
@@ -618,6 +658,7 @@ def resolve_seller_top5(
         quick_limit=quick_limit,
         full_limit=full_limit,
         source="LOCAL_MARKET",
+        analysis_registry=analysis_registry,
         progress_callback=progress_callback,
         ui=ui,
     )

@@ -1,4 +1,8 @@
-from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
+from src.seller_profit_display import (
+    build_seller_net_profit_summary,
+    known_negative_net_profit,
+    known_positive_net_profit,
+)
 
 
 def test_active_price_scenario_shows_negative_net_profit():
@@ -49,3 +53,10 @@ def test_known_negative_profit_is_not_a_recommendation():
 def test_nested_negative_asking_margin_is_not_a_recommendation():
     row = {"asking_price_opportunity": {"status": "NO_MARGIN", "net_margin": -62.83}}
     assert known_negative_net_profit(row) is True
+
+
+def test_visible_highlight_requires_calculated_positive_net_profit():
+    assert known_positive_net_profit({"asking_net_margin": 25}) is True
+    assert known_positive_net_profit({"asking_net_margin": 0}) is False
+    assert known_positive_net_profit({"asking_net_margin": -1}) is False
+    assert known_positive_net_profit({"risk_adjusted_profit": 999}) is False

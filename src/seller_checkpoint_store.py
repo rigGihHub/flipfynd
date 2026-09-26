@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.seller_analysis_registry import registry_progress
+
 _ROOT = Path('/tmp/flipfynd_seller_checkpoints')
 
 
@@ -19,14 +21,19 @@ def _namespace(key: str) -> str:
     return f'seller_checkpoint::{digest}'
 
 
-def _progress(value: dict | None) -> tuple[int, int, int]:
+def _progress(value: dict | None) -> tuple[int, int, int, int, int, int]:
     if not isinstance(value, dict):
-        return (0, 0, 0)
+        return (0, 0, 0, 0, 0, 0)
     items = value.get("items") or {}
+    registry = value.get("analysis_registry") or {}
+    full, quick, run = registry_progress(registry)
     return (
         max(1, int(value.get("next_page") or 1)),
         len(items) if isinstance(items, dict) else 0,
         max(0, int(value.get("pages_read") or 0)),
+        full,
+        quick,
+        run,
     )
 
 

@@ -140,7 +140,11 @@ from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.seller_top5 import build_seller_top5, seller_result_tier, seller_has_positive_purchase_price
 from src.asking_price_ui import render_asking_price_opportunity, render_asking_price_shortlist
-from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
+from src.seller_profit_display import (
+    build_seller_net_profit_summary,
+    known_negative_net_profit,
+    known_positive_net_profit,
+)
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
 from src.seller_inventory_triage import build_seller_inventory_triage
@@ -328,7 +332,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.62"
+APP_VERSION = "v0.14.63"
 SELLER_PRESENTATION_CONTRACT = "positive-price-nonnegative-profit-v2"
 
 
@@ -1155,7 +1159,7 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
     signature = build_analysis_signature(
         item,
         data_size=inventory_size,
-        mode=f"seller_v5_pricing_truth_{sport}_{strategy_mode}",
+        mode=f"seller_v6_persistent_coverage_{sport}_{strategy_mode}",
     )
     cached = get_cached_analysis(signature)
     if cached:
@@ -6353,12 +6357,17 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         # the immediately preceding block. Pass it explicitly so
                         # continuation survives DB/session checkpoint lag.
                         resume_checkpoint=_visible_cp,
+                        analysis_registry=(
+                            (_click_result.get("analysis_registry") if isinstance(_click_result, dict) else None)
+                            or (_visible_cp.get("analysis_registry") if isinstance(_visible_cp, dict) else None)
+                            or {}
+                        ),
                     )
                 except TypeError as exc:
                     # Streamlit may hot-reload app.py while keeping an older imported
                     # controller module in memory. Refresh that module automatically and
                     # continue the same user action instead of asking for another click.
-                    if not any(name in str(exc) for name in ("profile_url", "progress_callback", "database_url")):
+                    if not any(name in str(exc) for name in ("profile_url", "progress_callback", "database_url", "analysis_registry")):
                         raise
                     seller_progress_bar.progress(2, text="2% · Synkar analysmotorn automatiskt…")
                     seller_progress_line.info("Ny kod upptäcktes · laddar om Seller Top 5-motorn utan att avbryta sökningen")
@@ -6377,6 +6386,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         full_limit=8,
                         database_url=DATABASE_URL,
                         resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
+                        analysis_registry=_seller_previous_result.get("analysis_registry") or {},
                     )
                 if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
                     top5 = dict(top5)
@@ -6400,7 +6410,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                         pass
                 found_count = int(top5.get("inventory_count") or 0)
                 quick_count = int(top5.get("quick_analysed") or 0)
-                full_count = int(top5.get("full_analysed") or 0)
+                full_count = int(top5.get("full_unique_analysed") or top5.get("full_analysed") or 0)
                 source = top5.get("inventory_source") or "okänd källa"
                 result_status = str(top5.get("status") or "")
                 if result_status == "INVENTORY_PARTIAL":
@@ -6464,6 +6474,15 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             f"estimate={seller_top5_result.get('total_listing_estimate')} | "
             f"resume={bool(seller_top5_result.get('resume_required'))}"
         ]
+        _coverage = seller_top5_result.get("analysis_coverage") or {}
+        if _coverage:
+            _diag_lines.append(
+                f"FF-ANALYSIS-COVERAGE | quick={int(_coverage.get('quick_unique') or 0)}/"
+                f"{int(_coverage.get('inventory_unique') or 0)} | "
+                f"full={int(_coverage.get('full_unique') or 0)}/"
+                f"{int(_coverage.get('inventory_unique') or 0)} | "
+                f"full_remaining={int(_coverage.get('full_remaining') or 0)}"
+            )
         if _start_dbg:
             _diag_lines.append(
                 f"FF-CONTROLLER-START | source={_start_dbg.get('source')} | "
@@ -6499,7 +6518,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             row for row in _ranked_rows
             if (
                 _seller_ui_row_is_safe(row)
-                and not known_negative_net_profit(row)
+                and known_positive_net_profit(row)
                 and seller_has_positive_purchase_price(row)
             )
         ]
@@ -6515,11 +6534,13 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             st.markdown(f"### 🔎 Kandidater värda fortsatt kontroll · {seller_name}")
             st.caption("Inga verifierade fynd ännu. Dessa kort har kortspecifika signaler men är inte köpklara.")
         else:
-            st.markdown(f"### Inga starka fynd hittade ännu · {seller_name}")
-            st.caption("FlipFynd visar inte vanliga bas- och standardkort som utfyllnad.")
+            st.markdown(f"### Inga verifierade fynd i analyserade delen ännu · {seller_name}")
+            st.caption("FlipFynd visar inte minusaffärer, okänd nettovinst eller vanliga standardkort som utfyllnad.")
+        _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
+        _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
         st.caption(
             f"{inv_count} annonser hittade · "
-            f"{int(seller_top5_result.get('full_analysed') or 0)} djupanalyserade"
+            f"{_full_unique} unika djupanalyserade · {_full_remaining} återstår"
         )
         inventory_source = seller_top5_result.get("inventory_source")
         if inventory_source == "TRADERA_API":
@@ -6546,7 +6567,10 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
             st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
         if not rows:
-            st.info("Inget kort klarade kvalitetsgränsen ännu. Top 5 uppdateras när fler sidor läses.")
+            if _full_remaining > 0:
+                st.info("Inget verifierat fynd i den analyserade delen ännu. Fortsatt sökning roterar vidare till tidigare oanalyserade annonser.")
+            else:
+                st.info("Hela det sparade kortlagret är analyserat och inget kort klarade den positiva nettovinst- och evidensgränsen.")
         elif len(rows) < 5:
             st.caption(
                 f"Topplistan innehåller {len(rows)} kort eftersom bara {len(rows)} "

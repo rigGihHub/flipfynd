@@ -66,3 +66,9 @@ def known_negative_net_profit(row: dict | None) -> bool:
     """Whether the available economics prove that buying loses money."""
     summary = build_seller_net_profit_summary(row)
     return summary["available"] and summary["value"] < 0
+
+
+def known_positive_net_profit(row: dict | None) -> bool:
+    """Only highlighted rows with an explicit positive scenario pass."""
+    summary = build_seller_net_profit_summary(row)
+    return summary["available"] and summary["value"] > 0
