@@ -264,6 +264,11 @@ def _seller_presentation_label(row: dict) -> dict:
 
 def seller_result_tier(row: dict) -> str:
     """Separate actual finds from research candidates and weak filler."""
+    # Purchase price is part of the deal identity. A missing/zero price may be
+    # a parser or auction-state failure and must not survive as an internal
+    # FIND merely because another layer later hides it from the UI.
+    if not seller_has_positive_purchase_price(row):
+        return "WEAK"
     if known_negative_net_profit(row):
         return "WEAK"
     decision = str(row.get("decision") or "SKIP").upper()

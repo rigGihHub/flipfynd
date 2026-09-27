@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "description": "Säkerhetskontrakt och positiva kontroller. Detta är inte ett påstående om verklig träffsäkerhet.",
+  "cases": [
+    {
+      "id": "observed-zero-price-linus-ullmark",
+      "source_kind": "observed_ui_regression",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": false,
+      "row": {
+        "title": "Linus Ullmark RC 2015-16 UD Series Two Young Guns #472",
+        "price": 0,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 3,
+        "valuation_confidence": 80,
+        "risk_score": 25,
+        "net_profit_estimate": 25.49,
+        "valuation_display_safe": true
+      }
+    },
+    {
+      "id": "observed-negative-margin-marc-del-gaizo",
+      "source_kind": "observed_ui_regression",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": false,
+      "row": {
+        "title": "2023-24 Upper Deck Marc Del Gaizo Clear Cut Young Guns #498",
+        "price": 99,
+        "decision": "UNDERSÖK",
+        "asking_price_opportunity": {"net_margin": -62.83, "possible_find": false}
+      }
+    },
+    {
+      "id": "observed-negative-margin-isaac-howard",
+      "source_kind": "observed_ui_regression",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": false,
+      "row": {
+        "title": "Isaac Howard RC 2025-26 UD Canvas Young Guns #C-239",
+        "price": 49,
+        "decision": "UNDERSÖK",
+        "asking_price_opportunity": {"net_margin": -16.61, "possible_find": false}
+      }
+    },
+    {
+      "id": "active-asking-only-positive",
+      "source_kind": "synthetic_safety",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": true,
+      "row": {
+        "title": "2023-24 Upper Deck Young Guns #451 Example Player",
+        "price": 50,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 0,
+        "valuation_confidence": 75,
+        "risk_score": 25,
+        "asking_price_opportunity": {"net_margin": 20, "possible_find": true}
+      }
+    },
+    {
+      "id": "risk-adjusted-profit-only",
+      "source_kind": "synthetic_safety",
+      "sport": "football",
+      "expected_find": false,
+      "expected_highlight": false,
+      "row": {
+        "title": "2024-25 Topps Chrome #100 Example Player",
+        "price": 40,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 3,
+        "valuation_confidence": 80,
+        "risk_score": 20,
+        "risk_adjusted_profit": 250
+      }
+    },
+    {
+      "id": "identity-parallel-conflict",
+      "source_kind": "synthetic_safety",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": true,
+      "row": {
+        "title": "2023-24 Upper Deck #451 Example Player Base",
+        "price": 50,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "identity_conflicts": ["parallel"],
+        "sold_comps": 3,
+        "valuation_confidence": 85,
+        "risk_score": 20,
+        "net_profit_estimate": 100,
+        "valuation_display_safe": true
+      }
+    },
+    {
+      "id": "raw-versus-graded-conflict",
+      "source_kind": "synthetic_safety",
+      "sport": "football",
+      "expected_find": false,
+      "expected_highlight": true,
+      "row": {
+        "title": "2023-24 Topps Chrome #25 Example Player Raw",
+        "price": 100,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "identity_conflicts": ["grading_company", "grade"],
+        "sold_comps": 4,
+        "valuation_confidence": 90,
+        "risk_score": 20,
+        "net_profit_estimate": 150,
+        "valuation_display_safe": true
+      }
+    },
+    {
+      "id": "missing-risk",
+      "source_kind": "synthetic_safety",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": true,
+      "row": {
+        "title": "2022-23 Upper Deck Exclusive /100 #88 Example Player",
+        "price": 100,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 3,
+        "valuation_confidence": 80,
+        "net_profit_estimate": 80,
+        "valuation_display_safe": true
+      }
+    },
+    {
+      "id": "lot-cannot-be-buy",
+      "source_kind": "synthetic_safety",
+      "sport": "hockey",
+      "expected_find": false,
+      "expected_highlight": true,
+      "row": {
+        "title": "Lot 10 Upper Deck hockeykort inklusive Young Guns",
+        "price": 100,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 3,
+        "valuation_confidence": 80,
+        "risk_score": 20,
+        "net_profit_estimate": 100,
+        "valuation_display_safe": true
+      }
+    },
+    {
+      "id": "verified-hockey-positive-control",
+      "source_kind": "synthetic_positive_control",
+      "sport": "hockey",
+      "expected_find": true,
+      "expected_highlight": true,
+      "row": {
+        "title": "2022-23 Upper Deck Exclusive 12/100 #88 Example Player",
+        "price": 100,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 3,
+        "valuation_confidence": 85,
+        "risk_score": 25,
+        "net_profit_estimate": 120,
+        "valuation_display_safe": true
+      }
+    },
+    {
+      "id": "verified-football-positive-control",
+      "source_kind": "synthetic_positive_control",
+      "sport": "football",
+      "expected_find": true,
+      "expected_highlight": true,
+      "row": {
+        "title": "2023-24 Topps Chrome Gold 21/50 #77 Example Player",
+        "price": 150,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": true,
+        "sold_comps": 4,
+        "valuation_confidence": 90,
+        "risk_score": 20,
+        "net_profit_estimate": 180,
+        "valuation_display_safe": true
+      }
+    }
+  ]
+}

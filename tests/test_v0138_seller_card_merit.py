@@ -20,7 +20,7 @@ def test_signature_style_is_not_autograph_or_research_merit():
 
 
 def test_numbered_match_attax_can_be_researched_but_is_not_automatically_a_find():
-    row = {"title": "Haaland Match Attax 2024/25 Red 7/25", "collector_signal_score": 18, "sold_comps": 0}
+    row = {"title": "Haaland Match Attax 2024/25 Red 7/25", "price": 50, "collector_signal_score": 18, "sold_comps": 0}
     merit = assess_seller_card_merit(row)
     assert merit["mass_market_base"] is False
     assert merit["eligible"] is True
@@ -30,6 +30,7 @@ def test_numbered_match_attax_can_be_researched_but_is_not_automatically_a_find(
 def test_verified_buy_remains_a_find():
     row = {
         "title": "Connor McDavid Young Guns Rookie", "decision": "KÖP",
+        "price": 100,
         "identity_ok": True, "exact_identity_gate_supports_exact_comp_search": True,
         "sold_comps": 3, "valuation_confidence": 72, "risk_score": 35,
         "risk_adjusted_profit": 100, "net_profit_estimate": 75,

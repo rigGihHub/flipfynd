@@ -5,6 +5,7 @@ from src.seller_top5 import seller_result_tier
 def _row(**updates):
     row = {
         "title": "2015 Upper Deck Young Guns Connor McDavid #201",
+        "price": 100,
         "decision": "KÖP", "identity_ok": True,
         "exact_identity_gate_supports_exact_comp_search": True,
         "sold_comps": 3,

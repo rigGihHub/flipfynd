@@ -25,11 +25,18 @@ _SEALED = re.compile(
 def assess_listing_integrity(item_or_title) -> dict:
     if isinstance(item_or_title, dict):
         title = str(item_or_title.get("titel") or item_or_title.get("title") or "")
+        explicit_lot = item_or_title.get("is_lot") is True
     else:
         title = str(item_or_title or "")
+        explicit_lot = False
     hard_reasons = [name for name, pattern in _HARD_EXCLUSIONS.items() if pattern.search(title)]
     if _SEALED.search(title):
         hard_reasons.append("sealed_product")
+    # A lot can be useful for manual treasure research, but it is not the same
+    # product as an exact single-card comp and may never be purchase-ready.
+    from src.card_parser import detect_lot_info
+    if explicit_lot or detect_lot_info(title).get("is_lot"):
+        hard_reasons.append("lot_or_multipack")
     reprint = bool(_REPRINT.search(title))
     return {
         "eligible_physical_single_card": not hard_reasons,

@@ -117,6 +117,23 @@ def test_zero_price_listing_is_never_presented_as_research_or_find():
     assert out["rows"] == []
 
 
+def test_zero_price_listing_is_weak_at_the_decision_layer_too():
+    from src.seller_top5 import seller_result_tier
+
+    row = {
+        "title": "2015-16 Upper Deck Young Guns #472 Example Player",
+        "price": 0,
+        "decision": "KÖP",
+        "exact_identity_gate_supports_exact_comp_search": True,
+        "sold_comps": 3,
+        "valuation_confidence": 85,
+        "risk_score": 20,
+        "net_profit_estimate": 100,
+        "valuation_display_safe": True,
+    }
+    assert seller_result_tier(row) == "WEAK"
+
+
 def test_explicit_zero_summary_price_is_not_rescued_by_nested_source_price():
     from src.seller_top5 import seller_has_positive_purchase_price
 
