@@ -58,6 +58,15 @@ def _source_name(record):
     return str(record.get("source_platform") or record.get("platform") or record.get("source") or "okänd källa")
 
 
+def _origin_marketplace(record):
+    return str(
+        record.get("origin_marketplace")
+        or record.get("underlying_marketplace")
+        or record.get("sale_marketplace")
+        or ""
+    ).strip()
+
+
 def _has_individual_sale_evidence(record):
     evidence=_norm(record.get("source_sale_evidence"))
     status=_norm(record.get("sale_status") or record.get("status"))
@@ -108,6 +117,7 @@ def build_multi_source_consensus(identity: dict, records: Iterable[dict] | None)
             continue
         accepted.append({
             "source":_source_name(record),
+            "origin_marketplace": _origin_marketplace(record) or None,
             "price_sek":round(price,2),
             "weight":weight,
             "sold_at":record.get("sold_at") or record.get("sold_date") or record.get("date"),

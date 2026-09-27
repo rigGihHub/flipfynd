@@ -42,3 +42,18 @@ def test_router_blocks_when_identity_is_incomplete():
     out = build_comp_acquisition_router({"player_name": "Wayne Gretzky"}, [])
     assert out["status"] == "IDENTITY_NOT_READY"
     assert out["next_source"] is None
+
+
+def test_130point_does_not_invent_an_independent_marketplace():
+    aggregated = sale("130 Point", 21)
+    out = build_comp_acquisition_router(IDENTITY, [sale("Tradera", 18), aggregated])
+    assert out["source_quorum"] is False
+    assert out["status"] == "SEARCH_EBAY"
+
+
+def test_130point_sale_counts_under_verified_origin_marketplace():
+    aggregated = {**sale("130 Point", 21), "origin_marketplace": "eBay"}
+    out = build_comp_acquisition_router(IDENTITY, [sale("Tradera", 18), aggregated])
+    assert out["source_quorum"] is True
+    coverage = {row["key"]: row["count"] for row in out["coverage"]}
+    assert coverage["ebay"] == 1

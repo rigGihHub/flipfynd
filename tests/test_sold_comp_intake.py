@@ -1,4 +1,16 @@
 from src.sold_comp_import import normalize_sold_comp
+
+
+def test_130point_origin_marketplace_survives_normalization():
+    record = normalize_sold_comp({
+        "title": "2023-24 Upper Deck #451 Example Player",
+        "sold_price": 100,
+        "currency": "SEK",
+        "sold": True,
+        "source_platform": "130 Point",
+        "origin_marketplace": "eBay",
+    })
+    assert record["origin_marketplace"] == "eBay"
 from src.sold_comp_intake import review_sold_comp_intake, sold_comp_intake_audit
 
 

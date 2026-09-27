@@ -24,6 +24,10 @@ def test_comp_plan_prioritizes_realized_sales_over_price_guides():
     assert plan["sources"][1]["key"] == "ebay_sold_search"
     assert plan["sources"][-1]["evidence_class"] == "AGGREGATED_PRICE_GUIDE"
     assert any(s["key"] == "sportscardspro" for s in plan["sources"])
+    keys = [source["key"] for source in plan["sources"]]
+    assert keys.index("130point") < keys.index("card_ladder")
+    point = next(source for source in plan["sources"] if source["key"] == "130point")
+    assert point["direct_query_url"] == "https://130point.com/search"
 
 
 def test_sportscardspro_is_research_only_not_automatic_sold_feed():

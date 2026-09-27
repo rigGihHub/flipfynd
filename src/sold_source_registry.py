@@ -92,12 +92,17 @@ SOURCES = (
     {
         "key": "130point",
         "label": "130 Point",
-        "research_url": "https://130point.com/",
+        "research_url": "https://130point.com/search",
         "supports_sports_cards": True,
         "automated_ingestion": False,
         "status": "RESEARCH_ONLY",
         "evidence_type": "SALES_RESEARCH_AGGREGATOR",
-        "note": "Användbar manuell dubbelkontroll av sales. FlipFynd antar ingen officiell publik utvecklarintegration och räknar inte ett visat riktpris som exact comp.",
+        "note": (
+            "Prioriterad manuell multi-market-källa för individuella sales och accepted Best Offer-kontroll. "
+            "130 Point visar även aktiva objekt, så varje post måste verifieras som såld och matchas mot exakt "
+            "kortidentitet. Ursprunglig marknadsplats måste sparas; en 130 Point-post är inte en oberoende "
+            "marknad om den underliggande försäljningen kommer från eBay. Ingen publik API- eller scrapingåtkomst antas."
+        ),
     },
     {
         "key": "sportscardspro",

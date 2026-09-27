@@ -19,3 +19,10 @@ def test_readiness_reports_blocked_direct_api_separately():
     assert summary["automated_count"] == 0
     assert summary["access_blocked_count"] >= 1
     assert access_blocked_sources()
+
+
+def test_130point_is_manual_multi_market_research_not_an_api_claim():
+    source = {row["key"]: row for row in sold_source_registry()}["130point"]
+    assert source["research_url"] == "https://130point.com/search"
+    assert source["automated_ingestion"] is False
+    assert "ursprunglig marknadsplats" in source["note"].casefold()

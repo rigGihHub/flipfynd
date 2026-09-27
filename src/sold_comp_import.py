@@ -188,6 +188,9 @@ def normalize_sold_comp(row: dict, *, provenance: str = "manual_import") -> dict
         record["sold_at"] = sold_at
     if url:
         record["lank"] = url
+    origin_marketplace = _first(row, "origin_marketplace", "underlying_marketplace", "sale_marketplace")
+    if origin_marketplace not in (None, ""):
+        record["origin_marketplace"] = str(origin_marketplace).strip()
     if seller:
         record["saljare"] = seller
     if sport in SUPPORTED_SPORTS:

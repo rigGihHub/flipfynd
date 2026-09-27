@@ -46,7 +46,7 @@ def build_research_links(identity: dict | None) -> dict:
         {"key": "card_ladder", "label": "Card Ladder", "url": "https://www.cardladder.com/", "role": "MULTI_MARKET"},
         {"key": "fanatics", "label": "Fanatics Collect", "url": "https://sales-history.fanaticscollect.com/", "role": "DIRECT_SOLD"},
         {"key": "comc", "label": "COMC", "url": "https://www.comc.com/", "role": "MARKET_CONTEXT"},
-        {"key": "130point", "label": "130 Point", "url": "https://130point.com/", "role": "SALES_RESEARCH"},
+        {"key": "130point", "label": "130 Point", "url": "https://130point.com/search", "role": "DIRECT_SOLD_RESEARCH"},
     ]
     return {"ready": bool(exact.get("ready")), "query": query, "links": links, "missing_fields": exact.get("missing_fields") or []}
 
@@ -113,7 +113,7 @@ def parse_verified_sales_batch(
     """Parse several manually verified sales with minimal repetitive typing.
 
     Expected line format:
-      source | sold_price | currency | fx_rate_to_sek | sold_at | url
+      source | sold_price | currency | fx_rate_to_sek | sold_at | url | origin_marketplace
 
     `fx_rate_to_sek` may be blank for SEK rows. Every row is still routed
     through build_manual_sold_row, so all existing strict verification rules
@@ -132,8 +132,8 @@ def parse_verified_sales_batch(
         if len(parts) < 3:
             errors.append(f"Rad {line_no}: minst source | price | currency krävs.")
             continue
-        parts += [""] * (6 - len(parts))
-        source, price, currency, fx_rate, sold_at, url = parts[:6]
+        parts += [""] * (7 - len(parts))
+        source, price, currency, fx_rate, sold_at, url, origin_marketplace = parts[:7]
         try:
             row = build_manual_sold_row(
                 identity,
@@ -146,6 +146,7 @@ def parse_verified_sales_batch(
                 identity_verified=True,
                 identity_evidence_source=identity_evidence_source,
                 sale_confirmed=True,
+                origin_marketplace=origin_marketplace,
             )
             rows.append(row)
         except ValueError as exc:

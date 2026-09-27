@@ -67,11 +67,11 @@ SOURCE_PROFILES = {
     "130point": {
         "label": "130 Point",
         "evidence_class": "SALES_RESEARCH_AGGREGATOR",
-        "priority": 7,
-        "history": "beror på källa/tjänst",
-        "best_offer_actual": None,
-        "use_for": "Manuell dubbelkontroll när eBay-resultat är tunna eller Best Offer är otydligt.",
-        "valuation_role": "CONTEXT_UNTIL_INDIVIDUAL_SALE_VERIFIED",
+        "priority": 3.5,
+        "history": "multi-market sales history enligt tjänstens tillgängliga resultat",
+        "best_offer_actual": True,
+        "use_for": "Prioriterad manuell sökning efter individuella sales och accepted Best Offer. Kontrollera sold/live, exakt identitet och ursprunglig marknadsplats.",
+        "valuation_role": "PRIMARY_IF_INDIVIDUAL_SALE_AND_ORIGIN_MARKETPLACE_ARE_VERIFIED",
     },
     "sportscardspro": {
         "label": "SportsCardsPro",
@@ -143,6 +143,9 @@ def build_comp_research_plan(identity: dict | None) -> dict:
         elif key == "tradera_sold":
             row["direct_query_url"] = f"https://www.tradera.com/search?q={quote_plus(query)}" if query else "https://www.tradera.com/"
             row["direct_query_note"] = "Tradera-sökningen kan innehålla aktiva annonser. Endast explicit sålda avslut får registreras som SOLD-comp."
+        elif key == "130point":
+            row["direct_query_url"] = "https://130point.com/search"
+            row["direct_query_note"] = "Klistra in den exakta sökfrasen. Kontrollera att träffen är SOLD och spara den ursprungliga marknadsplatsen."
         else:
             row["direct_query_url"] = None
         rows.append(row)

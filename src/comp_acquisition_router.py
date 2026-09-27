@@ -23,13 +23,24 @@ def _norm(value) -> str:
     return " ".join(str(value or "").casefold().strip().split())
 
 
-def _source_group(source: str) -> str:
+def _source_group(source: str, origin_marketplace: str = "") -> str:
     text = _norm(source)
+    origin = _norm(origin_marketplace)
+    if "130 point" in text or "130point" in text:
+        # 130 Point aggregates underlying marketplaces. It is not a separate
+        # market and must not manufacture source diversity.
+        if "ebay" in origin:
+            return "ebay"
+        if "tradera" in origin:
+            return "tradera"
+        if any(token in origin for token in ("fanatics", "goldin", "heritage", "my slabs", "myslabs", "pristine")):
+            return "independent"
+        return "other"
     if "tradera" in text:
         return "tradera"
     if "ebay" in text:
         return "ebay"
-    if any(token in text for token in ("card ladder", "fanatics", "comc", "130 point", "130point")):
+    if any(token in text for token in ("card ladder", "fanatics", "comc")):
         return "independent"
     return "other"
 
@@ -54,7 +65,7 @@ def build_comp_acquisition_router(identity: dict | None, records) -> dict:
     groups = {key: {"key": key, "label": label, "count": 0} for key, label in PRIMARY_SOURCE_GROUPS}
     groups["other"] = {"key": "other", "label": "Övrig verifierad källa", "count": 0}
     for row in consensus.get("accepted") or []:
-        group = _source_group(row.get("source"))
+        group = _source_group(row.get("source"), row.get("origin_marketplace"))
         groups[group]["count"] += 1
 
     exact_count = int(consensus.get("exact_sold_count") or 0)

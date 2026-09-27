@@ -332,7 +332,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.65"
+APP_VERSION = "v0.14.66"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -5497,7 +5497,7 @@ with st.expander("⚙️ Administration & data"):
                             st.caption("SportsCardsPro API kan aktiveras med Streamlit-secret `SPORTSCARDSPRO_TOKEN`. API-värdet används bara som guide/context, aldrig som SOLD.")
 
                         st.markdown("**Batchregistrera flera verifierade exact SOLD**")
-                        st.caption("En rad per sale: `källa | pris | valuta | fx till SEK | datum | URL`. FX lämnas tom för SEK. Exempel: `eBay | 2.15 | USD | 9.50 | 2026-09-01 | https://...`")
+                        st.caption("En rad per sale: `källa | pris | valuta | fx till SEK | datum | URL | ursprunglig marknadsplats`. Sista fältet krävs för 130 Point. Exempel: `130 Point | 2.15 | USD | 9.50 | 2026-09-01 | https://... | eBay`")
                         with st.form("batch_verified_sold_form", clear_on_submit=True):
                             batch_text = st.text_area("Klistra in verifierade sales", height=130, placeholder="eBay | 2.15 | USD | 9.50 | 2026-09-01 | https://...\nTradera | 24 | SEK | | 2026-08-20 | https://...")
                             batch_identity_source = st.text_input("Källa för identitetskontrollen", key="batch_identity_source", placeholder="t.ex. checklist + foto")
@@ -5544,6 +5544,11 @@ with st.expander("⚙️ Administration & data"):
                             ["Tradera", "eBay", "eBay Product Research", "Card Ladder", "Fanatics Collect", "COMC", "130 Point", "SportsCardsPro", "Annan verifierad källa"],
                         )
                         shipping_text = f4.text_input("Frakt (valfritt)", value="")
+                        origin_marketplace = st.text_input(
+                            "Ursprunglig marknadsplats (krävs för 130 Point)",
+                            value="",
+                            help="Exempel: eBay, Fanatics Collect, Goldin eller Heritage. 130 Point är aggregatorn, inte själva marknaden.",
+                        )
                         fx_rate_text = ""
                         if currency != "SEK":
                             fx_rate_text = st.text_input(
@@ -5584,6 +5589,7 @@ with st.expander("⚙️ Administration & data"):
                                 identity_verified=identity_verified,
                                 identity_evidence_source=identity_source,
                                 sale_confirmed=sale_confirmed,
+                                origin_marketplace=origin_marketplace,
                             )
                             result = acquire_sold_batch(
                                 [manual_row],

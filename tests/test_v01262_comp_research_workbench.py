@@ -21,6 +21,7 @@ def test_links_use_structured_exact_identity():
     urls = {row["key"]: row["url"] for row in result["links"]}
     assert "LH_Sold=1" in urls["ebay"]
     assert "sportscardspro.com/search-products" in urls["sportscardspro"]
+    assert urls["130point"] == "https://130point.com/search"
 
 
 def test_batch_capture_requires_explicit_verification():
@@ -51,6 +52,22 @@ def test_batch_capture_builds_multiple_strict_sales():
     assert not result["errors"]
     assert result["rows"][0]["identity_verified"] is True
     assert result["rows"][1]["source_platform"] == "Tradera"
+
+
+def test_130point_batch_requires_and_preserves_origin_marketplace():
+    missing = parse_verified_sales_batch(
+        "130 Point | 25 | USD | 9.50 | 2026-09-01 | https://130point.com/search",
+        identity(), identity_verified=True, identity_evidence_source="checklist", sales_confirmed=True,
+    )
+    assert missing["valid_count"] == 0
+    assert "ursprunglig marknadsplats" in missing["errors"][0]
+
+    valid = parse_verified_sales_batch(
+        "130 Point | 25 | USD | 9.50 | 2026-09-01 | https://130point.com/search | eBay",
+        identity(), identity_verified=True, identity_evidence_source="checklist", sales_confirmed=True,
+    )
+    assert valid["valid_count"] == 1
+    assert valid["rows"][0]["origin_marketplace"] == "eBay"
 
 
 def test_sportscardspro_requires_token_without_network_call():

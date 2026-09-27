@@ -64,6 +64,7 @@ def build_manual_sold_row(
     identity_verified=False,
     identity_evidence_source="",
     sale_confirmed=False,
+    origin_marketplace="",
 ):
     if not sale_confirmed:
         raise ValueError("försäljningen måste vara uttryckligen verifierad innan den kan registreras")
@@ -82,6 +83,9 @@ def build_manual_sold_row(
     source_platform = str(source_platform or "").strip()
     if not source_platform:
         raise ValueError("källa krävs")
+    origin_marketplace = str(origin_marketplace or "").strip()
+    if "130point" in source_platform.casefold().replace(" ", "") and not origin_marketplace:
+        raise ValueError("130 Point kräver ursprunglig marknadsplats, till exempel eBay eller Fanatics Collect")
 
     row = {
         "title": build_exact_research_query(identity).get("query") or "Verifierad kortförsäljning",
@@ -91,6 +95,8 @@ def build_manual_sold_row(
         "sale_status": "sold",
         "sold": True,
     }
+    if origin_marketplace:
+        row["origin_marketplace"] = origin_marketplace
 
     if currency != "SEK":
         if fx_rate_to_sek in (None, ""):
