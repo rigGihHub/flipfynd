@@ -5,9 +5,12 @@ from src.seller_top5 import seller_result_tier
 def _row(**updates):
     row = {
         "title": "2015 Upper Deck Young Guns Connor McDavid #201",
-        "decision": "KÖP", "identity_ok": True, "sold_comps": 3,
+        "decision": "KÖP", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True,
+        "sold_comps": 3,
         "valuation_confidence": 75, "risk_score": 35,
         "risk_adjusted_profit": 100,
+        "net_profit_estimate": 80, "valuation_display_safe": True,
     }
     row.update(updates)
     return row
@@ -19,7 +22,7 @@ def test_only_evidence_complete_buy_is_a_find():
 
 
 def test_buy_without_identity_is_research_not_find():
-    row = _row(identity_ok=False)
+    row = _row(identity_ok=False, exact_identity_gate_supports_exact_comp_search=False)
     assert assess_deal_readiness(row)["ready_for_find"] is False
     assert seller_result_tier(row) == "RESEARCH"
 
@@ -34,3 +37,23 @@ def test_low_valuation_confidence_blocks_find():
     out = assess_deal_readiness(_row(valuation_confidence=40))
     assert out["ready_for_find"] is False
     assert "värderingssäkerheten är under 55/100" in out["blockers"]
+
+
+def test_risk_adjusted_profit_alone_cannot_create_find():
+    out = assess_deal_readiness(_row(net_profit_estimate=None, valuation_display_safe=False))
+    assert out["ready_for_find"] is False
+    assert "verifierad nettovinst saknas" in out["blockers"]
+
+
+def test_active_asking_margin_is_research_only_even_when_positive():
+    row = _row(net_profit_estimate=None, valuation_display_safe=False)
+    row["asking_price_opportunity"] = {"possible_find": True, "net_margin": 500}
+    out = assess_deal_readiness(row)
+    assert out["ready_for_find"] is False
+    assert "aktiva begärda priser" in " ".join(out["blockers"])
+
+
+def test_identity_conflict_blocks_find():
+    out = assess_deal_readiness(_row(identity_conflicts=["parallel"]))
+    assert out["ready_for_find"] is False
+    assert "kortidentiteten innehåller konflikter" in out["blockers"]

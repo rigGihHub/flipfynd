@@ -23,6 +23,18 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
     the user's actual money outcome.
     """
     row = row or {}
+    net_profit = _number(row.get("net_profit_estimate"))
+    if net_profit is None:
+        net_profit = _number(row.get("estimated_net_profit"))
+    verified_source = str(row.get("practical_price_source") or "").upper() == "VERIFIED"
+    if net_profit is not None and (row.get("valuation_display_safe") is True or verified_source):
+        return {
+            "available": True,
+            "value": net_profit,
+            "label": "Nettovinst efter kostnader",
+            "basis": "verifierad marknadsevidens",
+        }
+
     asking = row.get("asking_price_opportunity") or {}
     asking_margin = _number(asking.get("net_margin"))
     if asking_margin is not None:
@@ -40,18 +52,6 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
             "value": active_margin,
             "label": "Nettovinst mot prisindikation",
             "basis": "aktiva jämförelser, inte genomförda försäljningar",
-        }
-
-    net_profit = _number(row.get("net_profit_estimate"))
-    if net_profit is None:
-        net_profit = _number(row.get("estimated_net_profit"))
-    verified_source = str(row.get("practical_price_source") or "").upper() == "VERIFIED"
-    if net_profit is not None and (row.get("valuation_display_safe") is True or verified_source):
-        return {
-            "available": True,
-            "value": net_profit,
-            "label": "Nettovinst efter kostnader",
-            "basis": "verifierad marknadsevidens",
         }
 
     return {

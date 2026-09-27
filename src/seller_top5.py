@@ -20,7 +20,8 @@ from src.seller_card_merit import assess_seller_card_merit
 from src.fast_analysis_pool import select_fast_analysis_pool
 from src.analysis_budget import fast_analysis_budget, seller_deep_analysis_budget
 from src.deal_readiness import assess_deal_readiness
-from src.seller_profit_display import known_negative_net_profit
+from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
+from src.seller_recall_diagnostics import build_seller_coverage_funnel
 from src.seller_analysis_registry import (
     begin_run as begin_analysis_run,
     coverage as analysis_coverage,
@@ -169,7 +170,9 @@ def _seller_opportunity_rank_key(row: dict):
     sold = int(_num(row.get("sold_comps")))
     readiness = assess_deal_readiness(row)
     identity_ok = bool(readiness["identity_verified"])
-    profit = _num(row.get("risk_adjusted_profit"))
+    profit_summary = build_seller_net_profit_summary(row)
+    profit = _num(profit_summary.get("value")) if profit_summary.get("available") else 0.0
+    verified_profit_basis = profit_summary.get("label") == "Nettovinst efter kostnader"
     deal = _num(row.get("deal_score"))
     verified_find = decision.startswith("KÖP") and readiness["ready_for_find"]
     valuation_confidence = max(
@@ -177,13 +180,13 @@ def _seller_opportunity_rank_key(row: dict):
         _num(row.get("valuation_confidence_score")),
     )
     verified_profit = bool(
-        identity_ok and sold > 0 and profit > 0
+        identity_ok and sold > 0 and profit > 0 and verified_profit_basis
         and valuation_confidence >= 55
         and readiness["risk_score"] is not None
         and readiness["risk_score"] <= 65
     )
     evidence_positive_profit = bool(
-        identity_ok and sold > 0 and profit > 0 and valuation_confidence >= 55
+        identity_ok and sold > 0 and profit > 0 and verified_profit_basis and valuation_confidence >= 55
     )
     asking = row.get("asking_price_opportunity") or {}
     asking_find = bool(asking.get("possible_find"))
@@ -212,7 +215,8 @@ def _seller_opportunity_score(row: dict) -> float:
     collector = min(40.0, _num(row.get("collector_signal_score")))
     merit = assess_seller_card_merit(row)
     deal = _num(row.get("deal_score"))
-    profit = _num(row.get("risk_adjusted_profit"))
+    profit_summary = build_seller_net_profit_summary(row)
+    profit = _num(profit_summary.get("value")) if profit_summary.get("available") else 0.0
     sold = int(_num(row.get("sold_comps")))
     score = deal * 0.55 + _num(row.get("rank_score")) * 0.25 + merit["score"] * 0.15 + collector * 0.05
     # Scarcity can route a card into research, but cannot manufacture economic
@@ -633,6 +637,37 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
 
     _emit(progress_callback, phase="ranking", done=len(selected), total=5, percent=97)
     coverage = analysis_coverage(registry, inventory)
+    current_profit_summaries = [build_seller_net_profit_summary(row) for row in full_rows]
+    current_positive_net = sum(
+        1 for summary in current_profit_summaries
+        if summary.get("available") and _num(summary.get("value")) > 0
+    )
+    current_verified_finds = sum(1 for row in full_rows if seller_result_tier(row) == "FIND")
+    selected_profit_summaries = [build_seller_net_profit_summary(row) for row in selected]
+    selected_positive_net = sum(
+        1 for summary in selected_profit_summaries
+        if summary.get("available") and _num(summary.get("value")) > 0
+    )
+    analysis_funnel = build_seller_coverage_funnel(
+        raw_inventory=len(raw_inventory),
+        card_inventory=len(inventory),
+        inventory_unique=int(quick.get("inventory_unique_count") or 0),
+        quick_selected=int(quick.get("fast_pool_count") or 0),
+        quick_success=int(quick.get("analysed_count") or 0),
+        quick_failed=int(quick.get("failed_count") or 0),
+        merit_eligible=len(qualified_quick_rows),
+        asking_routed=len(asking_candidates),
+        merit_routed=len(merit_candidates),
+        exploration_routed=len(exploration_candidates),
+        full_selected=candidate_limit,
+        full_success=len(full_rows),
+        full_failed=failed,
+        positive_net_current=current_positive_net,
+        verified_find_current=current_verified_finds,
+        selected_positive_net=selected_positive_net,
+        cumulative_full_unique=coverage["full_unique"],
+        cumulative_full_remaining=coverage["full_remaining"],
+    )
     common_meta = {
         "seller": alias,
         "inventory_count": len(raw_inventory),
@@ -654,6 +689,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "condition_risks_demoted": condition_risks_demoted,
         "analysis_registry": registry,
         "analysis_coverage": coverage,
+        "analysis_funnel": analysis_funnel,
         "quick_unique_analysed": coverage["quick_unique"],
         "quick_remaining": coverage["quick_remaining"],
         "full_unique_analysed": coverage["full_unique"],

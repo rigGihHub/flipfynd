@@ -20,6 +20,7 @@ def _analysis(risk):
         "exact_identity_gate_supports_exact_comp_search": True,
         "sold_comparable_count": 3, "valuation_confidence_score": 80,
         "rank_score": 90, "risk_adjusted_profit": 100,
+        "net_profit_estimate": 70, "valuation_display_safe": True,
     }
 
 
@@ -40,8 +41,10 @@ def test_full_bridge_preserves_risk_and_buy_boundary(risk, tier):
 
 def _compact(**updates):
     row = {"title": _item()["titel"], "decision": "KÖP", "identity_ok": True,
+           "exact_identity_gate_supports_exact_comp_search": True,
            "sold_comps": 3, "valuation_confidence": 80,
-           "risk_adjusted_profit": 100}
+           "risk_adjusted_profit": 100,
+           "net_profit_estimate": 70, "valuation_display_safe": True}
     row.update(updates)
     return row
 
@@ -71,7 +74,7 @@ def test_stale_summary_cannot_override_higher_source_risk():
 @pytest.mark.parametrize("updates,expected", [
     ({"risk_score": 35}, "🟢 KÖP"),
     ({"risk_score": 90}, "🟡 Värt att undersöka"),
-    ({"risk_score": 35, "identity_ok": False}, "🟡 Värt att undersöka"),
+    ({"risk_score": 35, "identity_ok": False, "exact_identity_gate_supports_exact_comp_search": False}, "🟡 Värt att undersöka"),
     ({"risk_score": 35, "sold_comps": 0}, "🟡 Värt att undersöka"),
     ({"risk_score": 35, "valuation_confidence": 40}, "🟡 Värt att undersöka"),
     ({"risk_score": 35, "analysis_level": "quick_fallback"}, "🟡 Värt att undersöka"),
@@ -99,13 +102,16 @@ def test_seller_pipeline_does_not_publish_high_risk_buy_label():
 def test_positive_profit_without_verified_risk_cannot_get_verified_profit_rank():
     from src.seller_top5 import _seller_opportunity_rank_key
     unsafe = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 3,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 3,
         "risk_adjusted_profit": 500, "valuation_confidence": 90,
         "rank_score": 99, "player_market_score": 99,
     }
     safe = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 1,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 1,
         "risk_adjusted_profit": 50, "valuation_confidence": 70, "risk_score": 20,
+        "net_profit_estimate": 40, "valuation_display_safe": True,
         "rank_score": 40, "player_market_score": 40,
     }
     assert _seller_opportunity_rank_key(safe) > _seller_opportunity_rank_key(unsafe)
@@ -114,11 +120,15 @@ def test_positive_profit_without_verified_risk_cannot_get_verified_profit_rank()
 def test_low_valuation_confidence_cannot_get_verified_profit_rank():
     from src.seller_top5 import _seller_opportunity_rank_key
     low_conf = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 5,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 5,
         "risk_adjusted_profit": 1000, "valuation_confidence": 20, "risk_score": 10,
+        "net_profit_estimate": 900, "valuation_display_safe": True,
     }
     verified = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 1,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 1,
         "risk_adjusted_profit": 40, "valuation_confidence": 70, "risk_score": 20,
+        "net_profit_estimate": 30, "valuation_display_safe": True,
     }
     assert _seller_opportunity_rank_key(verified) > _seller_opportunity_rank_key(low_conf)

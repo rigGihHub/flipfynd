@@ -35,7 +35,11 @@ def test_positive_economics_rank_before_scarcity_only_candidate():
         collector_signals=[],
         sold_comps=2,
         identity_ok=True,
+        exact_identity_gate_supports_exact_comp_search=True,
         valuation_confidence=70,
+        risk_score=20,
+        net_profit_estimate=90,
+        valuation_display_safe=True,
         source_item={"titel": "Verified undervalued card"},
     )
     assert _seller_opportunity_rank_key(economic_candidate) > _seller_opportunity_rank_key(scarcity_only)

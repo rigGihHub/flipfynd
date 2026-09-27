@@ -3,9 +3,11 @@ from src.seller_top5 import _seller_opportunity_rank_key
 
 def test_sold_backed_positive_economics_beats_asking_only_margin():
     sold_backed = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 2,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 2,
         "risk_adjusted_profit": 20, "deal_score": 35, "rank_score": 40,
         "valuation_confidence": 70, "risk_score": 20,
+        "net_profit_estimate": 18, "valuation_display_safe": True,
         "title": "Ordinary card",
     }
     asking_only = {
@@ -30,14 +32,18 @@ def test_asking_only_candidate_still_beats_weak_filler():
 
 def test_negative_profit_hype_cannot_beat_verified_profitable_card():
     profitable = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 2,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 2,
         "risk_adjusted_profit": 8, "deal_score": 25, "rank_score": 25,
         "valuation_confidence": 65, "title": "Ordinary profitable card",
+        "net_profit_estimate": 7, "valuation_display_safe": True,
     }
     loss_making_hype = {
-        "decision": "UNDERSÖK", "identity_ok": True, "sold_comps": 2,
+        "decision": "UNDERSÖK", "identity_ok": True,
+        "exact_identity_gate_supports_exact_comp_search": True, "sold_comps": 2,
         "risk_adjusted_profit": -20, "deal_score": 95, "rank_score": 100,
         "player_market_score": 100, "collector_signal_score": 40,
         "valuation_confidence": 90, "title": "1994 Score Kevin Smyth Rookie",
+        "net_profit_estimate": -20, "valuation_display_safe": True,
     }
     assert _seller_opportunity_rank_key(profitable) > _seller_opportunity_rank_key(loss_making_hype)

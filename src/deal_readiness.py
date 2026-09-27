@@ -4,6 +4,7 @@ from __future__ import annotations
 from math import isfinite
 
 from src.card_listing_integrity import assess_listing_integrity
+from src.seller_profit_display import build_seller_net_profit_summary
 
 
 def _num(value, default=0.0):
@@ -15,16 +16,16 @@ def _num(value, default=0.0):
 
 def assess_deal_readiness(row: dict) -> dict:
     decision = str(row.get("beslut") or row.get("decision") or "SKIP").upper()
+    source = row.get("source_item") or {}
     identity = bool(
         row.get("exact_identity_gate_supports_exact_comp_search")
-        or row.get("exact_identity_gate_supports_dynamic_max_bid")
-        or row.get("identity_ok")
+        or source.get("exact_identity_gate_supports_exact_comp_search")
     )
+    identity_conflicts = list(row.get("identity_conflicts") or source.get("identity_conflicts") or [])
     sold = int(_num(row.get("sold_comparable_count") or row.get("sold_comps")))
     valuation = _num(row.get("valuation_confidence_score") or row.get("valuation_confidence"))
     # Older compact seller rows omitted risk. Recover it from the original
     # analysis, but never turn absent/invalid evidence into a passing default.
-    source = row.get("source_item") or {}
     risk_values = [item.get("risk_score") for item in (row, source)
                    if item.get("risk_score") not in (None, "")]
     parsed_risks = [_num(value, float("nan")) for value in risk_values]
@@ -39,21 +40,27 @@ def assess_deal_readiness(row: dict) -> dict:
         blockers.append("analysen ger ingen köpsignal")
     if not identity:
         blockers.append("exakt kortidentitet är inte verifierad")
+    if identity_conflicts:
+        blockers.append("kortidentiteten innehåller konflikter")
     if sold < 1:
         blockers.append("verifierade SOLD-comps saknas")
     if valuation < 55:
         blockers.append("värderingssäkerheten är under 55/100")
-    # A find must actually make money after the model's risk adjustment.
-    # Famous players, scarcity and a BUY label can never compensate for a
-    # non-positive resale case.
-    profit = _num(
-        row.get("risk_adjusted_profit")
-        if row.get("risk_adjusted_profit") not in (None, "")
-        else row.get("net_profit_estimate") or row.get("net_profit"),
-        0.0,
+    # risk_adjusted_profit is a ranking feature, not an actual money outcome.
+    # KÖP requires an explicit positive net-profit calculation backed by
+    # verified market evidence. Active asking prices remain research-only.
+    profit_summary = build_seller_net_profit_summary(row)
+    verified_profit = bool(
+        profit_summary["available"]
+        and profit_summary["value"] > 0
+        and profit_summary["label"] == "Nettovinst efter kostnader"
     )
-    if profit <= 0:
+    if not profit_summary["available"]:
+        blockers.append("verifierad nettovinst saknas")
+    elif profit_summary["value"] <= 0:
         blockers.append("beräknad nettovinst är inte positiv")
+    elif not verified_profit:
+        blockers.append("nettovinsten bygger endast på aktiva begärda priser")
     if not risk_verified:
         blockers.append("köprisken är inte verifierad")
     elif risk > 65:
@@ -69,8 +76,10 @@ def assess_deal_readiness(row: dict) -> dict:
         "status": "KÖPKLAR" if not blockers else "INTE KÖPKLAR",
         "blockers": blockers,
         "identity_verified": identity,
+        "identity_conflicts": identity_conflicts,
         "sold_comparable_count": sold,
         "valuation_confidence_score": valuation,
         "risk_score": risk,
-        "verified_net_profit": profit,
+        "verified_net_profit": profit_summary["value"] if verified_profit else None,
+        "profit_evidence": profit_summary["basis"],
     }

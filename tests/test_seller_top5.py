@@ -282,3 +282,5 @@ def test_repeated_runs_advance_unique_full_analysis_coverage():
     assert first["full_unique_analysed"] == 24
     assert second["full_unique_analysed"] > first["full_unique_analysed"]
     assert second["full_remaining"] < first["full_remaining"]
+    assert second["analysis_funnel"]["cumulative_full_unique"] == second["full_unique_analysed"]
+    assert second["analysis_funnel"]["recall_measured"] is False

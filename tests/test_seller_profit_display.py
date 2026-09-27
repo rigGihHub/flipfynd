@@ -60,3 +60,13 @@ def test_visible_highlight_requires_calculated_positive_net_profit():
     assert known_positive_net_profit({"asking_net_margin": 0}) is False
     assert known_positive_net_profit({"asking_net_margin": -1}) is False
     assert known_positive_net_profit({"risk_adjusted_profit": 999}) is False
+
+
+def test_verified_sold_economics_wins_over_active_asking_scenario():
+    result = build_seller_net_profit_summary({
+        "net_profit_estimate": 42,
+        "valuation_display_safe": True,
+        "asking_price_opportunity": {"net_margin": -50},
+    })
+    assert result["value"] == 42
+    assert result["label"] == "Nettovinst efter kostnader"

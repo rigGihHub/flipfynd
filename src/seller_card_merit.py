@@ -8,6 +8,7 @@ import re
 
 from src.seller_collector_signals import collector_signals
 from src.card_listing_integrity import assess_listing_integrity
+from src.seller_profit_display import build_seller_net_profit_summary
 
 _MASS_MARKET = re.compile(r"\b(match\s*attax|adrenalyn(?:\s*xl)?|sticker)\b", re.I)
 _FAUX_PREMIUM = re.compile(r"\b(signature\s*style|silver\s*script|facsimile(?:\s*signature)?|printed\s*signature|pre[- ]?printed\s*signature)\b", re.I)
@@ -33,7 +34,7 @@ def assess_seller_card_merit(row: dict) -> dict:
     collector=collector_signals(source); signals=set(collector.get("signals") or []); strong=sorted(signals & _STRONG_SIGNALS)
     sold=int(_num(row.get("sold_comps") or row.get("sold_comparable_count"))); identity_ok=bool(row.get("identity_ok") or row.get("exact_identity_gate_supports_exact_comp_search")); decision=str(row.get("decision") or row.get("beslut") or "SKIP").upper()
     market_value=_num(row.get("market_value") or row.get("estimated_market_value") or row.get("market_value_estimate"),0)
-    profit=_num(row.get("risk_adjusted_profit") or row.get("net_profit_estimate") or row.get("net_profit"),0)
+    profit_summary=build_seller_net_profit_summary(row); profit=_num(profit_summary.get("value"),0) if profit_summary.get("available") else 0
     mass_market_base=bool(_MASS_MARKET.search(title)) and not strong; mass_market_team_badge=bool(_MASS_MARKET.search(title) and _TEAM_BADGE.search(title)); faux_premium=bool(_FAUX_PREMIUM.search(title)); generic_rookie=bool(_ROOKIE_WORD.search(title)) and not strong and sold == 0
     # Base-like means there is no card-specific scarcity/premium trait. A star
     # name may make it collectible, but without SOLD/value/profit evidence that

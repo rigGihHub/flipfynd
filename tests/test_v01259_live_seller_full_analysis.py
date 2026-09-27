@@ -16,6 +16,8 @@ def test_full_analysis_uses_normal_full_pipeline_and_preserves_buy():
             "market_edge_score": 66,
             "max_buy_price": 180,
             "total_acquisition_cost": 120,
+            "net_profit_estimate": 45,
+            "valuation_display_safe": True,
         }
 
     out = full_analyze_live_seller_item(

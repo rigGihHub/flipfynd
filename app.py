@@ -332,8 +332,8 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.63"
-SELLER_PRESENTATION_CONTRACT = "positive-price-nonnegative-profit-v2"
+APP_VERSION = "v0.14.64"
+SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
 def _seller_ui_row_is_safe(row):
@@ -1159,7 +1159,7 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
     signature = build_analysis_signature(
         item,
         data_size=inventory_size,
-        mode=f"seller_v6_persistent_coverage_{sport}_{strategy_mode}",
+        mode=f"seller_v7_verified_profit_gate_{sport}_{strategy_mode}",
     )
     cached = get_cached_analysis(signature)
     if cached:
@@ -6483,6 +6483,16 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
                 f"{int(_coverage.get('inventory_unique') or 0)} | "
                 f"full_remaining={int(_coverage.get('full_remaining') or 0)}"
             )
+        _funnel = seller_top5_result.get("analysis_funnel") or {}
+        if _funnel:
+            _diag_lines.append(
+                f"FF-CANDIDATE-FUNNEL | cards={int(_funnel.get('card_inventory') or 0)} | "
+                f"quick={int(_funnel.get('quick_success') or 0)} | "
+                f"merit={int(_funnel.get('merit_eligible') or 0)} | "
+                f"full={int(_funnel.get('full_success') or 0)} | "
+                f"positive_net={int(_funnel.get('positive_net_current') or 0)} | "
+                f"verified_find={int(_funnel.get('verified_find_current') or 0)}"
+            )
         if _start_dbg:
             _diag_lines.append(
                 f"FF-CONTROLLER-START | source={_start_dbg.get('source')} | "
@@ -6542,6 +6552,26 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             f"{inv_count} annonser hittade · "
             f"{_full_unique} unika djupanalyserade · {_full_remaining} återstår"
         )
+        _result_funnel = seller_top5_result.get("analysis_funnel") or {}
+        if _result_funnel and _seller_result_status != "INVENTORY_PARTIAL":
+            with st.expander("Analystäckning och diagnostik", expanded=False):
+                st.code(
+                    "\n".join([
+                        f"FF-SELLER-ANALYSIS | version={APP_VERSION} | seller={seller_name}",
+                        f"inventory={inv_count} | cards={int(_result_funnel.get('card_inventory') or 0)} | "
+                        f"unique={int(_result_funnel.get('inventory_unique') or 0)}",
+                        f"quick={int(_result_funnel.get('quick_success') or 0)} | "
+                        f"merit={int(_result_funnel.get('merit_eligible') or 0)} | "
+                        f"full={int(_result_funnel.get('full_success') or 0)}",
+                        f"positive_net={int(_result_funnel.get('positive_net_current') or 0)} | "
+                        f"verified_find={int(_result_funnel.get('verified_find_current') or 0)} | "
+                        f"shown={len(_seller_display_rows)}",
+                        f"full_unique={_full_unique} | full_remaining={_full_remaining} | "
+                        f"coverage={float(_result_funnel.get('cumulative_full_coverage_pct') or 0):.1f}%",
+                        "recall=not_measured_without_labelled_ground_truth",
+                    ]),
+                    language=None,
+                )
         inventory_source = seller_top5_result.get("inventory_source")
         if inventory_source == "TRADERA_API":
             st.caption("Live via Tradera")
