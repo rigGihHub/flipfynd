@@ -32,3 +32,22 @@ def test_negative_model_indications_do_not_fill_an_unsafe_top_five():
         "guide_price": 20 + index,
     } for index in range(5)]
     assert build_opportunity_top5(listings, limit=5)["rows"] == []
+
+
+def test_low_model_guide_does_not_hide_positive_exact_active_comparison():
+    listing = {
+        "titel": "2023-24 Upper Deck Young Guns #201 Player Example",
+        "lank": "https://www.tradera.com/item/active-comp",
+        "analysis_total_cost": 35,
+        "guide_price": 10,
+        "asking_price_opportunity": {
+            "status": "POSSIBLE_FIND", "possible_find": True,
+            "reference_asking_price": 90, "net_margin": 43,
+            "comparison_count": 2, "comparisons": [],
+        },
+    }
+    result = build_opportunity_top5([listing], limit=5)["rows"]
+    assert len(result) == 1
+    assert result[0]["asking_positive"] is True
+    assert result[0]["practical_price_source"] == "ACTIVE_PRICE"
+    assert result[0]["practical_margin"] == 55
