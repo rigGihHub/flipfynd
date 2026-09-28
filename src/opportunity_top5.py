@@ -464,16 +464,12 @@ def build_opportunity_top5(items, limit=5):
         deduped.append(row)
         if len(deduped) >= max(0, int(limit)):
             break
-    # Apply the reality gate first, but always return the requested number of
-    # best analysed candidates. The usefulness guard may remove known losses;
-    # refill those empty slots from the gated ranking as clearly labelled
-    # REMAINDER/UNDERSÖK rows rather than returning a one-row "Top 5".
-    # Filter known loss scenarios before limiting the list. Filtering only in
-    # the Streamlit view can discard all five selected rows while viable rows
-    # remain farther down the ranked pool.
+    # A shorter list is preferable to filling it with candidates whose only
+    # available price indication is already at/below acquisition cost.
     gated_rows = [
         row for row in gate_and_sort(rows, limit=max(limit * 20, len(rows)))
         if not known_negative_net_profit(row)
+        and (row.get("practical_margin") is None or row["practical_margin"] > 0)
     ]
     final_rows = build_useful_top5(gated_rows, limit=limit)
     seen_final = {(row.get("url") or str(row.get("title") or "").casefold()) for row in final_rows}
