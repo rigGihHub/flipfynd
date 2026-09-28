@@ -20,7 +20,12 @@ from src.seller_card_merit import assess_seller_card_merit
 from src.fast_analysis_pool import select_fast_analysis_pool
 from src.analysis_budget import fast_analysis_budget, seller_deep_analysis_budget
 from src.deal_readiness import assess_deal_readiness
-from src.seller_profit_display import build_seller_net_profit_summary, known_negative_net_profit
+from src.seller_profit_display import (
+    build_seller_net_profit_summary,
+    known_negative_net_profit,
+    known_positive_net_profit,
+    positive_active_price_indication,
+)
 from src.seller_recall_diagnostics import build_seller_coverage_funnel
 from src.seller_analysis_registry import (
     begin_run as begin_analysis_run,
@@ -172,7 +177,7 @@ def _seller_opportunity_rank_key(row: dict):
     identity_ok = bool(readiness["identity_verified"])
     profit_summary = build_seller_net_profit_summary(row)
     profit = _num(profit_summary.get("value")) if profit_summary.get("available") else 0.0
-    verified_profit_basis = profit_summary.get("label") == "Nettovinst efter kostnader"
+    verified_profit_basis = profit_summary.get("evidence_kind") == "VERIFIED_SOLD"
     deal = _num(row.get("deal_score"))
     verified_find = decision.startswith("KÖP") and readiness["ready_for_find"]
     valuation_confidence = max(
@@ -189,7 +194,11 @@ def _seller_opportunity_rank_key(row: dict):
         identity_ok and sold > 0 and profit > 0 and verified_profit_basis and valuation_confidence >= 55
     )
     asking = row.get("asking_price_opportunity") or {}
-    asking_find = bool(asking.get("possible_find"))
+    asking_find = bool(
+        asking.get("possible_find")
+        and positive_active_price_indication(row)
+        and not known_positive_net_profit(row)
+    )
     research = seller_result_tier(row) == "RESEARCH"
     merit = assess_seller_card_merit(row)
 
@@ -614,8 +623,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     # Research candidates must have passed the explicit seller-card merit gate;
     # otherwise the truthful result is fewer than five cards.
     # Quick rows remain internal research candidates. The Streamlit result
-    # view separately requires a calculated positive net-profit scenario, so
-    # they can guide later deep analysis without becoming visible buy leads.
+    # view separately blocks known losses and invalid prices, so they can guide
+    # later deep analysis without becoming visible buy leads.
     fallback_pool = qualified_quick_rows if (full_rows or failed > 0) else []
     for qrow in fallback_pool:
         if len(selected) >= 5:
@@ -645,13 +654,21 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     current_profit_summaries = [build_seller_net_profit_summary(row) for row in full_rows]
     current_positive_net = sum(
         1 for summary in current_profit_summaries
-        if summary.get("available") and _num(summary.get("value")) > 0
+        if (
+            summary.get("available")
+            and _num(summary.get("value")) > 0
+            and summary.get("evidence_kind") == "VERIFIED_SOLD"
+        )
     )
     current_verified_finds = sum(1 for row in full_rows if seller_result_tier(row) == "FIND")
     selected_profit_summaries = [build_seller_net_profit_summary(row) for row in selected]
     selected_positive_net = sum(
         1 for summary in selected_profit_summaries
-        if summary.get("available") and _num(summary.get("value")) > 0
+        if (
+            summary.get("available")
+            and _num(summary.get("value")) > 0
+            and summary.get("evidence_kind") == "VERIFIED_SOLD"
+        )
     )
     analysis_funnel = build_seller_coverage_funnel(
         raw_inventory=len(raw_inventory),
