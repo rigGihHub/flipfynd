@@ -331,7 +331,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.71"
+APP_VERSION = "v0.14.72"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -2295,6 +2295,13 @@ if st.session_state.get("results") is not None:
                         f"användbart jämförpris {price_funnel.get('usable_reference', 0)} → "
                         f"möjliga fynd {price_funnel.get('possible_find', 0)}"
                     )
+                    total_price_routes = int(current_debug.get("price_routes_in_filtered_inventory") or 0)
+                    if total_price_routes:
+                        st.caption(
+                            f"Exakt sökbara i hela det filtrerade urvalet: {total_price_routes} · "
+                            f"ytterligare {int(current_debug.get('price_routes_added_to_fast_pool') or 0)} "
+                            "fick plats i den begränsade analysen."
+                        )
                     statuses = (st.session_state.get("debug") or {}).get("price_research_status_counts") or {}
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))
