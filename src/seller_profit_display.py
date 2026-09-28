@@ -33,6 +33,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
             "value": net_profit,
             "label": "Nettovinst efter kostnader",
             "basis": "verifierad marknadsevidens",
+            "evidence_kind": "VERIFIED_SOLD",
         }
 
     asking = row.get("asking_price_opportunity") or {}
@@ -43,6 +44,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
             "value": asking_margin,
             "label": "Nettovinst mot prisindikation",
             "basis": "aktiv jämförelse, inte genomförd försäljning",
+            "evidence_kind": "ACTIVE_ASKING",
         }
 
     active_margin = _number(row.get("asking_net_margin"))
@@ -52,6 +54,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
             "value": active_margin,
             "label": "Nettovinst mot prisindikation",
             "basis": "aktiva jämförelser, inte genomförda försäljningar",
+            "evidence_kind": "ACTIVE_ASKING",
         }
 
     return {
@@ -59,6 +62,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
         "value": None,
         "label": "Nettovinst",
         "basis": "ej beräkningsbar med tillräckligt underlag",
+        "evidence_kind": "UNAVAILABLE",
     }
 
 
@@ -69,6 +73,20 @@ def known_negative_net_profit(row: dict | None) -> bool:
 
 
 def known_positive_net_profit(row: dict | None) -> bool:
-    """Only highlighted rows with an explicit positive scenario pass."""
+    """Whether verified SOLD-backed economics prove a positive resale outcome."""
     summary = build_seller_net_profit_summary(row)
-    return summary["available"] and summary["value"] > 0
+    return (
+        summary["available"]
+        and summary["value"] > 0
+        and summary.get("evidence_kind") == "VERIFIED_SOLD"
+    )
+
+
+def positive_active_price_indication(row: dict | None) -> bool:
+    """Whether active listings show a positive research-only scenario."""
+    summary = build_seller_net_profit_summary(row)
+    return (
+        summary["available"]
+        and summary["value"] > 0
+        and summary.get("evidence_kind") == "ACTIVE_ASKING"
+    )
