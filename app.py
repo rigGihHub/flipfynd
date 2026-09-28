@@ -331,7 +331,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.69"
+APP_VERSION = "v0.14.70"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -2309,6 +2309,12 @@ if st.session_state.get("results") is not None:
                             f"{labels.get(reason, reason)}: {count}"
                             for reason, count in sorted(failure_reasons.items())
                         ))
+                    attempted = int(current_debug.get("broader_price_search_attempted") or 0)
+                    if attempted:
+                        st.caption(
+                            f"Bredare eBay-sökning: {attempted} försök, "
+                            f"{int(current_debug.get('broader_price_search_usable') or 0)} gav ett exakt jämförbart pris."
+                        )
                     target = int(current_debug.get("mispricing_sweep_target") or 0)
                     eligible = int(price_funnel.get("searchable_identity") or 0)
                     usable = int(price_funnel.get("usable_reference") or 0)
