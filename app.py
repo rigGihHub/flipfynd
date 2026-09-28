@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import json
 import re
 import subprocess
@@ -120,7 +121,8 @@ from src.fast_analysis_pool import select_fast_analysis_pool
 from src.card_listing_integrity import assess_listing_integrity
 from src.analysis_budget import fast_analysis_budget
 from src.search_run_cache import build_search_run_signature, get_reusable_search, store_reusable_search
-from src.ordinary_analysis_pipeline_v2 import analyze_data as shared_analyze_data
+from src import asking_price_opportunity as _asking_price_module
+from src import ordinary_analysis_pipeline_v2 as _ordinary_pipeline
 try:
     from src.persistent_search_jobs import (
         available as jobs_available, create_job, latest_active_job, latest_completed_job, latest_job,
@@ -331,7 +333,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.73"
+APP_VERSION = "v0.14.74"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -1179,7 +1181,14 @@ def analyze_data(*args, **kwargs):
     """Compatibility wrapper: UI and worker now share one analysis pipeline."""
     kwargs.setdefault("data_version", get_data_version())
     kwargs.setdefault("sold_comp_data", get_sold_comp_data())
-    return shared_analyze_data(*args, **kwargs)
+    # Streamlit reruns app.py inside a long-lived Python process. Rebinding an
+    # imported function at startup can retain an older pipeline and its price
+    # matcher across deployments even while the visible app version changes.
+    if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
+        importlib.reload(_asking_price_module)
+        importlib.reload(_ordinary_pipeline)
+        _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
+    return _ordinary_pipeline.analyze_data(*args, **kwargs)
 
 
 ensure_state()
@@ -2285,6 +2294,7 @@ if st.session_state.get("results") is not None:
                 with st.expander("💰 Prisresearch – felsökning", expanded=True):
                     ebay_ready = bool(current_debug.get("ebay_credentials_configured"))
                     st.write("eBay API: " + ("✅ konfigurerad" if ebay_ready else "❌ saknar EBAY_CLIENT_ID / EBAY_CLIENT_SECRET"))
+                    st.caption("Analysmotor: " + str(current_debug.get("analysis_engine_marker") or "äldre motor – uppdatera analysen"))
                     st.write(
                         f"Sökbar identitet {price_funnel.get('searchable_identity', 0)} → "
                         f"routade {price_funnel.get('routed', 0)} "
@@ -2296,12 +2306,11 @@ if st.session_state.get("results") is not None:
                         f"möjliga fynd {price_funnel.get('possible_find', 0)}"
                     )
                     total_price_routes = int(current_debug.get("price_routes_in_filtered_inventory") or 0)
-                    if total_price_routes:
-                        st.caption(
-                            f"Exakt sökbara i hela det filtrerade urvalet: {total_price_routes} · "
-                            f"ytterligare {int(current_debug.get('price_routes_added_to_fast_pool') or 0)} "
-                            "fick plats i den begränsade analysen."
-                        )
+                    st.caption(
+                        f"Exakt sökbara i hela det filtrerade urvalet: {total_price_routes} · "
+                        f"ytterligare {int(current_debug.get('price_routes_added_to_fast_pool') or 0)} "
+                        "fick plats i den begränsade analysen."
+                    )
                     statuses = (st.session_state.get("debug") or {}).get("price_research_status_counts") or {}
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))
