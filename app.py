@@ -331,7 +331,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.67"
+APP_VERSION = "v0.14.68"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -2298,6 +2298,17 @@ if st.session_state.get("results") is not None:
                     statuses = (st.session_state.get("debug") or {}).get("price_research_status_counts") or {}
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))
+                    failure_reasons = current_debug.get("price_research_failure_reasons") or {}
+                    if failure_reasons:
+                        labels = {
+                            "NO_SEARCH_RESULTS": "eBay gav inga annonser",
+                            "NO_EXACT_MATCH": "träffar fanns men inget exakt jämförbart kort",
+                            "NO_CONVERTIBLE_PRICE_OR_FX": "pris eller valutakurs saknades",
+                        }
+                        st.caption("Utan jämförpris: " + " · ".join(
+                            f"{labels.get(reason, reason)}: {count}"
+                            for reason, count in sorted(failure_reasons.items())
+                        ))
                     target = int(current_debug.get("mispricing_sweep_target") or 0)
                     eligible = int(price_funnel.get("searchable_identity") or 0)
                     usable = int(price_funnel.get("usable_reference") or 0)
