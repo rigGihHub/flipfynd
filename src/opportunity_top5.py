@@ -14,6 +14,7 @@ from src.lot_treasure_hunter import build_lot_treasure_signal
 from src.top5_reality_gate import gate_and_sort
 from src.opportunity_discovery_signals import opportunity_discovery_score, opportunity_discovery_signals
 from src.top5_usefulness_guard import build_useful_top5
+from src.seller_profit_display import known_negative_net_profit
 
 
 def _n(value, default=0.0):
@@ -467,7 +468,13 @@ def build_opportunity_top5(items, limit=5):
     # best analysed candidates. The usefulness guard may remove known losses;
     # refill those empty slots from the gated ranking as clearly labelled
     # REMAINDER/UNDERSÖK rows rather than returning a one-row "Top 5".
-    gated_rows = gate_and_sort(rows, limit=max(limit * 20, len(rows)))
+    # Filter known loss scenarios before limiting the list. Filtering only in
+    # the Streamlit view can discard all five selected rows while viable rows
+    # remain farther down the ranked pool.
+    gated_rows = [
+        row for row in gate_and_sort(rows, limit=max(limit * 20, len(rows)))
+        if not known_negative_net_profit(row)
+    ]
     final_rows = build_useful_top5(gated_rows, limit=limit)
     seen_final = {(row.get("url") or str(row.get("title") or "").casefold()) for row in final_rows}
     if len(final_rows) < limit:
