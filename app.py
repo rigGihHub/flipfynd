@@ -331,7 +331,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.69"
+APP_VERSION = "v0.14.71"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -2337,7 +2337,7 @@ if st.session_state.get("results") is not None:
                 st.caption(f"{actual_find_count} kandidat(er) har verklig positiv prisindikation i den här körningen. Övriga rader är bäst av resten.")
             else:
                 st.markdown("### 🔎 Närmast fyndgränsen – inga fynd hittades")
-                st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Listan visar de fem kandidater som ligger närmast en lönsam vidareförsäljning av det som kunde prisbedömas.")
+                st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Endast kandidater utan känd minusmarginal kan visas för vidare kontroll.")
             if rescued_count:
                 st.caption(f"{rescued_count} kandidat(er) visas för vidare kontroll trots att positiv marginal inte är bevisad.")
             if not top_rows:

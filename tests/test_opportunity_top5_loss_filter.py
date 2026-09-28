@@ -22,3 +22,13 @@ def test_known_fee_adjusted_losses_cannot_consume_top_five_slots():
     selected = build_opportunity_top5(listings, limit=5)["rows"]
     assert [row["url"] for row in selected] == ["https://www.tradera.com/item/5"]
     assert all(not known_negative_net_profit(row) for row in selected)
+
+
+def test_negative_model_indications_do_not_fill_an_unsafe_top_five():
+    listings = [{
+        "titel": f"2024 Topps Chrome Player {index} #12",
+        "lank": f"https://www.tradera.com/item/model-{index}",
+        "analysis_total_cost": 60,
+        "guide_price": 20 + index,
+    } for index in range(5)]
+    assert build_opportunity_top5(listings, limit=5)["rows"] == []
