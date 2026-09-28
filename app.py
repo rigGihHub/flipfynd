@@ -143,7 +143,6 @@ from src.asking_price_ui import render_asking_price_opportunity, render_asking_p
 from src.seller_profit_display import (
     build_seller_net_profit_summary,
     known_negative_net_profit,
-    known_positive_net_profit,
 )
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.seller_top5_controller import reset_seller_top5_search, resolve_seller_top5
@@ -332,7 +331,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.66"
+APP_VERSION = "v0.14.67"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -6534,7 +6533,7 @@ with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search
             row for row in _ranked_rows
             if (
                 _seller_ui_row_is_safe(row)
-                and known_positive_net_profit(row)
+                and not known_negative_net_profit(row)
                 and seller_has_positive_purchase_price(row)
             )
         ]
