@@ -75,6 +75,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
+        "analysis_engine_marker": "raw-title-price-coverage-v01474",
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
