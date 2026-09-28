@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 import requests
 
 from src.card_parser import parse_card_features
+from src.research_title_identity import build_research_title_identity
 from src.card_listing_integrity import assess_listing_integrity
 from src.comp_source_intelligence import exact_identity_query
 from src.ebay_browse_context import configured_credentials, fetch_configured_ebay_active_context
@@ -154,10 +155,20 @@ def build_asking_price_opportunity(item, context, *, fx=None):
 
 
 def asking_research_identity(item):
-    parsed = parse_card_features(str(item.get("titel") or item.get("title") or ""))
+    title = str(item.get("titel") or item.get("title") or "")
+    parsed = parse_card_features(title)
     fields = dict(parsed)
-    fields.update(item.get("exact_identity_gate_research_identity_fields")
-                  or item.get("exact_identity_gate_identity_fields") or {})
+    gated = (item.get("exact_identity_gate_research_identity_fields")
+             or item.get("exact_identity_gate_identity_fields") or {})
+    if gated:
+        fields.update(gated)
+    else:
+        # Raw listings have not yet passed the expensive analyzer. The same
+        # title recovery used by that analyzer may route research, but it
+        # never establishes a verified card identity or a purchase decision.
+        recovered = build_research_title_identity(title)
+        if recovered.get("complete"):
+            fields.update({key: value for key, value in recovered["fields"].items() if value})
     fields["serial_denominator"] = fields.get("serial_denominator") or parsed.get("serial_number")
     return fields
 
