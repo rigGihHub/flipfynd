@@ -4,7 +4,7 @@ import pytest
 
 from src.asking_price_opportunity import (
     attach_asking_price_opportunity, build_asking_price_opportunity,
-    parse_ecb_rates, select_asking_price_research,
+    broader_asking_query, parse_ecb_rates, select_asking_price_research,
 )
 from src.ebay_browse_context import fetch_ebay_active_context
 from src.seller_top5 import seller_result_tier, _seller_opportunity_rank_key
@@ -50,6 +50,20 @@ def test_missing_comparison_explains_which_evidence_stage_failed():
     assert mismatch["comparison_failure_reason"] == "NO_EXACT_MATCH"
     assert missing_fx["comparison_failure_reason"] == "NO_CONVERTIBLE_PRICE_OR_FX"
     assert not any(row["possible_find"] for row in (empty, mismatch, missing_fx))
+
+
+def test_broader_query_does_not_pretend_that_missing_traits_match():
+    identity = {**IDENTITY, "parallel": "Gold", "serial_denominator": "50"}
+    query = broader_asking_query(identity)
+    assert query == "Connor Bedard Upper Deck 451"
+    # The second search may return a base card, but it cannot become a price
+    # comparison for the numbered Gold parallel.
+    from src.ebay_browse_context import fetch_ebay_active_context
+    context = fetch_ebay_active_context(
+        query, identity=identity, client_id="id", client_secret="secret",
+        session=Session(title=TITLE),
+    )
+    assert not any(row["asking_comparison_eligible"] for row in context["rows"])
 
 
 @pytest.mark.parametrize("price", [1, 30, 38])
