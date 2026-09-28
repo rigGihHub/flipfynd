@@ -19,11 +19,7 @@ from src.top5_verification_budget import add_top5_verification_indices
 from src.latest_market import latest_analysis_items
 from src.analysis_scope import select_recent_archive_fast_pool
 from src.pricing import total_acquisition_cost
-from src.asking_price_opportunity import (
-    attach_asking_price_opportunity, asking_research_identity,
-    broader_asking_query, select_asking_price_research,
-)
-from src.comp_source_intelligence import exact_identity_query
+from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 from src.ebay_browse_context import configured_credentials
 
 def analyze_data(
@@ -486,41 +482,6 @@ def analyze_data(
         debug["asking_price_routed"] = len(set(routed_indices + adaptive_price_indices))
     else:
         debug["adaptive_price_research_added"] = 0
-
-    # The official search sometimes returns no listings for a long exact query.
-    # Try a shorter query for a small, ranked subset. The returned listings
-    # still pass the unchanged exact-card eligibility and economic gates.
-    empty_searches = [
-        (idx, item) for idx, item in full_by_index.items()
-        if (item.get("asking_price_opportunity") or {}).get("comparison_failure_reason") == "NO_SEARCH_RESULTS"
-    ]
-    def _research_priority(value):
-        try:
-            return float(value or 0)
-        except (TypeError, ValueError):
-            return 0.0
-    empty_searches.sort(key=lambda pair: (
-        _research_priority(pair[1].get("opportunity_priority_score") or pair[1].get("rank_score")),
-        _research_priority(pair[1].get("special_engine_strength")),
-    ), reverse=True)
-    fallback_attempted = 0
-    fallback_usable = 0
-    for idx, item in empty_searches[:12]:
-        identity = asking_research_identity(item)
-        query = broader_asking_query(identity)
-        if not query or query == exact_identity_query(identity):
-            continue
-        refreshed = attach_asking_price_opportunity(item, query_override=query)
-        full_by_index[idx] = refreshed
-        original = candidates[idx][0]
-        signature = build_analysis_signature(
-            original, data_size=len(data), mode=f"{sport}_{strategy}_{data_version}",
-        )
-        set_cached_analysis(signature, refreshed)
-        fallback_attempted += 1
-        fallback_usable += bool((refreshed.get("asking_price_opportunity") or {}).get("reference_asking_price"))
-    debug["broader_price_search_attempted"] = fallback_attempted
-    debug["broader_price_search_usable"] = fallback_usable
 
     for idx, (original, fast, _attention) in enumerate(candidates):
         analysed = full_by_index.get(idx, fast)

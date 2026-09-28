@@ -234,17 +234,7 @@ def select_asking_price_research(rows, *, limit=24):
     return [dict(row, seller_deep_route="ASKING_PRICE_RESEARCH") for *_, row in chosen]
 
 
-def broader_asking_query(identity):
-    """A second discovery query; the exact-card evidence gate stays unchanged."""
-    player = " ".join(str(identity.get("player_name") or "").split())
-    number = " ".join(str(identity.get("card_number") or "").lstrip("#").split())
-    if not player or not number:
-        return ""
-    set_name = " ".join(str(identity.get("set_name") or "").split())
-    return " ".join(part for part in (player, set_name, number) if part)
-
-
-def attach_asking_price_opportunity(item, *, query_override=None):
+def attach_asking_price_opportunity(item):
     """Enrich full analyses only; no network request without usable identity/keys."""
     out = dict(item)
     identity = asking_research_identity(out)
@@ -256,15 +246,13 @@ def attach_asking_price_opportunity(item, *, query_override=None):
     if not client_id or not client_secret:
         return out
     try:
-        context = fetch_configured_ebay_active_context(query_override or exact_identity_query(identity), identity)
+        context = fetch_configured_ebay_active_context(exact_identity_query(identity), identity)
         fx = _cached_fx(int(time.time() // 3600)) if any(
             row.get("asking_comparison_eligible") and row.get("currency") != "SEK"
             for row in context.get("rows") or []
         ) else None
         out["ebay_active_context"] = context
         out["asking_price_opportunity"] = build_asking_price_opportunity(out, context, fx=fx)
-        if query_override:
-            out["asking_price_opportunity"]["broader_search_attempted"] = True
     except requests.HTTPError as exc:
         response = getattr(exc, "response", None)
         out["asking_price_opportunity"] = {
