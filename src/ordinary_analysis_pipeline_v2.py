@@ -17,10 +17,11 @@ from src.market_sweep_engine import build_market_sweep_map, select_market_sweep_
 from src.find_more_cards import select_second_pass_indices
 from src.top5_verification_budget import add_top5_verification_indices
 from src.latest_market import latest_analysis_items
-from src.analysis_scope import select_recent_archive_fast_pool
+from src.analysis_scope import select_recent_archive_fast_pool, _listing_key
 from src.pricing import total_acquisition_cost
 from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 from src.ebay_browse_context import configured_credentials
+from src.price_route_coverage import add_price_route_coverage
 
 def analyze_data(
     data,
@@ -226,7 +227,26 @@ def analyze_data(
         cap=fast_pool_budget,
         include_older=include_older,
     )
+    # Price research formerly saw only this bounded fast pool. Reserve some
+    # slots for exact-identifiable cards anywhere in the filtered inventory,
+    # keeping the same CPU cap and the existing recent-first protected lane.
+    all_price_routes = select_asking_price_research(
+        [{"source_item": row} for row in integrity_eligible],
+        limit=max(1, len(integrity_eligible)),
+    )
+    fast_pool_source, price_route_added = add_price_route_coverage(
+        fast_pool_source,
+        [route["source_item"] for route in all_price_routes],
+        max_new=min(40, fast_pool_budget // 4),
+    )
+    latest_keys = {_listing_key(row) for row in latest_scope if isinstance(row, dict)}
+    scope_debug["latest_fast_selected"] = sum(
+        _listing_key(row) in latest_keys for row in fast_pool_source
+    )
+    scope_debug["archive_fast_selected"] = len(fast_pool_source) - scope_debug["latest_fast_selected"]
     debug.update(scope_debug)
+    debug["price_routes_in_filtered_inventory"] = len(all_price_routes)
+    debug["price_routes_added_to_fast_pool"] = price_route_added
     debug["fast_pool_budget"] = fast_pool_budget
     debug["fast_pool_selected"] = len(fast_pool_source)
     debug["fast_pool_skipped"] = max(0, debug["cheap_filtered_candidates"] - len(fast_pool_source))
