@@ -39,6 +39,19 @@ def test_single_active_price_is_research_signal_not_possible_find():
     assert not out["creates_sold_evidence"]
 
 
+def test_missing_comparison_explains_which_evidence_stage_failed():
+    empty = build_asking_price_opportunity(ITEM, {"raw_listing_count": 0, "rows": []})
+    mismatch = build_asking_price_opportunity(ITEM, {"raw_listing_count": 1, "rows": [
+        {"url": "https://www.ebay.com/itm/wrong", "price": 500, "currency": "SEK",
+         "asking_comparison_eligible": False},
+    ]})
+    missing_fx = build_asking_price_opportunity(ITEM, _context(5, currency="USD"))
+    assert empty["comparison_failure_reason"] == "NO_SEARCH_RESULTS"
+    assert mismatch["comparison_failure_reason"] == "NO_EXACT_MATCH"
+    assert missing_fx["comparison_failure_reason"] == "NO_CONVERTIBLE_PRICE_OR_FX"
+    assert not any(row["possible_find"] for row in (empty, mismatch, missing_fx))
+
+
 @pytest.mark.parametrize("price", [1, 30, 38])
 def test_nonpositive_margin_is_not_a_possible_find(price):
     assert not build_asking_price_opportunity(ITEM, _context(price))["possible_find"]

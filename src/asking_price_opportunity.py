@@ -80,7 +80,15 @@ def build_asking_price_opportunity(item, context, *, fx=None):
             continue
         rows.append({**row, "asking_price_sek": round(value * rate, 2)})
     if not rows:
-        return {**out, "status": "NO_MATCHED_PRICES_OR_FX"}
+        context_rows = (context or {}).get("rows") or []
+        eligible_rows = [row for row in context_rows if row.get("asking_comparison_eligible") and row.get("url")]
+        if (context or {}).get("raw_listing_count") == 0:
+            reason = "NO_SEARCH_RESULTS"
+        elif not eligible_rows:
+            reason = "NO_EXACT_MATCH"
+        else:
+            reason = "NO_CONVERTIBLE_PRICE_OR_FX"
+        return {**out, "status": "NO_MATCHED_PRICES_OR_FX", "comparison_failure_reason": reason}
     rows.sort(key=lambda row: row["asking_price_sek"])
     price = _number(item.get("pris", item.get("price")))
     if price is None or price <= 0:

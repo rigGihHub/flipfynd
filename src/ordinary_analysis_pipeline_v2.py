@@ -532,6 +532,14 @@ def analyze_data(
                 detail += f"/{error_type}"
             price_status_counts[detail] = price_status_counts.get(detail, 0) + 1
     debug["price_research_status_counts"] = price_status_counts
+    debug["price_research_failure_reasons"] = {}
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        reason = (row.get("asking_price_opportunity") or {}).get("comparison_failure_reason")
+        if reason:
+            counts = debug["price_research_failure_reasons"]
+            counts[reason] = counts.get(reason, 0) + 1
 
     results.sort(
         key=lambda item: (
