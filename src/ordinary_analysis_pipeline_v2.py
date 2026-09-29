@@ -76,7 +76,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "inventory-price-sweep-v01476",
+        "analysis_engine_marker": "inventory-price-sweep-v01477",
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
@@ -545,8 +545,17 @@ def analyze_data(
     price_rows.update({_listing_key(row): row for row in results
                        if isinstance(row.get("asking_price_opportunity"), dict)})
     price_results = list(price_rows.values())
-    debug["asking_price_eligible_pool"] = len(all_price_routes)
-    debug["mispricing_sweep_target"] = len(all_price_routes)
+    all_route_keys = {_listing_key(route["source_item"]) for route in all_price_routes}
+    debug["asking_price_eligible_pool"] = len(all_route_keys | set(price_rows))
+    debug["mispricing_sweep_target"] = debug["asking_price_eligible_pool"]
+    debug["single_price_research_leads"] = [
+        {"title": row.get("titel") or row.get("title"),
+         "url": row.get("lank") or row.get("url"),
+         "scenario": row["asking_price_opportunity"]}
+        for row in price_results
+        if (row.get("asking_price_opportunity") or {}).get("status") == "RESEARCH_SINGLE_ACTIVE"
+        and (row.get("asking_price_opportunity") or {}).get("net_margin", 0) > 0
+    ]
     debug["asking_price_routed"] = len(price_results)
 
     debug["asking_context_candidates"] = sum(
