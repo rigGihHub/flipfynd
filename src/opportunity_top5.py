@@ -173,7 +173,7 @@ def build_opportunity_top5(items, limit=5):
         asking_positive = bool(
             isinstance(asking_context, dict)
             and asking_context.get("possible_find")
-            and asking_margin > 0
+            and asking_margin >= 1
             and asking_count > 0
         )
         # A low model/guide estimate must not replace a positive exact-card
@@ -328,9 +328,10 @@ def build_opportunity_top5(items, limit=5):
         practical_margin = None
         practical_source = None
         if market is not None and total is not None:
-            practical_margin, practical_source = market - total, "VERIFIED"
+            verified_net = item.get("net_profit_estimate", item.get("estimated_net_profit", item.get("net_profit")))
+            practical_margin, practical_source = (_n(verified_net) if verified_net is not None else market - total), "VERIFIED"
         elif asking_reference is not None and total is not None:
-            practical_margin, practical_source = asking_reference - total, "ACTIVE_PRICE"
+            practical_margin, practical_source = (asking_margin if "net_margin" in asking_context else asking_reference - total), "ACTIVE_PRICE"
         elif heuristic_indication is not None and total is not None:
             practical_margin, practical_source = heuristic_indication - total, "MODEL_GUIDE"
 
@@ -385,7 +386,9 @@ def build_opportunity_top5(items, limit=5):
         score = max(0.0, min(100.0, base + research + evidence + economic + freshness))
         certainty = min(100.0, _n(item.get("ranking_confidence_score") or item.get("deal_confidence_score")) * 0.55 + sold * 10 + (20 if valuation_safe else 0))
 
-        net = item.get("estimated_net_profit")
+        net = item.get("net_profit_estimate")
+        if net is None:
+            net = item.get("estimated_net_profit")
         if net is None:
             net = item.get("net_profit")
         net = _n(net, 0.0) if net is not None else None
@@ -476,7 +479,7 @@ def build_opportunity_top5(items, limit=5):
     gated_rows = [
         row for row in gate_and_sort(rows, limit=max(limit * 20, len(rows)))
         if not known_negative_net_profit(row)
-        and (row.get("practical_margin") is None or row["practical_margin"] > 0)
+        and (row.get("practical_margin") is None or row["practical_margin"] >= 1)
     ]
     final_rows = build_useful_top5(gated_rows, limit=limit)
     seen_final = {(row.get("url") or str(row.get("title") or "").casefold()) for row in final_rows}

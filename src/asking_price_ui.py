@@ -66,15 +66,15 @@ def _shortlist_rank(row):
     return margin, roi if roi is not None else float("-inf")
 
 
-def render_asking_price_shortlist(results):
+def render_asking_price_shortlist(results, *, heading="Möjliga fynd mot begärda priser"):
     import streamlit as st
 
     rows = [row for row in results or [] if (row.get("asking_price_opportunity") or {}).get("possible_find")]
     rows.sort(key=_shortlist_rank, reverse=True)
     if not rows:
         return
-    st.markdown("### Möjliga fynd mot begärda priser")
-    st.caption("Sorteras främst på möjlig nettovinst. Aktivt annonspris är research, inte SOLD-evidens.")
+    st.markdown("### " + heading)
+    st.caption("Minst 1 kr möjlig nettovinst efter inköp, frakt, avgift och emballage. Störst nettovinst visas först. Begärda priser är osäkert underlag.")
     for row in rows[:5]:
         st.markdown(f"#### {row.get('titel') or row.get('title') or 'Kortannons'}")
         render_asking_price_opportunity(row["asking_price_opportunity"])

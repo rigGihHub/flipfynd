@@ -119,24 +119,25 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     packaging = 3.0
     total = round(price + freight, 2)
     margin = round(reference - total - fee - packaging, 2)
-    single_comp_signal = bool(len(rows) == 1 and margin > 0)
+    single_comp_signal = bool(len(rows) == 1 and margin >= 1)
     # Active asking prices are not realised sales. A lone listing may signal
     # something worth researching, but it must never become a purchase-ready
     # find by itself. Two exact active comps can support a weak possible-find;
     # three or more provide materially better market context.
     evidence_sufficient = len(rows) >= 2
-    possible_find = bool(margin > 0 and evidence_sufficient)
+    possible_find = bool(margin >= 1 and evidence_sufficient)
     return {
         **out,
         "status": (
             "RESEARCH_SINGLE_ACTIVE" if single_comp_signal
             else "POSSIBLE_FIND" if possible_find
-            else "NO_MARGIN" if margin <= 0
+            else "NO_MARGIN" if margin < 1
             else "INSUFFICIENT_ACTIVE_EVIDENCE"
         ),
         "possible_find": possible_find,
         "weak_find_signal": single_comp_signal,
-        "research_signal": bool(margin > 0 and not evidence_sufficient),
+        "research_signal": bool(margin >= 1 and not evidence_sufficient),
+        "minimum_net_profit": 1.0,
         "evidence_sufficient_for_possible_find": evidence_sufficient,
         "purchase_price": price,
         "shipping": freight, "shipping_known": shipping["known"],
@@ -261,7 +262,13 @@ def attach_asking_price_opportunity(item):
         # One shorter discovery query can recover spelling/set-title variants.
         # Both searches still pass the unchanged exact-identity matcher.
         eligible = [row for row in context.get("rows") or [] if row.get("asking_comparison_eligible")]
-        if len(eligible) < 2:
+        # Spend a second request only on an already profitable single-price
+        # lead. Empty/negative queries formerly doubled quota consumption.
+        primary = build_asking_price_opportunity(out, context, fx=(
+            _cached_fx(int(time.time() // 3600)) if any(
+                row.get("asking_comparison_eligible") and row.get("currency") != "SEK"
+                for row in context.get("rows") or []) else None))
+        if len(eligible) == 1 and primary.get("research_signal"):
             shorter = " ".join(str(value) for value in (
                 identity.get("player_name"), identity.get("season"),
                 "#" + str(identity.get("card_number") or "")) if value)
@@ -289,6 +296,7 @@ def attach_asking_price_opportunity(item):
             "status": "COMPARISON_HTTP_ERROR",
             "possible_find": False,
             "http_status": getattr(response, "status_code", None),
+            "retry_after_seconds": getattr(exc, "retry_after_seconds", None),
             "error_type": type(exc).__name__,
             "error_stage": str(getattr(exc, "ebay_stage", "UNKNOWN")),
         }

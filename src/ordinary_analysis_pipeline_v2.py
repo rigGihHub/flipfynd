@@ -24,6 +24,10 @@ from src.ebay_browse_context import configured_credentials
 from src.inventory_price_sweep import sweep_inventory
 from src.price_route_coverage import add_price_route_coverage, spread_price_routes
 
+from src.price_research_session import price_research_run
+
+
+@price_research_run
 def analyze_data(
     data,
     sport,
@@ -76,7 +80,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "inventory-price-sweep-v01477",
+        "analysis_engine_marker": "quota-aware-net-profit-v01480",
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
@@ -516,10 +520,10 @@ def analyze_data(
             analysed["url"] = analysed.get("url") or analysed.get("lank")
         results.append(analysed)
 
-    # The rescue must leave the 160-card CPU shortlist. Screen remaining
-    # exact routes cheaply; only positive scenarios receive full analysis.
+    # Screen beyond the CPU shortlist even when its first cards were positive:
+    # the user wants the best findings, not a search that stops at its first hit.
     inventory_screened = []
-    if not first_price_find and debug.get("ebay_credentials_configured"):
+    if debug.get("ebay_credentials_configured"):
         inventory_screened, sweep_debug = sweep_inventory(
             all_price_routes, results, attach_asking_price_opportunity,
         )
@@ -554,8 +558,18 @@ def analyze_data(
          "scenario": row["asking_price_opportunity"]}
         for row in price_results
         if (row.get("asking_price_opportunity") or {}).get("status") == "RESEARCH_SINGLE_ACTIVE"
-        and (row.get("asking_price_opportunity") or {}).get("net_margin", 0) > 0
+        and (row.get("asking_price_opportunity") or {}).get("net_margin", 0) >= 1
     ]
+    # Independent local market lane: no eBay calls and no SOLD/BUY promotion.
+    from src.tradera_price_context import screen_tradera_prices
+    local_leads, local_debug = screen_tradera_prices(integrity_eligible, sport_items)
+    debug.update(local_debug)
+    debug["tradera_price_find_rows"] = [row for row in local_leads
+        if row["asking_price_opportunity"].get("possible_find")][:5]
+    debug["single_price_research_leads"].extend(
+        {"title": row.get("titel") or row.get("title"), "url": row.get("lank") or row.get("url"),
+         "scenario": row["asking_price_opportunity"]}
+        for row in local_leads if row["asking_price_opportunity"].get("weak_find_signal"))
     debug["asking_price_routed"] = len(price_results)
 
     debug["asking_context_candidates"] = sum(

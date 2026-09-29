@@ -1,5 +1,6 @@
 """Bounded network screening beyond the CPU analysis shortlist."""
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 import time
 
 from src.analysis_scope import _listing_key
@@ -20,6 +21,11 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=180, limit=1
         if key not in seen:
             seen.add(key)
             pending.append(row)
+    if any((row.get("asking_price_opportunity") or {}).get("http_status")
+           in {401, 403, 429} for row in analysed):
+        return [], {"inventory_price_checked": 0,
+                    "inventory_price_remaining": len(pending),
+                    "inventory_price_stop": "API_LIMIT", "inventory_price_seconds": 0}
     results = []
     started = time.monotonic()
     stop = "COMPLETE"
@@ -29,7 +35,8 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=180, limit=1
                 stop = "TIME_LIMIT"
                 break
             batch = pending[offset:min(offset + workers, limit)]
-            results.extend(executor.map(enrich, batch))
+            futures = [executor.submit(copy_context().run, enrich, row) for row in batch]
+            results.extend(future.result() for future in futures)
             if any((row.get("asking_price_opportunity") or {}).get("http_status")
                    in {401, 403, 429} for row in results[-len(batch):]):
                 stop = "API_LIMIT"

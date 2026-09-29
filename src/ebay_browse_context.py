@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import base64
+from email.utils import parsedate_to_datetime
+from threading import RLock
+
+from src.price_research_session import fetch_once
 from functools import lru_cache
 import hashlib
 import json
@@ -58,6 +62,45 @@ def configured_credentials():
 
 
 _TOKEN_CACHE = {}
+_RATE_LIMITS = {}
+_RATE_LOCK = RLock()
+
+
+def _limit_key(client_id, client_secret):
+    return hashlib.sha256(f"{client_id}:{client_secret}".encode()).hexdigest()
+
+
+def _check_rate_limit(key):
+    with _RATE_LOCK:
+        until = _RATE_LIMITS.get(key, 0)
+        remaining = until - time.monotonic()
+    if remaining > 0:
+        response = requests.Response()
+        response.status_code = 429
+        err = requests.HTTPError("EBAY_RATE_LIMIT_PAUSED", response=response)
+        err.ebay_stage = "COOLDOWN"
+        err.retry_after_seconds = int(remaining) + 1
+        raise err
+
+
+def _record_rate_limit(key, response):
+    if getattr(response, "status_code", None) != 429:
+        return None
+    # Honour the provider's numeric or HTTP-date Retry-After. If absent,
+    # pause requests for 15 minutes; the quota's actual reset remains unknown.
+    retry = (getattr(response, "headers", {}) or {}).get("Retry-After")
+    try:
+        seconds = float(retry)
+    except (TypeError, ValueError):
+        try:
+            seconds = parsedate_to_datetime(retry).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            seconds = 900
+    seconds = max(1, seconds) if isfinite(seconds) else 900
+    with _RATE_LOCK:
+        _RATE_LIMITS[key] = max(_RATE_LIMITS.get(key, 0), time.monotonic() + seconds)
+    return int(seconds) + 1
+
 
 
 def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret, session=requests, timeout=5, limit=25):
@@ -66,6 +109,9 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         return {"ok": False, "status": "QUERY_MISSING"}
     if not str(client_id or "").strip() or not str(client_secret or "").strip():
         return {"ok": False, "status": "CREDENTIALS_MISSING"}
+    rate_key = _limit_key(client_id, client_secret)
+    if session is requests:
+        _check_rate_limit(rate_key)
     basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     cache_key = (client_id, client_secret)
     cached_token = _TOKEN_CACHE.get(cache_key) if session is requests else None
@@ -86,6 +132,8 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
                 token_ok = False
         if not token_ok:
             err = requests.HTTPError(f"EBAY_TOKEN_HTTP_{getattr(token_response, 'status_code', 'unknown')}", response=token_response)
+            if session is requests:
+                err.retry_after_seconds = _record_rate_limit(rate_key, token_response)
             setattr(err, "ebay_stage", "TOKEN")
             raise err
         token_data = token_response.json()
@@ -95,6 +143,8 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             _TOKEN_CACHE[cache_key] = (token, time.monotonic() + max(0, float(token_data.get("expires_in") or 7200) - 60))
     if not token:
         return {"ok": False, "status": "TOKEN_MISSING"}
+    if session is requests:
+        _check_rate_limit(rate_key)
     response = session.get(
         SEARCH_URL,
         params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
@@ -110,6 +160,8 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             response_ok = False
     if not response_ok:
         err = requests.HTTPError(f"EBAY_BROWSE_HTTP_{getattr(response, 'status_code', 'unknown')}", response=response)
+        if session is requests:
+            err.retry_after_seconds = _record_rate_limit(rate_key, response)
         setattr(err, "ebay_stage", "BROWSE")
         raise err
     payload = response.json()
@@ -140,6 +192,29 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             "url": item.get("itemWebUrl"), "source": "eBay Browse",
             "buying_options": item.get("buyingOptions") or [], "item_id": item.get("itemId")
         })
+    rows = match_active_rows(raw_rows, identity)
+    usd = [row["price"] for row in rows if row.get("currency") == "USD"]
+    return {
+        "ok": True,
+        "status": "ACTIVE_CONTEXT_ONLY",
+        "query": query,
+        "raw_listing_count": len(raw_rows),
+        "listing_count": len(rows),
+        "rejected_listing_count": len(raw_rows) - len(rows),
+        "min_usd": min(usd) if usd else None,
+        "median_usd": round(statistics.median(usd), 2) if usd else None,
+        "max_usd": max(usd) if usd else None,
+        "rows": rows,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "search_url": f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(query)}",
+        "sold_comps": 0,
+        "context_only": True,
+        "note": "Aktiva eBay-annonser används för begärda prisjämförelser och möjliga fynd. De är inte SOLD eller verifierat försäljningsvärde.",
+    }
+
+
+def match_active_rows(raw_rows, identity):
+    """Shared exact-card/variant gate for active asking prices from any source."""
     rows = []
     for row in raw_rows:
         candidate = _literal_identity_hints(identity or {}, row)
@@ -206,24 +281,7 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             and not parsed.get("is_lot")
         )
         rows.append(row)
-    usd = [row["price"] for row in rows if row.get("currency") == "USD"]
-    return {
-        "ok": True,
-        "status": "ACTIVE_CONTEXT_ONLY",
-        "query": query,
-        "raw_listing_count": len(raw_rows),
-        "listing_count": len(rows),
-        "rejected_listing_count": len(raw_rows) - len(rows),
-        "min_usd": min(usd) if usd else None,
-        "median_usd": round(statistics.median(usd), 2) if usd else None,
-        "max_usd": max(usd) if usd else None,
-        "rows": rows,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "search_url": f"https://www.ebay.com/sch/i.html?_nkw={quote_plus(query)}",
-        "sold_comps": 0,
-        "context_only": True,
-        "note": "Aktiva eBay-annonser används för begärda prisjämförelser och möjliga fynd. De är inte SOLD eller verifierat försäljningsvärde.",
-    }
+    return rows
 
 
 @lru_cache(maxsize=256)
@@ -289,9 +347,11 @@ def fetch_configured_ebay_active_context(query, identity=None):
     identity_json = json.dumps(identity or {}, sort_keys=True, ensure_ascii=False, default=str)
     identity_obj = json.loads(identity_json) if identity_json else {}
     client_id, client_secret = configured_credentials()
-    return fetch_ebay_active_context(
-        query,
-        identity=identity_obj,
-        client_id=client_id,
-        client_secret=client_secret,
-    )
+    # Extra parser scores do not change the same exact-card lookup.
+    fields = {key: identity_obj.get(key) for key in (
+        "player_name", "season", "set_name", "card_number", "parallel",
+        "serial_denominator", "grading_company", "grade", "is_lot", "is_auto", "is_patch")}
+    key = (_limit_key(client_id, client_secret), " ".join(str(query).casefold().split()),
+           json.dumps(fields, sort_keys=True, default=str))
+    return fetch_once(key, lambda: fetch_ebay_active_context(
+        query, identity=identity_obj, client_id=client_id, client_secret=client_secret))

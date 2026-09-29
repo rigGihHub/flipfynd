@@ -334,8 +334,19 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.79"
+APP_VERSION = "v0.14.80"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
+
+# Saved searches must also render with the current deployed UI after hot reload.
+import src.asking_price_ui as _asking_ui_module
+import src.opportunity_top5 as _opportunity_ui_module
+for _ui_module in (_asking_ui_module, _opportunity_ui_module):
+    if getattr(_ui_module, "_flipfynd_loaded_version", None) != APP_VERSION:
+        importlib.reload(_ui_module)
+        _ui_module._flipfynd_loaded_version = APP_VERSION
+render_asking_price_opportunity = _asking_ui_module.render_asking_price_opportunity
+render_asking_price_shortlist = _asking_ui_module.render_asking_price_shortlist
+build_opportunity_top5 = _opportunity_ui_module.build_opportunity_top5
 
 
 def _seller_ui_row_is_safe(row):
@@ -1188,6 +1199,12 @@ def analyze_data(*args, **kwargs):
     if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
         import src.card_parser as _card_parser_module
         importlib.reload(_card_parser_module)
+        import src.ebay_browse_context as _ebay_context_module
+        import src.analysis_cache as _analysis_cache_module
+        import src.inventory_price_sweep as _inventory_sweep_module
+        importlib.reload(_analysis_cache_module)
+        importlib.reload(_inventory_sweep_module)
+        importlib.reload(_ebay_context_module)
         importlib.reload(_asking_price_module)
         importlib.reload(_ordinary_pipeline)
         _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
@@ -1200,6 +1217,20 @@ update_fetch_status()
 # The URL identifies this browser's search, never a global last-user result.
 _search_token = str(st.query_params.get("search_run") or "")
 _saved_search = resumable_search.load(_search_token, DATABASE_URL)
+from src.browser_search_backup import browser_backup, decode_snapshot
+_browser_copy = browser_backup(_search_token, _saved_search,
+    clear=bool(st.session_state.get("_browser_clear_requested")))
+if isinstance(_browser_copy, dict) and _browser_copy.get("cleared"):
+    st.session_state.pop("_browser_clear_requested", None)
+if not _saved_search and isinstance(_browser_copy, dict) and _browser_copy.get("blob"):
+    _browser_token = _browser_copy.get("token")
+    if not _search_token or _browser_token == _search_token:
+        _recovered = decode_snapshot(_browser_token, _browser_copy["blob"])
+        if _recovered and resumable_search.restore_browser_snapshot(_browser_token, _recovered, DATABASE_URL):
+            st.query_params["search_run"] = _browser_token
+            st.rerun()
+if isinstance(_browser_copy, dict) and _browser_copy.get("error"):
+    st.caption("Webbläsaren tillåter inte lokal säkerhetskopiering. Behåll söklänken för att återställa resultatet från servern.")
 if _saved_search:
     for key, value in (_saved_search.get("params", {}).get("widgets") or {}).items():
         if key not in st.session_state:
@@ -1812,6 +1843,7 @@ with st.form("analysis_form"):
 
 
 if clear_main_search:
+    st.session_state["_browser_clear_requested"] = True
     st.query_params.pop("search_run", None)
     _saved_search = None
     st.session_state["results"] = None
@@ -1838,6 +1870,7 @@ if clear_main_search:
 if run:
     # Resolve data and secrets on the UI thread, then pass only ordinary Python
     # objects to the worker. No worker depends on a live Streamlit session.
+    _previous_search_token = st.query_params.get("search_run")
     _search_token = resumable_search.new_token()
     st.query_params["search_run"] = _search_token
     _params = {
@@ -1845,6 +1878,7 @@ if run:
             "search_sport", "search_budget", "search_text", "search_archive",
             "search_sale_type", "ordinary_card_type_filter")},
         "app_version": APP_VERSION,
+        "previous_search_run": _previous_search_token,
     }
     _job_kwargs = dict(data=list(data), sport=sport, search=effective_search,
         max_price=max_price, sale_type=sale_type, full_limit=full_limit,
@@ -1854,6 +1888,12 @@ if run:
     if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
         import src.card_parser as _card_parser_module
         importlib.reload(_card_parser_module)
+        import src.ebay_browse_context as _ebay_context_module
+        import src.analysis_cache as _analysis_cache_module
+        import src.inventory_price_sweep as _inventory_sweep_module
+        importlib.reload(_analysis_cache_module)
+        importlib.reload(_inventory_sweep_module)
+        importlib.reload(_ebay_context_module)
         importlib.reload(_asking_price_module)
         importlib.reload(_ordinary_pipeline)
         _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
@@ -2139,6 +2179,8 @@ if st.session_state.get("results") is not None:
     if not _advanced_terminal:
         st.divider()
         if _main_view == "Vad ska jag köpa?":
+            from src.price_research_status import price_research_problem
+            _price_problem = price_research_problem(st.session_state.get("debug"))
             simple_buy = build_buy_view(filtered)
             st.subheader("🎯 Ditt beslut just nu")
             st.caption("Ett tydligt förstaval – eller ett tydligt besked att avstå.")
@@ -2169,10 +2211,19 @@ if st.session_state.get("results") is not None:
                         st.write("• " + str(reason))
                     st.caption(simple_buy.get("note") or "")
             else:
-                st.info("Inget SOLD-verifierat förstaval just nu. Möjliga fynd från begärda priser visas separat nedan.")
+                if _price_problem:
+                    st.warning(_price_problem)
+                else:
+                    st.info("Inget SOLD-verifierat förstaval just nu. Möjliga fynd med minst 1 kr nettovinst visas nedan.")
                 st.caption(simple_buy.get("note") or "")
 
+            if _price_problem and _saved_search:
+                _previous = (_saved_search.get("params") or {}).get("previous_search_run")
+                if resumable_search.valid_token(_previous):
+                    st.link_button("Visa föregående sparade sökning", f"?search_run={_previous}")
             render_asking_price_shortlist(st.session_state.get("results") or [])
+            _local_rows = (st.session_state.get("debug") or {}).get("tradera_price_find_rows") or []
+            render_asking_price_shortlist(_local_rows, heading="Möjliga fynd mot begärda Tradera-priser")
 
             # One compact Top 5. Research signals may rank UNDERSÖK candidates,
             # but KÖP remains gated by verified economic evidence.
@@ -2234,6 +2285,10 @@ if st.session_state.get("results") is not None:
                             f"{labels.get(reason, reason)}: {count}"
                             for reason, count in sorted(failure_reasons.items())
                         ))
+                    if "tradera_price_checked" in current_debug:
+                        st.caption(f"Inlästa Tradera-priser: {current_debug['tradera_price_checked']} kort kontrollerade · "
+                                   f"{current_debug['tradera_price_usable']} med exakt jämförpris · "
+                                   f"{current_debug['tradera_possible_finds']} möjliga fynd. Bara annonser skannade senaste dygnet används.")
                     target = int(current_debug.get("mispricing_sweep_target") or 0)
                     eligible = int(price_funnel.get("searchable_identity") or 0)
                     usable = int(price_funnel.get("usable_reference") or 0)
@@ -2273,10 +2328,14 @@ if st.session_state.get("results") is not None:
                 1 for row in top_rows
                 if (
                     (row.get("decision") == "KÖP")
+                    or (row.get("practical_price_source") == "VERIFIED"
+                        and row.get("estimated_net_profit") is not None
+                        and float(row["estimated_net_profit"]) >= 1
+                        and int(row.get("sold_comps") or 0) >= 2)
                     or (row.get("asking_positive") is True)
                     or (
                         row.get("practical_margin") is not None
-                        and float(row.get("practical_margin") or 0) > 0
+                        and float(row.get("practical_margin") or 0) >= 1
                         and row.get("practical_price_source") in {"VERIFIED", "ACTIVE_PRICE"}
                         and int(row.get("asking_comparison_count") or 0) >= 2
                     )
@@ -2285,12 +2344,17 @@ if st.session_state.get("results") is not None:
             if actual_find_count:
                 st.markdown("### 🏆 Fynd att undersöka")
                 st.caption(f"{actual_find_count} kandidat(er) har verklig positiv prisindikation i den här körningen. Övriga rader är bäst av resten.")
+            elif _price_problem:
+                st.markdown("### 🔎 Prisundersökningen kunde inte slutföras")
+                st.caption("Fynd med tillgängligt underlag visas ovan. Kort utan fungerande priskontroll är inte bedömda.")
             else:
                 st.markdown("### 🔎 Närmast fyndgränsen – inga fynd hittades")
                 st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Endast kandidater utan känd minusmarginal kan visas för vidare kontroll.")
             if rescued_count:
                 st.caption(f"{rescued_count} kandidat(er) visas för vidare kontroll trots att positiv marginal inte är bevisad.")
-            if not top_rows:
+            if not top_rows and _price_problem:
+                st.info("Inga bedömbara kandidater att visa från denna ofullständiga prisundersökning.")
+            elif not top_rows:
                 st.warning(
                     "Inga kandidater med positiv eller ännu okänd fyndmarginal hittades i den analyserade gruppen. "
                     "FlipFynd visar inte längre kända minusaffärer bara för att fylla Top 5."

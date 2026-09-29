@@ -172,6 +172,8 @@ def get_cached_analysis(signature: str):
         return None
 
     result = entry.get("result")
+    if str(((result or {}).get("asking_price_opportunity") or {}).get("status", "")).startswith("COMPARISON_"):
+        return None
     context = (result or {}).get("ebay_active_context")
     if context:
         try:
@@ -186,6 +188,8 @@ def get_cached_analysis(signature: str):
 
 
 def set_cached_analysis(signature: str, result: dict) -> None:
+    if str((result.get("asking_price_opportunity") or {}).get("status", "")).startswith("COMPARISON_"):
+        return
     payload = _load_cache_payload()
     entries = payload["entries"]
 
