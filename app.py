@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.78"
+APP_VERSION = "v0.14.79"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -1471,7 +1471,8 @@ if repaired_categories:
 if st.session_state.pop("results_stale_notice", False):
     st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det sparade resultatet visas tills du startar en ny sökning.")
 if st.session_state.pop("restored_completed_search", False):
-    st.caption("↩️ Din senaste färdiga fyndsökning har återställts.")
+    _saved_version = (_saved_search or {}).get("params", {}).get("app_version", "")
+    st.caption(f"↩️ Din sparade fyndsökning {_saved_version} har återställts utan ny analys. Priserna gäller tidpunkten då sökningen gjordes.")
 _fetch_state_summary = load_fetch_state()
 _last_values = [
     info.get("last_fetch_at")

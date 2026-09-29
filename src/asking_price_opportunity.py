@@ -266,7 +266,12 @@ def attach_asking_price_opportunity(item):
                 identity.get("player_name"), identity.get("season"),
                 "#" + str(identity.get("card_number") or "")) if value)
             if shorter != exact_identity_query(identity):
-                extra = fetch_configured_ebay_active_context(shorter, identity)
+                try:
+                    extra = fetch_configured_ebay_active_context(shorter, identity)
+                except requests.RequestException as exc:
+                    # A failed optional query must not erase valid primary data.
+                    extra = {}
+                    context["expansion_error"] = type(exc).__name__
                 seen_urls = {row.get("url") for row in context.get("rows") or []}
                 context["rows"] = list(context.get("rows") or []) + [
                     row for row in extra.get("rows") or [] if row.get("url") not in seen_urls]
