@@ -333,7 +333,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.76"
+APP_VERSION = "v0.14.77"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -2340,6 +2340,30 @@ if st.session_state.get("results") is not None:
                             f"Fyndsvep: målet är att prisundersöka upp till {target or eligible} av {eligible} "
                             f"sökbara kort. {usable} fick användbart jämförpris och {finds} gav positiv fyndmarginal."
                         )
+
+            research_leads = current_debug.get("single_price_research_leads") or []
+            if research_leads:
+                st.subheader("🔍 Positiva prisspår att kontrollera")
+                st.caption("Ett enda jämförpris per kort. Detta är osäkra undersökningsförslag, inte köprekommendationer eller bevisat marknadsvärde.")
+                for lead in sorted(research_leads, key=lambda lead: lead["scenario"]["net_margin"], reverse=True)[:5]:
+                    scenario = lead["scenario"]
+                    with st.expander(str(lead.get("title") or "Kort att undersöka"), expanded=True):
+                        st.write(
+                            f"Pris {scenario['purchase_price']:.0f} kr · "
+                            f"{'Frakt' if scenario.get('shipping_known') else 'Antagen frakt'} {scenario['shipping']:.0f} kr · "
+                            f"Totalt {scenario['total_cost']:.0f} kr"
+                        )
+                        st.write(
+                            f"Begärt jämförpris {scenario['observed_asking_price']:.0f} kr · "
+                            f"Försiktigt försäljningsscenario {scenario['reference_asking_price']:.0f} kr · "
+                            f"Möjlig nettomarginal i scenariot +{scenario['net_margin']:.0f} kr"
+                        )
+                        st.caption("Scenariot drar av 15 % från jämförpriset samt säljavgift och emballage. Faktiskt försäljningspris och efterfrågan är inte bekräftade.")
+                        if str(lead.get("url") or "").startswith("https://"):
+                            st.link_button("Öppna Tradera-annons", lead["url"])
+                        for comp in scenario.get("comparisons") or []:
+                            if str(comp.get("url") or "").startswith("https://"):
+                                st.link_button("Granska det enda jämförpriset", comp["url"])
 
             actual_find_count = sum(
                 1 for row in top_rows
