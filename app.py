@@ -137,6 +137,7 @@ except ImportError:
     ensure_seller_inventory_job = lambda **kwargs: None
     seller_inventory_job_status = lambda **kwargs: None
 from src.ordinary_search_job_contract import build_ordinary_search_job_payload, unpack_completed_ordinary_job
+from src import resumable_search
 from src.persistent_store import load_namespace as load_persistent_namespace, save_namespace as save_persistent_namespace
 from src.latest_market import LATEST_MAX_PAGES, latest_analysis_items
 from src.seller_live_full_analysis import full_analyze_live_seller_item
@@ -333,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.77"
+APP_VERSION = "v0.14.78"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -1185,6 +1186,8 @@ def analyze_data(*args, **kwargs):
     # imported function at startup can retain an older pipeline and its price
     # matcher across deployments even while the visible app version changes.
     if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
+        import src.card_parser as _card_parser_module
+        importlib.reload(_card_parser_module)
         importlib.reload(_asking_price_module)
         importlib.reload(_ordinary_pipeline)
         _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
@@ -1194,29 +1197,17 @@ def analyze_data(*args, **kwargs):
 ensure_state()
 update_fetch_status()
 
-# Restore the last completed ordinary search when Streamlit creates a new
-# browser session (for example after leaving the app and returning). Session
-# state is ephemeral; the completed result is not.
-if st.session_state.get("results") is None and DATABASE_URL:
-    try:
-        restored = load_persistent_namespace(DATABASE_URL, "ordinary_last_completed", {})
-        if isinstance(restored, dict) and isinstance(restored.get("results"), list):
-            restored_signature = str(restored.get("signature") or "")
-            # Never restore a completed search produced by an older analysis
-            # engine. This was keeping obsolete Top 5 rows visible even after
-            # the ranking/price pipeline changed.
-            # Restore the last completed search across browser/session loss.
-            # Exact engine-version freshness is handled by the next explicit
-            # Hitta fynd run; losing the user's visible results is worse than
-            # showing them with a clear restored marker.
-            if restored_signature:
-                st.session_state["results"] = restored.get("results") or []
-                st.session_state["debug"] = restored.get("debug") if isinstance(restored.get("debug"), dict) else {}
-                st.session_state["last_completed_search_signature"] = restored_signature
-                st.session_state["results_data_version"] = restored.get("data_version") or get_data_version()
-                st.session_state["restored_completed_search"] = True
-    except Exception:
-        pass
+# The URL identifies this browser's search, never a global last-user result.
+_search_token = str(st.query_params.get("search_run") or "")
+_saved_search = resumable_search.load(_search_token, DATABASE_URL)
+if _saved_search:
+    for key, value in (_saved_search.get("params", {}).get("widgets") or {}).items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+    if _saved_search.get("status") == "COMPLETED" and st.session_state.get("results") is None:
+        st.session_state["results"] = _saved_search.get("results") or []
+        st.session_state["debug"] = _saved_search.get("debug") or {}
+        st.session_state["restored_completed_search"] = True
 
 if st.session_state.get("fetch_status") == "running":
     # Data is persisted page-by-page during a crawl; refresh the cached dataset
@@ -1478,7 +1469,7 @@ if repaired_categories:
         + ". Gammal sidstatus stämde inte med annonslänkarna och har därför byggts om från verifierad data."
     )
 if st.session_state.pop("results_stale_notice", False):
-    st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det gamla sökresultatet rensades så att du inte ser en inaktuell nolla.")
+    st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det sparade resultatet visas tills du startar en ny sökning.")
 if st.session_state.pop("restored_completed_search", False):
     st.caption("↩️ Din senaste färdiga fyndsökning har återställts.")
 _fetch_state_summary = load_fetch_state()
@@ -1702,12 +1693,14 @@ with st.form("analysis_form"):
         sport_label = st.selectbox(
             "Sport",
             ["Hockey", "Fotboll"],
+            key="search_sport",
         )
         sport = "hockey" if sport_label == "Hockey" else "football"
 
     with p2:
         max_price = st.number_input(
             "Budget – max totalpris inkl. frakt",
+            key="search_budget",
             min_value=0,
             value=1000,
             step=50,
@@ -1721,6 +1714,7 @@ with st.form("analysis_form"):
 
     search = st.text_input(
         "Sök spelare, set eller kort",
+        key="search_text",
         value="",
         placeholder="T.ex. Bedard, Young Guns, Messi…",
         help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",
@@ -1739,6 +1733,7 @@ with st.form("analysis_form"):
     with st.expander("Avancerade filter"):
         include_older = st.checkbox(
             "Ta med äldre sparade annonser",
+            key="search_archive",
             value=False,
             help="Normalt prioriteras senaste annonserna och en begränsad del av äldre lagret granskas automatiskt. Slå på för ett bredare arkivurval.",
         )
@@ -1747,6 +1742,7 @@ with st.form("analysis_form"):
             sale_type = st.selectbox(
                 "Annonsform",
                 ["Alla", "Endast auktioner", "Endast Köp nu"],
+                key="search_sale_type",
             )
             minimum_confidence = st.slider(
                 "Minsta analyssäkerhet",
@@ -1788,7 +1784,7 @@ with st.form("analysis_form"):
     # can use a wider deep pass once deployed.
     full_limit = 8
 
-    _find_disabled = (not _has_data) or _flow_fetching
+    _find_disabled = (not _has_data) or _flow_fetching or bool(_saved_search and _saved_search.get("status") == "RUNNING")
     if _flow_fetching:
         _find_label = "⏳ Vänta – annonser hämtas"
     elif not _has_data:
@@ -1815,6 +1811,8 @@ with st.form("analysis_form"):
 
 
 if clear_main_search:
+    st.query_params.pop("search_run", None)
+    _saved_search = None
     st.session_state["results"] = None
     st.session_state["debug"] = None
     st.session_state["result_cache"] = {}
@@ -1837,139 +1835,43 @@ if clear_main_search:
 
 
 if run:
-    status = st.status("🔎 FlipFynd startar analysen…", expanded=True)
-    status.write(f"1/3 • Förbereder {sport_label.lower()}annonser inom din budget på {int(max_price)} kr.")
-    progress = st.progress(12, text="Förbereder annonser…")
-    status.write("2/3 • Analyserar kort, efterfrågan, risk, comps och möjlig vinst. Det kan ta en stund om många annonser ska bedömas.")
-    progress.progress(35, text="Analyserar och rankar fynd…")
-    try:
-        # A running Streamlit process may retain the pre-v0.14.34 helper.
-        # Encode scope in an existing argument, so both signatures work and
-        # latest-only results can never be reused for an archive search.
-        ANALYSIS_ENGINE_VERSION = "ordinary-v2-archive-price-routing-20260925-33"
-        scoped_data_version = json.dumps(
-            [get_data_version(), "archive" if include_older else "latest", ANALYSIS_ENGINE_VERSION, APP_VERSION],
-            separators=(",", ":"),
-        )
-        current_run_signature = build_search_run_signature(
-            data_version=scoped_data_version, app_version=APP_VERSION, sport=sport,
-            search=effective_search, max_price=max_price, sale_type=sale_type,
-            strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
-            auto_only=auto_only,
-        )
-        # Prefer the in-session cache, then recover the same completed search
-        # from durable Postgres storage after navigation/reconnect.
-        reusable = get_reusable_search(st.session_state.get("result_cache"), current_run_signature)
-        # Recover a completed background job for this exact search before
-        # falling back to synchronous analysis.
-        if not reusable and jobs_available():
-            try:
-                completed_job = latest_completed_job(
-                    job_kind="ordinary_search", signature=current_run_signature
-                )
-                completed = unpack_completed_ordinary_job(completed_job)
-                if completed:
-                    results, debug = completed
-                    reusable = (results, debug)
-            except Exception:
-                pass
-        database_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
-        if not reusable and database_url:
-            try:
-                durable_cache = load_persistent_namespace(
-                    database_url, "ordinary_search:" + current_run_signature, {}
-                )
-                reusable = get_reusable_search(durable_cache, current_run_signature)
-                if reusable:
-                    st.session_state["result_cache"] = durable_cache
-            except Exception:
-                reusable = None
-        if reusable:
-            results, debug = reusable
-            debug = dict(debug)
-            debug["reused_completed_search"] = True
-            progress.progress(90, text="Återanvänder färdig analys…")
-            status.write("2/3 • Samma annonser och filter är redan analyserade. Återanvänder det färdiga resultatet.")
-        else:
-            # Queue the expensive analysis when durable jobs are available.
-            # A separate worker can then continue after browser disconnect.
-            active_job = None
-            if jobs_available():
-                try:
-                    active_job = latest_active_job(
-                        job_kind="ordinary_search", signature=current_run_signature
-                    )
-                    if not active_job:
-                        payload = build_ordinary_search_job_payload(
-                            sport=sport, search=effective_search, max_price=max_price,
-                            sale_type=sale_type, full_limit=full_limit, strategy=strategy,
-                            numbered_only=numbered_only, patch_only=patch_only,
-                            auto_only=auto_only, include_older=include_older,
-                            data_version=scoped_data_version, app_version=APP_VERSION,
-                        )
-                        active_job = create_job(
-                            job_kind="ordinary_search", payload=payload,
-                            signature=current_run_signature,
-                        )
-                except Exception:
-                    active_job = None
-            if active_job:
-                # Until a separate worker is deployed, QUEUED jobs would make
-                # the user wait forever and show no result. Only hand off when
-                # a worker has actually claimed the job.
-                if str(active_job.get("status") or "") == "RUNNING":
-                    st.session_state["active_search_job_id"] = active_job["job_id"]
-                    status.update(label="⏳ Analysen fortsätter i bakgrunden", state="running", expanded=False)
-                    progress.progress(int(active_job.get("progress") or 1), text="Bakgrundsanalys pågår – du kan lämna appen.")
-                    st.info("Bakgrundsanalysen är aktiv. Du kan byta app och komma tillbaka senare.")
-                    st.stop()
-                # No worker has claimed it: run synchronously now so Hitta fynd
-                # always produces a result instead of silently parking in QUEUED.
-                active_job = None
-            results, debug = analyze_data(
-                data=data, sport=sport, search=effective_search,
-                max_price=max_price, sale_type=sale_type, full_limit=full_limit,
-                strategy=strategy, numbered_only=numbered_only,
-                patch_only=patch_only, auto_only=auto_only,
-                include_older=include_older,
-                data_version=f"{scoped_data_version}:{ANALYSIS_ENGINE_VERSION}",
-            )
-            debug["reused_completed_search"] = False
-            st.session_state["result_cache"] = store_reusable_search(current_run_signature, results, debug)
-            if database_url:
-                try:
-                    save_persistent_namespace(
-                        database_url,
-                        "ordinary_search:" + current_run_signature,
-                        st.session_state["result_cache"],
-                    )
-                except Exception:
-                    pass
-        progress.progress(90, text="Sorterar de bästa kandidaterna…")
-        elapsed_text = "direkt från cache" if debug.get("reused_completed_search") else f"{debug.get('total_analysis_seconds', 0):.1f} s"
-        status.write(f"3/3 • Klart på {elapsed_text}. {int((debug or {}).get('final_results', len(results)) or 0)} annonser nådde analyssteget.")
-        progress.progress(100, text="Klar")
-        status.update(label="✅ Analysen är klar – resultaten visas nedan", state="complete", expanded=False)
-    except Exception as exc:
-        status.update(label="❌ Analysen kunde inte slutföras", state="error", expanded=True)
-        st.error("Något gick fel under fyndanalysen. Dina inställningar är sparade; försök igen eller öppna tekniska detaljer i Administration & data.")
-        raise
+    # Resolve data and secrets on the UI thread, then pass only ordinary Python
+    # objects to the worker. No worker depends on a live Streamlit session.
+    _search_token = resumable_search.new_token()
+    st.query_params["search_run"] = _search_token
+    _params = {
+        "widgets": {key: st.session_state.get(key) for key in (
+            "search_sport", "search_budget", "search_text", "search_archive",
+            "search_sale_type", "ordinary_card_type_filter")},
+        "app_version": APP_VERSION,
+    }
+    _job_kwargs = dict(data=list(data), sport=sport, search=effective_search,
+        max_price=max_price, sale_type=sale_type, full_limit=full_limit,
+        strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
+        auto_only=auto_only, include_older=include_older,
+        data_version=f"{get_data_version()}:{APP_VERSION}", sold_comp_data=get_sold_comp_data())
+    if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
+        import src.card_parser as _card_parser_module
+        importlib.reload(_card_parser_module)
+        importlib.reload(_asking_price_module)
+        importlib.reload(_ordinary_pipeline)
+        _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
+    _job_fn = _ordinary_pipeline.analyze_data
+    resumable_search.start(_search_token, _params,
+        lambda kwargs=_job_kwargs, fn=_job_fn: fn(**kwargs), database_url=DATABASE_URL)
+    st.session_state["results"] = None
+    st.session_state["debug"] = {}
+    st.rerun()
 
-    # Persist immediately after successful analysis so a later Streamlit
-    # rerun/navigation cannot make the user press Hitta fynd twice.
-    st.session_state["results"] = results
-    st.session_state["debug"] = debug
-    st.session_state["results_data_version"] = get_data_version()
-    st.session_state["last_completed_search_signature"] = current_run_signature
-    if database_url:
-        try:
-            save_persistent_namespace(
-                database_url,
-                "ordinary_last_completed",
-                {"signature": current_run_signature, "results": results, "debug": debug, "data_version": get_data_version()},
-            )
-        except Exception:
-            pass
+if _saved_search and _saved_search.get("status") == "RUNNING":
+    st.info("Analysen fortsätter i bakgrunden. Du kan lämna appen och återvända till samma länk.")
+    if st_autorefresh:
+        st_autorefresh(interval=3000, key="resume_search_poll")
+    else:
+        st.button("Visa sökningens status")
+    st.stop()
+elif _saved_search and _saved_search.get("status") in {"FAILED", "INTERRUPTED"}:
+    st.warning("Sökningen avbröts på servern. Dina filter är återställda. Tryck Hitta fynd för att försöka igen.")
 
 
 def render_same_seller_button(item: dict, key: str) -> None:
@@ -2338,7 +2240,8 @@ if st.session_state.get("results") is not None:
                     if eligible:
                         st.caption(
                             f"Fyndsvep: målet är att prisundersöka upp till {target or eligible} av {eligible} "
-                            f"sökbara kort. {usable} fick användbart jämförpris och {finds} gav positiv fyndmarginal."
+                            f"sökbara kort. {usable} fick användbart jämförpris; {finds} möjliga fynd med flera jämförpriser, "
+                            f"{len(current_debug.get('single_price_research_leads') or [])} osäkra positiva prisspår."
                         )
 
             research_leads = current_debug.get("single_price_research_leads") or []

@@ -203,11 +203,17 @@ def extract_player_name(title: str) -> Optional[str]:
         if player in norm:
             return normalize_player_name(player.title())
 
+    # Product labels must not become a player's name ("Ultimate Of").
+    # Remove a recognized set and marketplace boilerplate before fallback.
+    norm = re.split(r"\b(?:sluttid|pris|price|utropspris)\b", norm, maxsplit=1)[0]
+    for raw_pattern, _display in SET_PATTERNS:
+        pattern = normalize_text(raw_pattern)
+        norm = re.sub(r"(?<!\w)" + re.escape(pattern) + r"(?!\w)", " ", norm)
     tokens = norm.split()
     candidates = []
 
     for token in tokens:
-        if token in CARD_STOPWORDS:
+        if token in CARD_STOPWORDS or token in {"of", "world", "cup", "ultimate", "collection"}:
             continue
         if re.search(r"\d", token):
             continue
