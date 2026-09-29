@@ -11,6 +11,23 @@ def _key(row):
                     for field in ("titel", "title", "pris", "frakt"))
 
 
+def spread_price_routes(ordered_routes, *, limit=140):
+    """Keep affordable leaders while probing the whole searchable inventory."""
+    routes = list(ordered_routes or [])
+    limit = max(0, int(limit))
+    if len(routes) <= limit:
+        return routes
+    if not limit:
+        return []
+    front = max(1, round(limit * 0.60))
+    chosen = routes[:front]
+    remainder = routes[front:]
+    slots = limit - len(chosen)
+    for index in range(slots):
+        chosen.append(remainder[min(len(remainder) - 1, index * len(remainder) // slots)])
+    return chosen
+
+
 def add_price_route_coverage(selected, ordered_routes, *, max_new=40):
     """Replace low-priority nonroutes, retaining the pool size and first quarter.
 

@@ -176,6 +176,13 @@ def build_opportunity_top5(items, limit=5):
             and asking_margin > 0
             and asking_count > 0
         )
+        # A low model/guide estimate must not replace a positive exact-card
+        # active comparison. Keep the model as separately labelled context;
+        # the external reference remains research-only, never a BUY value.
+        if asking_positive and asking_count >= 2:
+            exact_active_reference = _n(asking_context.get("reference_asking_price"), 0.0)
+            if exact_active_reference > 0:
+                asking_reference = exact_active_reference
         verified_edge = bool(market is not None and total is not None and market > total)
         buy = bool(existing_decision in {"KÖP", "BUY"} and sold >= 2 and valuation_safe and verified_edge)
 

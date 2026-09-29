@@ -1,4 +1,4 @@
-from src.price_route_coverage import add_price_route_coverage
+from src.price_route_coverage import add_price_route_coverage, spread_price_routes
 from src.asking_price_opportunity import asking_research_identity, select_asking_price_research
 
 
@@ -16,6 +16,14 @@ def test_no_routes_or_replacement_space_does_not_displace_anything():
     selected = [{"id": str(i)} for i in range(4)]
     result, added = add_price_route_coverage(selected, selected + [{"id": "new"}], max_new=2)
     assert (result, added) == (selected, 0)
+
+
+def test_price_routes_probe_beyond_cheapest_cluster():
+    routes = [{"id": str(index)} for index in range(100)]
+    selected = spread_price_routes(routes, limit=10)
+    assert len(selected) == 10
+    assert selected[:6] == routes[:6]
+    assert int(selected[-1]["id"]) >= 70
 
 
 def test_raw_title_can_route_research_before_full_analysis(monkeypatch):

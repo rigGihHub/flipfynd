@@ -21,7 +21,7 @@ from src.analysis_scope import select_recent_archive_fast_pool, _listing_key
 from src.pricing import total_acquisition_cost
 from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 from src.ebay_browse_context import configured_credentials
-from src.price_route_coverage import add_price_route_coverage
+from src.price_route_coverage import add_price_route_coverage, spread_price_routes
 
 def analyze_data(
     data,
@@ -75,7 +75,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "raw-title-price-coverage-v01474",
+        "analysis_engine_marker": "spread-price-coverage-v01475",
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
@@ -237,7 +237,7 @@ def analyze_data(
     )
     fast_pool_source, price_route_added = add_price_route_coverage(
         fast_pool_source,
-        [route["source_item"] for route in all_price_routes],
+        [route["source_item"] for route in spread_price_routes(all_price_routes, limit=140)],
         max_new=min(40, fast_pool_budget // 4),
     )
     latest_keys = {_listing_key(row) for row in latest_scope if isinstance(row, dict)}
