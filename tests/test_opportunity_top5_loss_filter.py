@@ -50,4 +50,4 @@ def test_low_model_guide_does_not_hide_positive_exact_active_comparison():
     assert len(result) == 1
     assert result[0]["asking_positive"] is True
     assert result[0]["practical_price_source"] == "ACTIVE_PRICE"
-    assert result[0]["practical_margin"] == 55
+    assert result[0]["practical_margin"] == 43

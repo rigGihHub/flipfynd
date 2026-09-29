@@ -84,3 +84,15 @@ def start(token, params, fn, *, database_url=None):
                 _JOBS.pop(key, None)
     _EXECUTOR.submit(execute)
     return True
+
+
+def restore_browser_snapshot(token, snapshot, database_url=None):
+    """Recover only a validated browser copy when the server has no run."""
+    if not valid_token(token) or not isinstance(snapshot, dict):
+        return False
+    with _LOCK:
+        if load(token, database_url) is not None:
+            return False
+        _JOBS[token] = snapshot
+        _save(token, snapshot, database_url)
+    return True
