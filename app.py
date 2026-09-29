@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.80"
+APP_VERSION = "v0.14.81"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 # Saved searches must also render with the current deployed UI after hot reload.
@@ -1217,7 +1217,12 @@ update_fetch_status()
 # The URL identifies this browser's search, never a global last-user result.
 _search_token = str(st.query_params.get("search_run") or "")
 _saved_search = resumable_search.load(_search_token, DATABASE_URL)
-from src.browser_search_backup import browser_backup, decode_snapshot
+import src.browser_search_backup as _browser_backup_module
+if getattr(_browser_backup_module, "_flipfynd_loaded_version", None) != APP_VERSION:
+    importlib.reload(_browser_backup_module)
+    _browser_backup_module._flipfynd_loaded_version = APP_VERSION
+browser_backup = _browser_backup_module.browser_backup
+recover_browser_search = _browser_backup_module.recover_browser_search
 _browser_copy = browser_backup(_search_token, _saved_search,
     clear=bool(st.session_state.get("_browser_clear_requested")))
 if isinstance(_browser_copy, dict) and _browser_copy.get("cleared"):
@@ -1225,8 +1230,7 @@ if isinstance(_browser_copy, dict) and _browser_copy.get("cleared"):
 if not _saved_search and isinstance(_browser_copy, dict) and _browser_copy.get("blob"):
     _browser_token = _browser_copy.get("token")
     if not _search_token or _browser_token == _search_token:
-        _recovered = decode_snapshot(_browser_token, _browser_copy["blob"])
-        if _recovered and resumable_search.restore_browser_snapshot(_browser_token, _recovered, DATABASE_URL):
+        if recover_browser_search(_browser_token, _browser_copy["blob"], DATABASE_URL):
             st.query_params["search_run"] = _browser_token
             st.rerun()
 if isinstance(_browser_copy, dict) and _browser_copy.get("error"):
