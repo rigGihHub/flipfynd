@@ -520,10 +520,10 @@ def analyze_data(
             analysed["url"] = analysed.get("url") or analysed.get("lank")
         results.append(analysed)
 
-    # The rescue must leave the 160-card CPU shortlist. Screen remaining
-    # exact routes cheaply; only positive scenarios receive full analysis.
+    # Screen beyond the CPU shortlist even when its first cards were positive:
+    # the user wants the best findings, not a search that stops at its first hit.
     inventory_screened = []
-    if not first_price_find and debug.get("ebay_credentials_configured"):
+    if debug.get("ebay_credentials_configured"):
         inventory_screened, sweep_debug = sweep_inventory(
             all_price_routes, results, attach_asking_price_opportunity,
         )

@@ -120,3 +120,23 @@ def test_api_error_cache_is_never_reused(monkeypatch):
     monkeypatch.setattr(cache, "_load_cache_payload", lambda: {"entries": {"test": {"result": {
         "asking_price_opportunity": {"status": "COMPARISON_HTTP_ERROR", "http_status": 429}}}}})
     assert cache.get_cached_analysis("test") is None
+
+
+def test_pipeline_keeps_searching_for_better_find_after_first_positive(monkeypatch):
+    from src import ordinary_analysis_pipeline_v2 as pipeline
+    rows = [{"id": str(i), "titel": TITLE, "pris": 10, "frakt": 22,
+             "source_category": "Hockey - NHL"} for i in range(200)]
+    calls = []
+    monkeypatch.setattr(pipeline, "analyze_item", lambda row, **kw: {
+        **row, "confidence": 80, "rank_score": 80, "analysis_total_cost": 32, "beslut": "UNDERSÖK"})
+    monkeypatch.setattr(pipeline, "get_cached_analysis", lambda signature: None)
+    monkeypatch.setattr(pipeline, "set_cached_analysis", lambda *args: None)
+    monkeypatch.setattr(pipeline, "configured_credentials", lambda: ("id", "secret"))
+    monkeypatch.setattr("src.asking_price_opportunity.configured_credentials", lambda: ("id", "secret"))
+    monkeypatch.setattr(pipeline, "attach_asking_price_opportunity", lambda row: {
+        **row, "asking_price_opportunity": {"status": "POSSIBLE_FIND", "possible_find": True,
+                    "net_margin": 1, "comparison_count": 2, "reference_asking_price": 40}})
+    monkeypatch.setattr(pipeline, "sweep_inventory", lambda *args: (calls.append(1) or ([], {})))
+    _, debug = pipeline.analyze_data(rows, "hockey", "", 1000, "Alla", 1, "standard", False, False, False)
+    assert debug["price_research_funnel"]["possible_find"] > 0
+    assert calls == [1]
