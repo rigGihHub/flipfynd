@@ -258,6 +258,20 @@ def attach_asking_price_opportunity(item):
         return out
     try:
         context = fetch_configured_ebay_active_context(exact_identity_query(identity), identity)
+        # One shorter discovery query can recover spelling/set-title variants.
+        # Both searches still pass the unchanged exact-identity matcher.
+        eligible = [row for row in context.get("rows") or [] if row.get("asking_comparison_eligible")]
+        if len(eligible) < 2:
+            shorter = " ".join(str(value) for value in (
+                identity.get("player_name"), identity.get("season"),
+                "#" + str(identity.get("card_number") or "")) if value)
+            if shorter != exact_identity_query(identity):
+                extra = fetch_configured_ebay_active_context(shorter, identity)
+                seen_urls = {row.get("url") for row in context.get("rows") or []}
+                context["rows"] = list(context.get("rows") or []) + [
+                    row for row in extra.get("rows") or [] if row.get("url") not in seen_urls]
+                context["raw_listing_count"] = int(context.get("raw_listing_count") or 0) + int(extra.get("raw_listing_count") or 0)
+                context["query_expanded"] = True
         fx = _cached_fx(int(time.time() // 3600)) if any(
             row.get("asking_comparison_eligible") and row.get("currency") != "SEK"
             for row in context.get("rows") or []
