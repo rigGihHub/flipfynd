@@ -60,3 +60,14 @@ def browser_backup(token, snapshot, *, clear=False):
         st.session_state["_browser_backup_blob"] = encode_snapshot(token, snapshot)
     return component(token=token, blob=st.session_state.get("_browser_backup_blob", ""),
                      clear=clear, key="browser_search_backup", default=None)
+
+
+def recover_browser_search(token, blob, database_url=None):
+    from src import resumable_search
+    snapshot = decode_snapshot(token, blob)
+    if snapshot is None:
+        return False
+    # A live server job wins over the browser copy, but its token still has
+    # to be put back into the URL when returning to the app's base address.
+    resumable_search.restore_browser_snapshot(token, snapshot, database_url)
+    return resumable_search.load(token, database_url) is not None

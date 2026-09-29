@@ -36,3 +36,14 @@ def test_running_browser_copy_never_claims_process_work_survived_a_restart():
     result = decode_snapshot(token, encode_snapshot(token, snapshot("RUNNING")))
     assert result["status"] == "INTERRUPTED"
     assert result["params"]["widgets"]["search_budget"] == 1000
+
+
+def test_base_url_return_reopens_existing_running_job_without_overwriting_it(tmp_path, monkeypatch):
+    from src.browser_search_backup import recover_browser_search
+    monkeypatch.setattr(jobs, "_ROOT", tmp_path)
+    token = jobs.new_token()
+    existing = snapshot("RUNNING")
+    jobs._JOBS[token] = existing
+    assert recover_browser_search(token, encode_snapshot(token, snapshot("RUNNING")))
+    assert jobs.load(token)["status"] == "RUNNING"
+    assert jobs._JOBS[token] is existing
