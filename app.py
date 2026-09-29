@@ -333,7 +333,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.75"
+APP_VERSION = "v0.14.76"
 SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
 
 
@@ -2311,6 +2311,12 @@ if st.session_state.get("results") is not None:
                         f"ytterligare {int(current_debug.get('price_routes_added_to_fast_pool') or 0)} "
                         "fick plats i den begränsade analysen."
                     )
+                    if "inventory_price_remaining" in current_debug:
+                        st.caption(
+                            f"Utökat prispass: {current_debug.get('inventory_price_checked', 0)} ytterligare kort kontrollerade · "
+                            f"{current_debug.get('inventory_price_remaining', 0)} återstår · "
+                            f"status {current_debug.get('inventory_price_stop', '')}."
+                        )
                     statuses = (st.session_state.get("debug") or {}).get("price_research_status_counts") or {}
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))

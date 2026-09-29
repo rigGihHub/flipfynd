@@ -21,6 +21,7 @@ from src.analysis_scope import select_recent_archive_fast_pool, _listing_key
 from src.pricing import total_acquisition_cost
 from src.asking_price_opportunity import attach_asking_price_opportunity, select_asking_price_research
 from src.ebay_browse_context import configured_credentials
+from src.inventory_price_sweep import sweep_inventory
 from src.price_route_coverage import add_price_route_coverage, spread_price_routes
 
 def analyze_data(
@@ -75,7 +76,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "spread-price-coverage-v01475",
+        "analysis_engine_marker": "inventory-price-sweep-v01476",
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
@@ -515,12 +516,45 @@ def analyze_data(
             analysed["url"] = analysed.get("url") or analysed.get("lank")
         results.append(analysed)
 
+    # The rescue must leave the 160-card CPU shortlist. Screen remaining
+    # exact routes cheaply; only positive scenarios receive full analysis.
+    inventory_screened = []
+    if not first_price_find and debug.get("ebay_credentials_configured"):
+        inventory_screened, sweep_debug = sweep_inventory(
+            all_price_routes, results, attach_asking_price_opportunity,
+        )
+        debug.update(sweep_debug)
+        positive = [row for row in inventory_screened
+                    if (row.get("asking_price_opportunity") or {}).get("possible_find")]
+        positive.sort(key=lambda row: row["asking_price_opportunity"].get("net_margin", 0), reverse=True)
+        # Preserve the CPU budget's intent: deepen at most ten new signals.
+        for screened in positive[:10]:
+            full = analyze_item(screened, all_items=market_items, mode="full",
+                                strategy_mode=strategy, sport=sport)
+            # Rebuild the comparison on the fully analysed identity. The strict
+            # matcher must validate it again before it can enter Top 5.
+            full = attach_asking_price_opportunity(full)
+            key = _listing_key(screened)
+            results = [row for row in results if _listing_key(row) != key]
+            results.append(full)
+            debug["full_analysis"] += 1
+        debug["inventory_signals_deepened"] = min(10, len(positive))
+    # Coverage includes negative screens too, without sending raw listings to
+    # the recommendation/ranking code. Prefer revalidated full results.
+    price_rows = {_listing_key(row): row for row in inventory_screened}
+    price_rows.update({_listing_key(row): row for row in results
+                       if isinstance(row.get("asking_price_opportunity"), dict)})
+    price_results = list(price_rows.values())
+    debug["asking_price_eligible_pool"] = len(all_price_routes)
+    debug["mispricing_sweep_target"] = len(all_price_routes)
+    debug["asking_price_routed"] = len(price_results)
+
     debug["asking_context_candidates"] = sum(
-        1 for row in results
+        1 for row in price_results
         if isinstance(row, dict) and isinstance(row.get("asking_price_opportunity"), dict)
     )
     debug["asking_context_covered"] = sum(
-        1 for row in results
+        1 for row in price_results
         if isinstance(row, dict)
         and isinstance(row.get("asking_price_opportunity"), dict)
         and (row.get("asking_price_opportunity") or {}).get("reference_asking_price")
@@ -528,14 +562,14 @@ def analyze_data(
     debug["price_research_funnel"] = {
         "searchable_identity": debug.get("asking_price_eligible_pool", 0),
         "routed": debug.get("asking_price_routed", 0),
-        "deep_analysed": len(full_by_index),
-        "context_attached": sum(1 for row in results if isinstance(row, dict) and isinstance(row.get("ebay_active_context"), dict)),
+        "deep_analysed": len(full_by_index) + debug.get("inventory_signals_deepened", 0),
+        "context_attached": sum(1 for row in price_results if isinstance(row, dict) and isinstance(row.get("ebay_active_context"), dict)),
         "opportunity_attached": debug.get("asking_context_candidates", 0),
         "usable_reference": debug.get("asking_context_covered", 0),
-        "possible_find": sum(1 for row in results if isinstance(row, dict) and (row.get("asking_price_opportunity") or {}).get("possible_find")),
+        "possible_find": sum(1 for row in price_results if isinstance(row, dict) and (row.get("asking_price_opportunity") or {}).get("possible_find")),
     }
     price_status_counts = {}
-    for row in results:
+    for row in price_results:
         if not isinstance(row, dict):
             continue
         opp = row.get("asking_price_opportunity")
@@ -554,7 +588,7 @@ def analyze_data(
             price_status_counts[detail] = price_status_counts.get(detail, 0) + 1
     debug["price_research_status_counts"] = price_status_counts
     debug["price_research_failure_reasons"] = {}
-    for row in results:
+    for row in price_results:
         if not isinstance(row, dict):
             continue
         reason = (row.get("asking_price_opportunity") or {}).get("comparison_failure_reason")
