@@ -36,6 +36,16 @@ def verify_purchase_cost(item, *, session=requests):
         response = session.get(url, timeout=10)
         response.raise_for_status()
         detail = parse_purchase_detail(response.text, match[1])
+        if not detail:
+            out["purchase_cost_verification"] = "UNAVAILABLE"
+            return out
+        # Identity details remain useful even when shipping is unspecified.
+        description = unescape(str(detail.get("description") or ""))
+        out.update(full_description=re.sub(r"<[^>]+>", " ", description)[:8000],
+                   purchase_detail_verified=True, purchase_detail_item_id=str(match[1]),
+                   purchase_detail_url=url, purchase_detail_title=str(detail.get("title") or ""))
+        if "isActive" in detail or "hasEnded" in detail or "isCancelled" in detail:
+            out["listing_inactive"] = bool(detail.get("hasEnded") or detail.get("isCancelled") or detail.get("isActive") is False)
         options = [row for row in detail.get("shippingOptions") or []
                    if not row.get("isTakeaway") and not row.get("isNotSpecified")
                    and row.get("toCountryCodeIso2") == "SE"
@@ -55,8 +65,6 @@ def verify_purchase_cost(item, *, session=requests):
             out["sale_type"] = "Auktion"
         elif detail.get("isPureBin"):
             out["sale_type"] = "Köp nu"
-        description = unescape(str(detail.get("description") or ""))
-        out["full_description"] = re.sub(r"<[^>]+>", " ", description)[:8000]
     except (requests.RequestException, ValueError, TypeError, KeyError):
         out["purchase_cost_verification"] = "UNAVAILABLE"
     return out
@@ -77,7 +85,7 @@ def refine_purchase_costs(rows, *, limit=24):
     for i, row in enumerate(candidates, 1):
         checked = verify_purchase_cost(row)
         row.update(checked)
-        if row.get("purchase_cost_verified"):
+        if row.get("purchase_cost_verified") or row.get("listing_inactive"):
             context = row.get("ebay_active_context") or {}
             row["asking_price_opportunity"] = build_asking_price_opportunity(row, context, fx=_cached_fx(int(time.time() // 3600)))
             scenario = row["asking_price_opportunity"]

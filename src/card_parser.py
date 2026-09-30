@@ -206,7 +206,9 @@ def normalize_text(text: str) -> str:
 
 
 def extract_player_name(title: str) -> Optional[str]:
-    norm = normalize_text(clean_card_title(title))
+    # Checklist prefixes (HR-71, CG-4, etc.) are identifiers, not player names.
+    raw = re.sub(r"(?:#|\b(?:card|kort|no\.?|nr\.?)\s*#?\s*)(?=[A-Za-z0-9-]*\d)[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*", " ", clean_card_title(title), flags=re.I)
+    norm = normalize_text(raw)
 
     for player in KNOWN_PLAYERS:
         if player in norm:
@@ -262,11 +264,11 @@ def extract_season(title: str) -> Optional[str]:
     raw = str(title or "")
 
     # Full start year + short/full end year.
-    match = re.search(r"\b((?:19|20)\d{2})\s*[-/]\s*((?:19|20)?\d{2})\b", raw)
+    match = re.search(r"(?<!\d)((?:19|20)\d{2})\s*[-/]\s*((?:19|20)?\d{2})\b", raw)
     if match:
         start = int(match.group(1))
         end_raw = match.group(2)
-        end = int(end_raw) if len(end_raw) == 4 else (start // 100) * 100 + int(end_raw)
+        end = int(end_raw) if len(end_raw) == 4 else start + 1 if int(end_raw) == (start + 1) % 100 else -1
         if end == start + 1:
             return f"{start}-{end % 100:02d}"
 

@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CACHE_PATH = BASE_DIR / "analysis_cache.json"
 
 CACHE_SCHEMA_VERSION = 2
-CACHE_MODEL_VERSION = "flip_v33_asking_price_opportunity"
+CACHE_MODEL_VERSION = "flip_v34_description_identity"
 
 _memory_cache: Optional[Dict[str, Any]] = None
 
@@ -156,6 +156,9 @@ def build_analysis_signature(item: dict, data_size: int, mode: str) -> str:
         "pris": item.get("pris"),
         "frakt": item.get("frakt"),
         "raw_text": item.get("raw_text", ""),
+        "full_description": item.get("full_description", ""),
+        "purchase_detail_verified": item.get("purchase_detail_verified", False),
+        "listing_inactive": item.get("listing_inactive", False),
         "data_size": data_size,
         "mode": mode,
     }

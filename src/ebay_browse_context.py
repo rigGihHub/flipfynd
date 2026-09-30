@@ -274,6 +274,7 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
 
 def match_active_rows(raw_rows, identity):
     """Shared exact-card/variant gate for active asking prices from any source."""
+    from src.description_price_identity import price_program
     rows = []
     for row in raw_rows:
         candidate = _literal_identity_hints(identity or {}, row)
@@ -327,6 +328,7 @@ def match_active_rows(raw_rows, identity):
             (not target_season or target_season == candidate_season)
             and (not target_set or target_set == candidate_set)
             and (not target_number_norm or target_number_norm == candidate_number_norm)
+            and ("price_program" not in (identity or {}) or str(identity.get("price_program") or "") == price_program(str(row.get("title") or "")))
         )
         target_player = str((identity or {}).get("player_name") or "").strip()
         player_tokens = [tok for tok in re.findall(r"[A-Za-zÀ-ÿ0-9]+", target_player.casefold()) if len(tok) >= 3]

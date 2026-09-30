@@ -334,12 +334,14 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.88"
+APP_VERSION = "v0.14.89"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
 import src.search_progress as _progress_runtime
-for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, _progress_runtime, resumable_search):
+import src.description_price_identity as _description_identity_runtime
+import src.tradera_purchase_cost as _purchase_cost_runtime
+for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, _progress_runtime, _description_identity_runtime, _purchase_cost_runtime, resumable_search):
     if getattr(_literal_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_literal_module)
         _literal_module._flipfynd_loaded_version = APP_VERSION
@@ -2324,6 +2326,14 @@ if st.session_state.get("results") is not None:
                         f"möjliga fynd {price_funnel.get('possible_find', 0)}"
                     )
                     total_price_routes = int(current_debug.get("price_routes_in_filtered_inventory") or 0)
+                    if "description_identity_checked" in current_debug:
+                        st.caption(
+                            f"Annonsbeskrivningar: {current_debug['description_identity_checked']} lästa nu · "
+                            f"{current_debug.get('description_identity_reused', 0)} återanvända · "
+                            f"{current_debug['description_identity_recovered']} saknade kortnummer återfunna · "
+                            f"{current_debug['description_identity_inactive']} avslutade annonser borttagna · "
+                            f"{current_debug['description_identity_remaining']} återstår att kontrollera."
+                        )
                     st.caption(
                         f"Exakt sökbara i hela det filtrerade urvalet: {total_price_routes} · "
                         f"ytterligare {int(current_debug.get('price_routes_added_to_fast_pool') or 0)} "
@@ -2385,6 +2395,8 @@ if st.session_state.get("results") is not None:
                             f"Möjlig nettomarginal i scenariot +{scenario['net_margin']:.0f} kr"
                         )
                         st.caption("Scenariot drar av 15 % från jämförpriset samt säljavgift och emballage. Faktiskt försäljningspris och efterfrågan är inte bekräftade.")
+                        if scenario.get("condition_warning"):
+                            st.warning("Säljaren beskriver slitage/EX-skick. Kontrollera bilderna; jämförelsepriset kan avse bättre skick.")
                         if str(lead.get("url") or "").startswith("https://"):
                             st.link_button("Öppna Tradera-annons", lead["url"])
                         for comp in scenario.get("comparisons") or []:

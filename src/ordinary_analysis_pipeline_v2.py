@@ -83,7 +83,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "literal-card-progress-v01487",
+        "analysis_engine_marker": "description-identity-v01489",
         "ebay_quota": ebay_quota,
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -230,6 +230,10 @@ def analyze_data(
     ]
     debug["integrity_eligible_candidates"] = len(integrity_eligible)
     debug["integrity_rejected_candidates"] = len(fast_pool_source) - len(integrity_eligible)
+    from src.description_price_identity import enrich_description_routes
+    if all(configured_credentials()):
+        debug.update(enrich_description_routes(integrity_eligible))
+        integrity_eligible = [row for row in integrity_eligible if not row.get("listing_inactive")]
     fast_pool_budget = fast_analysis_budget(len(fast_pool_source), context="ordinary")
     fast_pool_source, scope_debug = select_recent_archive_fast_pool(
         integrity_eligible,
