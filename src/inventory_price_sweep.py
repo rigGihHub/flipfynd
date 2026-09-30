@@ -4,9 +4,10 @@ from contextvars import copy_context
 import time
 
 from src.analysis_scope import _listing_key
+from src.search_progress import begin_phase, report_phase
 
 
-def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=180, limit=1000):
+def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=600, limit=1000):
     """Screen unseen listings, retaining input order and stopping on API limits.
 
     No ranking/value rules live here. Only the existing exact comparison
@@ -27,6 +28,7 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=180, limit=1
                     "inventory_price_remaining": len(pending),
                     "inventory_price_stop": "API_LIMIT", "inventory_price_seconds": 0}
     results = []
+    begin_phase("Prisjämför återstående kort", len(pending))
     started = time.monotonic()
     stop = "COMPLETE"
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -37,6 +39,7 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=180, limit=1
             batch = pending[offset:min(offset + workers, limit)]
             futures = [executor.submit(copy_context().run, enrich, row) for row in batch]
             results.extend(future.result() for future in futures)
+            report_phase("Prisjämför återstående kort", checked=len(results), total=len(pending))
             if any((row.get("asking_price_opportunity") or {}).get("http_status")
                    in {401, 403, 429} for row in results[-len(batch):]):
                 stop = "API_LIMIT"

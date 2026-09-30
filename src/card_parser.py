@@ -180,7 +180,15 @@ CARD_STOPWORDS = {
     "silver",
     "script",
     "uncommon",
+    "rainbow", "color", "colour", "wheel", "sunset", "surge", "pixels",
+    "refractor", "amethyst", "aquamarine", "seismic", "matte", "pink",
 }
+
+
+def clean_card_title(title: str) -> str:
+    """Separate card identity from appended marketplace dates/prices."""
+    return re.split(r"\b(?:sluttid\b|utropspris\b|pris\s*:|price\s*:)", str(title or ""),
+                    maxsplit=1, flags=re.I)[0].strip()
 
 
 def normalize_text(text: str) -> str:
@@ -197,7 +205,7 @@ def normalize_text(text: str) -> str:
 
 
 def extract_player_name(title: str) -> Optional[str]:
-    norm = normalize_text(title)
+    norm = normalize_text(clean_card_title(title))
 
     for player in KNOWN_PLAYERS:
         if player in norm:
@@ -444,6 +452,7 @@ def detect_parallel_info(norm: str) -> tuple[Optional[str], str, str]:
 
     # Highly distinctive names first.
     patterns = [
+        (r"\brainbow\s+colou?r\s+wheel\b", "Rainbow Color Wheel", "strong", "high"),
         (r"\bgold\s+outburst\b", "Gold Outburst", "elite", "high"),
         (r"\bred\s+outburst\b", "Red Outburst", "elite", "high"),
         (r"\bsilver\s+outburst\b", "Silver Outburst", "rare", "high"),
@@ -611,6 +620,7 @@ def build_card_identity(features: dict) -> dict:
     }
 
 def parse_card_features(title: str) -> dict:
+    title = clean_card_title(title)
     norm = normalize_text(title)
     serial_number = extract_serial_number(title)
     card_number = extract_card_number(title)

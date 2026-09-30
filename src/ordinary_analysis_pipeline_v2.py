@@ -25,6 +25,7 @@ from src.inventory_price_sweep import sweep_inventory
 from src.price_route_coverage import add_price_route_coverage, spread_price_routes
 
 from src.price_research_session import price_research_run
+from src.search_progress import begin_phase, report_phase
 
 
 @price_research_run
@@ -82,7 +83,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "provider-quota-control-v01482",
+        "analysis_engine_marker": "literal-card-progress-v01487",
         "ebay_quota": ebay_quota,
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -261,6 +262,7 @@ def analyze_data(
     debug["fast_pool_skipped"] = max(0, debug["cheap_filtered_candidates"] - len(fast_pool_source))
 
     fast_started = time.perf_counter()
+    begin_phase("Identifierar och prioriterar kort", len(fast_pool_source))
     for item in fast_pool_source:
         fast = analyze_item(
             item,
@@ -280,6 +282,7 @@ def analyze_data(
                 attention,
             )
         )
+        report_phase("Identifierar och prioriterar kort", checked=len(candidates), total=len(fast_pool_source))
     debug["fast_analysis_seconds"] = round(time.perf_counter() - fast_started, 3)
 
     # Full-analysis preselection may prioritize known scarce/chase structures so
@@ -435,8 +438,10 @@ def analyze_data(
 
     full_started = time.perf_counter()
     full_by_index = {}
+    begin_phase("Djupanalyserar och hämtar priser", len(full_indices))
     for idx in full_indices:
         full_by_index[idx] = _run_full_analysis(idx)
+        report_phase("Djupanalyserar och hämtar priser", checked=len(full_by_index), total=len(full_indices))
 
     # Find More Cards: when the first deep pass yields no BUY, inspect more of
     # the already-filtered candidate pool. User filters and all BUY thresholds
@@ -546,6 +551,7 @@ def analyze_data(
             results.append(full)
             debug["full_analysis"] += 1
         debug["inventory_signals_deepened"] = min(10, len(positive))
+    begin_phase("Kontrollerar nettovinst och sammanställer", 0)
     # Coverage includes negative screens too, without sending raw listings to
     # the recommendation/ranking code. Prefer revalidated full results.
     price_rows = {_listing_key(row): row for row in inventory_screened}

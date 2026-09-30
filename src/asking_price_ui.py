@@ -30,9 +30,10 @@ def render_asking_price_opportunity(opportunity):
         f"= **{data['total_cost']:.0f} kr totalt**"
     )
     st.write(
-        f"Lägsta jämförbara begärda kortpris: **{data['reference_asking_price']:.0f} kr** · "
+        f"Lägsta jämförbara begärda kortpris: **{data.get('observed_asking_price', data['reference_asking_price']):.2f} kr** · "
         f"{data['comparison_count']} annonser"
     )
+    st.write(f"Försäljningsscenario efter 15 % avdrag: **{data['reference_asking_price']:.2f} kr**")
     roi = _net_roi(data)
     roi_text = f" · **{roi:+.0f}% möjlig avkastning**" if roi is not None else ""
     st.write(
