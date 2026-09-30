@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.85"
+APP_VERSION = "v0.14.86"
 import src.ebay_quota as _ebay_quota_runtime
 import src.ebay_quota_ui as _ebay_quota_ui_runtime
 for _quota_module in (_ebay_quota_runtime, _ebay_quota_ui_runtime):
@@ -1731,6 +1731,21 @@ elif _has_data:
 else:
     st.warning("📥 Börja med att hämta annonser ovan. Hitta fynd blir aktiv när data finns och ingen hämtning pågår.")
 
+
+# Show the shared Browse allowance before any search, also in a fresh session.
+# Analytics is single-flight and cached for one minute; it consumes no Browse
+# search calls. During a running job read its locally reserved allowance only.
+from src.ebay_quota_ui import render_quota_counter
+if _saved_search and _saved_search.get("status") == "RUNNING":
+    _quota_id, _quota_secret = _ebay_runtime.configured_credentials()
+    _counter_quota = _ebay_quota_runtime.quota_status(_ebay_runtime._limit_key(_quota_id, _quota_secret))
+else:
+    _counter_quota = _ebay_runtime.fetch_configured_quota()
+st.session_state["ebay_live_quota"] = _counter_quota
+render_quota_counter(_counter_quota)
+st.button("↻ Uppdatera antal anrop", key="refresh_ebay_counter",
+          disabled=bool(_saved_search and _saved_search.get("status") == "RUNNING"),
+          help="Hämtar aktuell kvot. Kvotkontrollen görs högst en gång per minut och använder inga sökanrop.")
 
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)
