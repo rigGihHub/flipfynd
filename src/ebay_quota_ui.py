@@ -8,13 +8,17 @@ def quota_lines(quota):
     quota = quota or {}
     lines = []
     for rate in quota.get("rates", []):
+        if not rate.get("applies_to_search"):
+            continue
         reset = datetime.fromtimestamp(rate["reset_at"], ZoneInfo("Europe/Stockholm"))
         window = rate["timeWindow"]
         label = "dygn" if window == 86400 else f"{window} sekunder"
         lines.append(f"{rate['resource']}: {rate['remaining']} av {rate['limit']} anrop kvar / {label}. "
                      f"Återställs {reset:%Y-%m-%d %H:%M:%S} svensk tid.")
-    if quota.get("paused_until", 0) > time.time():
-        reset = datetime.fromtimestamp(quota["paused_until"], ZoneInfo("Europe/Stockholm"))
+    until = max([quota.get("paused_until", 0), *[r["reset_at"] for r in quota.get("rates", [])
+        if r.get("applies_to_search") and r.get("remaining") == 0]])
+    if until > time.time():
+        reset = datetime.fromtimestamp(until, ZoneInfo("Europe/Stockholm"))
         lines.append(f"Prisanrop pausade till {reset:%Y-%m-%d %H:%M:%S} svensk tid.")
     if quota.get("status") not in {None, "OK"}:
         lines.append("eBays kvotkontroll: " + str(quota["status"]) +

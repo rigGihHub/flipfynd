@@ -90,3 +90,16 @@ def test_provider_labels_and_missing_optional_count_still_enforce_limit():
     assert result["status"] == "OK"
     quota._save("app", result)
     assert not quota.reserve_call("app")
+
+
+def test_pause_label_uses_daily_reset_and_shows_only_search_quota(monkeypatch):
+    from src.ebay_quota_ui import quota_lines
+    monkeypatch.setattr(quota.time, "time", lambda: 1790744400)
+    data = quota.parse_quota(payload(0))
+    bulk = quota.parse_quota(payload(5000, "buy.browse.item.bulk"))
+    data["rates"] += bulk["rates"]
+    data["paused_until"] = quota.time.time() + 900
+    lines = quota_lines(data)
+    assert len(lines) == 2
+    assert "bulk" not in str(lines)
+    assert lines[0].split("Återställs ")[1].split(" svensk")[0] in lines[1]

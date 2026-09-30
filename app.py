@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.83"
+APP_VERSION = "v0.14.84"
 import src.ebay_quota as _ebay_quota_runtime
 import src.ebay_quota_ui as _ebay_quota_ui_runtime
 for _quota_module in (_ebay_quota_runtime, _ebay_quota_ui_runtime):
@@ -2263,12 +2263,15 @@ if st.session_state.get("results") is not None:
                     ebay_ready = bool(current_debug.get("ebay_credentials_configured"))
                     st.write("eBay API: " + ("✅ konfigurerad" if ebay_ready else "❌ saknar EBAY_CLIENT_ID / EBAY_CLIENT_SECRET"))
                     from src.ebay_quota_ui import render_quota_status
-                    render_quota_status(current_debug.get("ebay_quota"), current_debug.get("ebay_error_ids"))
+                    _quota_display = current_debug.get("ebay_quota") or {}
+                    _live_quota = st.session_state.get("ebay_live_quota") or {}
+                    if _live_quota.get("last_check", 0) > _quota_display.get("last_check", 0):
+                        _quota_display = _live_quota
+                    render_quota_status(_quota_display, current_debug.get("ebay_error_ids"))
                     if st.button("Kontrollera eBay-kvot", key="check_ebay_quota"):
                         from src.ebay_browse_context import fetch_configured_quota
                         st.session_state["ebay_live_quota"] = fetch_configured_quota()
-                    if st.session_state.get("ebay_live_quota"):
-                        render_quota_status(st.session_state["ebay_live_quota"])
+                        st.rerun()
                     st.caption("Analysmotor: " + str(current_debug.get("analysis_engine_marker") or "äldre motor – uppdatera analysen"))
                     st.write(
                         f"Sökbar identitet {price_funnel.get('searchable_identity', 0)} → "
