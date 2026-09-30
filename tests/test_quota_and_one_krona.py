@@ -34,11 +34,15 @@ def test_top_five_orders_by_net_instead_of_gross_and_keeps_one_krona():
     assert all(row["decision"] == "UNDERSÖK" for row in rows)
 
 
-def test_first_429_prevents_remaining_browse_calls_and_honours_retry_after(monkeypatch):
+def test_first_429_prevents_remaining_browse_calls_and_honours_retry_after(monkeypatch, tmp_path):
+    from src import ebay_quota
+    monkeypatch.setattr(ebay_quota, "_ROOT", tmp_path)
+    monkeypatch.setattr(ebay_quota, "_STATE", {})
     monkeypatch.setattr(browse, "_RATE_LIMITS", {})
     monkeypatch.setattr(browse, "_TOKEN_CACHE", {})
     clock = [100.0]
     monkeypatch.setattr(browse.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(browse.time, "time", lambda: clock[0])
     class Token:
         ok = True
         def json(self): return {"access_token": "test-token", "expires_in": 7200}

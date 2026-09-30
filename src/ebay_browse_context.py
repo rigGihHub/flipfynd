@@ -64,6 +64,9 @@ def configured_credentials():
 _TOKEN_CACHE = {}
 _RATE_LIMITS = {}
 _RATE_LOCK = RLock()
+_TOKEN_LOCK = RLock()
+_BROWSE_LOCK = RLock()
+_LAST_BROWSE_AT = 0.0
 
 
 def _limit_key(client_id, client_secret):
@@ -71,15 +74,19 @@ def _limit_key(client_id, client_secret):
 
 
 def _check_rate_limit(key):
+    from src.ebay_quota import blocked_until
+    durable_remaining = blocked_until(key) - time.time()
     with _RATE_LOCK:
         until = _RATE_LIMITS.get(key, 0)
-        remaining = until - time.monotonic()
+        remaining = max(until - time.monotonic(), durable_remaining)
     if remaining > 0:
         response = requests.Response()
         response.status_code = 429
         err = requests.HTTPError("EBAY_RATE_LIMIT_PAUSED", response=response)
         err.ebay_stage = "COOLDOWN"
         err.retry_after_seconds = int(remaining) + 1
+        from src.ebay_quota import quota_status
+        err.ebay_quota = quota_status(key)
         raise err
 
 
@@ -99,8 +106,57 @@ def _record_rate_limit(key, response):
     seconds = max(1, seconds) if isfinite(seconds) else 900
     with _RATE_LOCK:
         _RATE_LIMITS[key] = max(_RATE_LIMITS.get(key, 0), time.monotonic() + seconds)
+    from src.ebay_quota import pause
+    pause(key, seconds)
     return int(seconds) + 1
 
+
+
+def _get_token(client_id, client_secret, *, session=requests, timeout=5):
+    rate_key = _limit_key(client_id, client_secret)
+    with _TOKEN_LOCK:
+        basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+        cache_key = (client_id, client_secret)
+        cached_token = _TOKEN_CACHE.get(cache_key) if session is requests else None
+        token = cached_token[0] if cached_token and cached_token[1] > time.monotonic() else None
+        if not token:
+            token_response = session.post(
+                TOKEN_URL,
+                data={"grant_type": "client_credentials", "scope": "https://api.ebay.com/oauth/api_scope"},
+                headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
+                timeout=timeout,
+            )
+            token_ok = getattr(token_response, "ok", None)
+            if token_ok is None:
+                try:
+                    token_response.raise_for_status()
+                    token_ok = True
+                except Exception:
+                    token_ok = False
+            if not token_ok:
+                err = requests.HTTPError(f"EBAY_TOKEN_HTTP_{getattr(token_response, 'status_code', 'unknown')}", response=token_response)
+                if session is requests:
+                    err.retry_after_seconds = _record_rate_limit(rate_key, token_response)
+                setattr(err, "ebay_stage", "TOKEN")
+                raise err
+            token_data = token_response.json()
+            token = token_data.get("access_token")
+            if token and session is requests:
+                _TOKEN_CACHE.clear()
+                _TOKEN_CACHE[cache_key] = (token, time.monotonic() + max(0, float(token_data.get("expires_in") or 7200) - 60))
+        return token
+
+
+def fetch_configured_quota():
+    from src.ebay_quota import read_quota
+    client_id, client_secret = configured_credentials()
+    if not (client_id and client_secret):
+        return {"status": "CREDENTIALS_MISSING"}
+    try:
+        token = _get_token(client_id, client_secret)
+        return read_quota(_limit_key(client_id, client_secret), token) if token else {"status": "TOKEN_MISSING"}
+    except requests.RequestException as exc:
+        return {"status": "TOKEN_ERROR", "http_status": getattr(getattr(exc, "response", None), "status_code", None)}
 
 
 def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret, session=requests, timeout=5, limit=25):
@@ -112,45 +168,38 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
     rate_key = _limit_key(client_id, client_secret)
     if session is requests:
         _check_rate_limit(rate_key)
-    basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    cache_key = (client_id, client_secret)
-    cached_token = _TOKEN_CACHE.get(cache_key) if session is requests else None
-    token = cached_token[0] if cached_token and cached_token[1] > time.monotonic() else None
-    if not token:
-        token_response = session.post(
-            TOKEN_URL,
-            data={"grant_type": "client_credentials", "scope": "https://api.ebay.com/oauth/api_scope"},
-            headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
-            timeout=timeout,
-        )
-        token_ok = getattr(token_response, "ok", None)
-        if token_ok is None:
-            try:
-                token_response.raise_for_status()
-                token_ok = True
-            except Exception:
-                token_ok = False
-        if not token_ok:
-            err = requests.HTTPError(f"EBAY_TOKEN_HTTP_{getattr(token_response, 'status_code', 'unknown')}", response=token_response)
-            if session is requests:
-                err.retry_after_seconds = _record_rate_limit(rate_key, token_response)
-            setattr(err, "ebay_stage", "TOKEN")
-            raise err
-        token_data = token_response.json()
-        token = token_data.get("access_token")
-        if token and session is requests:
-            _TOKEN_CACHE.clear()
-            _TOKEN_CACHE[cache_key] = (token, time.monotonic() + max(0, float(token_data.get("expires_in") or 7200) - 60))
+    token = _get_token(client_id, client_secret, session=session, timeout=timeout)
     if not token:
         return {"ok": False, "status": "TOKEN_MISSING"}
     if session is requests:
         _check_rate_limit(rate_key)
-    response = session.get(
-        SEARCH_URL,
-        params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
-        headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
-        timeout=timeout,
-    )
+    if session is requests:
+        from src.ebay_quota import reserve_call
+        global _LAST_BROWSE_AT
+        with _BROWSE_LOCK:
+            _check_rate_limit(rate_key)
+            if not reserve_call(rate_key):
+                _check_rate_limit(rate_key)
+            delay = min(.15, .15 - (time.monotonic() - _LAST_BROWSE_AT))
+            if delay > 0:
+                time.sleep(delay)
+            response = session.get(
+                SEARCH_URL,
+                params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
+                headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
+                timeout=timeout,
+            )
+            _LAST_BROWSE_AT = time.monotonic()
+            # Set the breaker before releasing the lock to other workers.
+            if getattr(response, "status_code", None) == 429:
+                _record_rate_limit(rate_key, response)
+    else:
+        response = session.get(
+            SEARCH_URL,
+            params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
+            headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
+            timeout=timeout,
+        )
     response_ok = getattr(response, "ok", None)
     if response_ok is None:
         try:
@@ -162,6 +211,12 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
         err = requests.HTTPError(f"EBAY_BROWSE_HTTP_{getattr(response, 'status_code', 'unknown')}", response=response)
         if session is requests:
             err.retry_after_seconds = _record_rate_limit(rate_key, response)
+        from src.ebay_quota import quota_status
+        err.ebay_quota = quota_status(rate_key)
+        try:
+            err.ebay_error_ids = [str(e.get("errorId")) for e in response.json().get("errors", []) if e.get("errorId") is not None]
+        except (ValueError, AttributeError, TypeError):
+            err.ebay_error_ids = []
         setattr(err, "ebay_stage", "BROWSE")
         raise err
     payload = response.json()

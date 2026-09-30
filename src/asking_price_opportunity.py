@@ -297,6 +297,7 @@ def attach_asking_price_opportunity(item):
             "possible_find": False,
             "http_status": getattr(response, "status_code", None),
             "retry_after_seconds": getattr(exc, "retry_after_seconds", None),
+            "ebay_error_ids": getattr(exc, "ebay_error_ids", []),
             "error_type": type(exc).__name__,
             "error_stage": str(getattr(exc, "ebay_stage", "UNKNOWN")),
         }
