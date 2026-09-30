@@ -1,0 +1,82 @@
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+import json
+import pytest
+import requests
+from src import ebay_quota as quota
+from src import ebay_browse_context as browse
+
+
+@pytest.fixture(autouse=True)
+def isolated(tmp_path, monkeypatch):
+    monkeypatch.setattr(quota, "_ROOT", tmp_path)
+    monkeypatch.setattr(quota, "_STATE", {})
+
+
+def payload(remaining=2, resource="buy.browse"):
+    reset = datetime.fromtimestamp(quota.time.time() + 3600, timezone.utc).isoformat()
+    return {"rateLimits": [{"apiName": "browse", "apiContext": "buy", "resources": [
+        {"name": resource, "rates": [{"limit": 5000, "count": 5000-remaining,
+          "remaining": remaining, "timeWindow": 86400, "reset": reset}]}]}]}
+
+
+def test_provider_reset_stops_calls_survives_restart_then_expires(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(quota.time, "time", lambda: clock[0])
+    quota._save("app", quota.parse_quota(payload(0)))
+    assert quota.blocked_until("app") == 4600
+    quota._STATE.clear()
+    assert not quota.reserve_call("app")
+    clock[0] = 4601
+    assert quota.reserve_call("app")
+
+
+def test_get_items_quota_does_not_block_search():
+    quota._save("app", quota.parse_quota(payload(0, "buy.browse.item.getItems")))
+    assert quota.reserve_call("app")
+
+
+def test_concurrent_reservations_cannot_overspend_remaining_calls():
+    quota._save("app", quota.parse_quota(payload(2)))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        assert sum(pool.map(lambda _: quota.reserve_call("app"), range(20))) == 2
+
+
+def test_metadata_calls_are_single_flight_and_never_store_token_or_listings():
+    calls = []
+    class Response:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return payload()
+    class Session:
+        def get(self, url, **kw):
+            assert url == quota.URL
+            assert kw["params"] == {"api_name": "browse", "api_context": "buy"}
+            calls.append(1)
+            return Response()
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda _: quota.read_quota("app", "secret-token", session=Session()), range(20)))
+    assert len(calls) == 1
+    saved = (quota._ROOT / "app.json").read_text()
+    assert "secret-token" not in saved
+    assert "itemSummaries" not in saved
+
+
+def test_exhausted_quota_prevents_token_and_browse_requests(monkeypatch):
+    key = browse._limit_key("daily-limit", "secret")
+    quota._save(key, quota.parse_quota(payload(0)))
+    monkeypatch.setattr(browse.requests, "post", lambda *a, **kw: pytest.fail("Must not mint a token"))
+    monkeypatch.setattr(browse.requests, "get", lambda *a, **kw: pytest.fail("Must not call Browse"))
+    with pytest.raises(requests.HTTPError) as error:
+        browse.fetch_ebay_active_context("card", client_id="daily-limit", client_secret="secret")
+    assert error.value.ebay_stage == "COOLDOWN"
+    assert error.value.retry_after_seconds > 3500
+
+
+def test_failed_analytics_does_not_discard_known_provider_limit():
+    quota._save("app", quota.parse_quota(payload(0)))
+    class Session:
+        def get(self, *a, **kw): raise requests.Timeout()
+    result = quota.read_quota("app", "token", session=Session())
+    assert result["status"] == "QUOTA_CHECK_FAILED"
+    assert not quota.reserve_call("app")

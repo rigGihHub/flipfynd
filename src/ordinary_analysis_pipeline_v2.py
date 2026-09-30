@@ -45,6 +45,8 @@ def analyze_data(
     sold_comp_data=None,
 ):
     analysis_started = time.perf_counter()
+    from src.ebay_browse_context import fetch_configured_quota
+    ebay_quota = fetch_configured_quota()
     raw_total_items = len(data)
     # Keep interactive analysis bounded even if an older cloud runtime still
     # contains a very large crawl. This is a CPU guard, not a ranking signal.
@@ -80,7 +82,8 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "quota-aware-net-profit-v01480",
+        "analysis_engine_marker": "provider-quota-control-v01482",
+        "ebay_quota": ebay_quota,
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
@@ -610,6 +613,13 @@ def analyze_data(
                 detail += f"/{error_type}"
             price_status_counts[detail] = price_status_counts.get(detail, 0) + 1
     debug["price_research_status_counts"] = price_status_counts
+    from src.ebay_browse_context import configured_credentials as _quota_credentials, _limit_key
+    from src.ebay_quota import quota_status
+    _qid, _qsecret = _quota_credentials()
+    if _qid and _qsecret:
+        debug["ebay_quota"] = quota_status(_limit_key(_qid, _qsecret))
+    debug["ebay_error_ids"] = sorted({code for row in price_results
+        for code in (row.get("asking_price_opportunity") or {}).get("ebay_error_ids", [])})
     debug["price_research_failure_reasons"] = {}
     for row in price_results:
         if not isinstance(row, dict):
