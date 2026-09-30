@@ -80,5 +80,5 @@ def refine_purchase_costs(rows, *, limit=24):
         if row.get("purchase_cost_verified"):
             context = row.get("ebay_active_context") or {}
             row["asking_price_opportunity"] = build_asking_price_opportunity(row, context, fx=_cached_fx(int(time.time() // 3600)))
-        report_phase(i, total=len(candidates))
+        report_phase("Kontrollerar frakt och köparskydd i annonserna", checked=i, total=len(candidates))
     return len(candidates)
