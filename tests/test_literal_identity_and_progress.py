@@ -55,6 +55,22 @@ def test_purchase_detail_uses_exact_item_and_excludes_free_collection():
     assert not wrong.get('purchase_cost_verified')
 
 
+def test_cost_verification_reports_named_phase_and_checked_cards(monkeypatch):
+    from src import tradera_purchase_cost as costs
+    from src import asking_price_opportunity as prices
+    monkeypatch.setattr(costs, 'verify_purchase_cost', lambda row: dict(row, purchase_cost_verified=True, frakt=7, buyer_protection_fee=3))
+    monkeypatch.setattr(prices, '_cached_fx', lambda hour: {'rates_to_sek': {'SEK': 1}})
+    context = {'rows': [{'price': 50, 'currency': 'SEK', 'url': str(i), 'asking_comparison_eligible': True} for i in range(2)]}
+    row = {'titel': '2023-24 Upper Deck #451 Connor Bedard', 'pris': 10, 'lank': 'https://www.tradera.com/item/293316/1/x',
+           'ebay_active_context': context, 'asking_price_opportunity': {'comparison_count': 2, 'net_margin': -5}}
+    events = []
+    with track_progress(events.append):
+        assert costs.refine_purchase_costs([row]) == 1
+    assert events[-1]['phase'] == 'Kontrollerar frakt och köparskydd i annonserna'
+    assert events[-1]['checked'] == events[-1]['total'] == 1
+    assert row['asking_price_opportunity']['possible_find']
+
+
 def test_giordano_never_uses_mcdavid_name_or_auction_date_as_number():
     parsed = parse_card_features(GIORDANO)
     recovered = build_research_title_identity(GIORDANO)
