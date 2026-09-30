@@ -69,6 +69,8 @@ def test_cost_verification_reports_named_phase_and_checked_cards(monkeypatch):
     assert events[-1]['phase'] == 'Kontrollerar frakt och köparskydd i annonserna'
     assert events[-1]['checked'] == events[-1]['total'] == 1
     assert row['asking_price_opportunity']['possible_find']
+    assert row['analysis_total_cost'] == row['asking_price_opportunity']['total_cost'] == 20
+    assert row['total_cost'] == 20
 
 
 def test_giordano_never_uses_mcdavid_name_or_auction_date_as_number():
