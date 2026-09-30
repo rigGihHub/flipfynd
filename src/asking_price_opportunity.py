@@ -7,6 +7,7 @@ from math import isfinite
 import re
 import time
 import xml.etree.ElementTree as ET
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
@@ -71,9 +72,11 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         # REVIEW hits can be browsed, but incomplete identity is not price evidence.
         if not row.get("asking_comparison_eligible") or not row.get("url"):
             continue
-        if row["url"] in seen:
+        parts = urlsplit(row["url"])
+        key = row.get("item_id") or urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+        if key in seen:
             continue
-        seen.add(row["url"])
+        seen.add(key)
         value = _number(row.get("price"))
         currency = str(row.get("currency") or "").upper()
         rate = 1.0 if currency == "SEK" else _number(rates.get(currency))
@@ -98,23 +101,13 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     freight = _number(shipping["shipping"])
     if freight is None:
         return {**out, "status": "SHIPPING_INVALID"}
-    # Use a conservative lower-market reference rather than a single highest
-    # listing. With several exact active comps, the lower quartile resists one
-    # unrealistically cheap or expensive listing while staying conservative.
     prices = [row["asking_price_sek"] for row in rows]
     # Active listings are an upper-bound indication, not realised value.
     # Use the low end of exact item prices and apply a conservative haircut so
     # one expensive listing cannot manufacture a fake resale opportunity.
-    if len(prices) >= 3:
-        lower_index = max(0, int((len(prices) - 1) * 0.25))
-        observed_reference = prices[lower_index]
-        reference_method = "LOWER_QUARTILE_ACTIVE"
-        reference = round(observed_reference * 0.85, 2)
-    else:
-        observed_reference = prices[0]
-        reference_method = "SINGLE_ACTIVE_REVIEW" if len(prices) == 1 else "LOWEST_ACTIVE"
-        # One active seller is too weak to create a "possible find" by itself.
-        reference = round(observed_reference * 0.85, 2)
+    observed_reference = prices[0]
+    reference_method = "SINGLE_ACTIVE_REVIEW" if len(prices) == 1 else "LOWEST_ACTIVE"
+    reference = round(observed_reference * 0.85, 2)
     fee = round(min(200.0, max(3.0, reference * 0.10)), 2)
     packaging = 3.0
     total = round(price + freight, 2)
@@ -162,7 +155,15 @@ def asking_research_identity(item):
     gated = (item.get("exact_identity_gate_research_identity_fields")
              or item.get("exact_identity_gate_identity_fields") or {})
     if gated:
+        # A recovered gate can contain older parser output. Literal clean-title
+        # player/number conflicts must not send research for a different card.
         fields.update(gated)
+        for key in ("player_name", "card_number", "parallel"):
+            if parsed.get(key):
+                fields[key] = parsed[key]
+        if not parsed.get("card_number"):
+            recovered = build_research_title_identity(title)
+            fields["card_number"] = recovered["fields"].get("card_number")
     else:
         # Raw listings have not yet passed the expensive analyzer. The same
         # title recovery used by that analyzer may route research, but it
@@ -258,7 +259,7 @@ def attach_asking_price_opportunity(item):
     if not client_id or not client_secret:
         return out
     try:
-        context = fetch_configured_ebay_active_context(exact_identity_query(identity), identity)
+        context = fetch_configured_ebay_active_context(price_lookup_query(identity), identity)
         # One shorter discovery query can recover spelling/set-title variants.
         # Both searches still pass the unchanged exact-identity matcher.
         eligible = [row for row in context.get("rows") or [] if row.get("asking_comparison_eligible")]
@@ -272,7 +273,7 @@ def attach_asking_price_opportunity(item):
             shorter = " ".join(str(value) for value in (
                 identity.get("player_name"), identity.get("season"),
                 "#" + str(identity.get("card_number") or "")) if value)
-            if shorter != exact_identity_query(identity):
+            if shorter != price_lookup_query(identity):
                 try:
                     extra = fetch_configured_ebay_active_context(shorter, identity)
                 except requests.RequestException as exc:
@@ -317,3 +318,15 @@ def attach_asking_price_opportunity(item):
             "error_type": type(exc).__name__,
         }
     return out
+
+
+def price_lookup_query(identity):
+    """Use literal player/season/number anchors; verify the set in every hit.
+
+    eBay sellers spell manufacturers differently (OPC/O-Pee-Chee, UD/Upper
+    Deck). Mandatory manufacturer words in the request hid comparable cards.
+    Removing those query words never removes the downstream exact-set gate.
+    """
+    fields = dict(identity)
+    fields.pop("set_name", None)
+    return exact_identity_query(fields)

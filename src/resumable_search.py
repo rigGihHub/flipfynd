@@ -10,9 +10,10 @@ import uuid
 from src.persistent_store import load_namespace, save_namespace
 
 _ROOT = Path(__file__).resolve().parent.parent / 'search_snapshots'
-_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix='flipfynd-search')
-_LOCK = RLock()
-_JOBS = {}
+# A Streamlit code reload must not orphan running work or its progress.
+_EXECUTOR = globals().get('_EXECUTOR') or ThreadPoolExecutor(max_workers=1, thread_name_prefix='flipfynd-search')
+_LOCK = globals().get('_LOCK') or RLock()
+_JOBS = globals().get('_JOBS', {})
 
 
 def valid_token(token):
@@ -69,8 +70,17 @@ def start(token, params, fn, *, database_url=None):
         _save(token, job, database_url)
 
     def execute():
+        from src.search_progress import track_progress
+        last_saved = [0.0]
+        def progress(payload):
+            with _LOCK:
+                job['progress'] = payload
+                if time.monotonic() - last_saved[0] >= 2:
+                    _save(token, job, database_url)
+                    last_saved[0] = time.monotonic()
         try:
-            results, debug = fn()
+            with track_progress(progress):
+                results, debug = fn()
             final = {**job, 'status': 'COMPLETED', 'results': results,
                      'debug': debug, 'completed_at': time.time()}
         except Exception as exc:

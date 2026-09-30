@@ -183,6 +183,8 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             delay = min(.15, .15 - (time.monotonic() - _LAST_BROWSE_AT))
             if delay > 0:
                 time.sleep(delay)
+            from src.search_progress import record_request
+            record_request(0)
             response = session.get(
                 SEARCH_URL,
                 params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
@@ -194,6 +196,8 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             if getattr(response, "status_code", None) == 429:
                 _record_rate_limit(rate_key, response)
     else:
+        from src.search_progress import record_request
+        record_request(0)
         response = session.get(
             SEARCH_URL,
             params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
@@ -315,7 +319,10 @@ def match_active_rows(raw_rows, identity):
         target_set = str((identity or {}).get("set_name") or "").strip().casefold()
         candidate_set = str(parsed.get("set_name") or "").strip().casefold()
         target_number_norm = str((identity or {}).get("card_number") or "").strip().lstrip("#").casefold()
-        candidate_number_norm = str(parsed.get("card_number") or "").strip().lstrip("#").casefold()
+        # A literal target number is also valid without '#', provided the
+        # parser did not find a conflicting explicit number. The matcher still
+        # requires player, season, set and variant to agree independently.
+        candidate_number_norm = str(parsed.get("card_number") or candidate.get("card_number") or "").strip().lstrip("#").casefold()
         core_identity_match = bool(
             (not target_season or target_season == candidate_season)
             and (not target_set or target_set == candidate_set)

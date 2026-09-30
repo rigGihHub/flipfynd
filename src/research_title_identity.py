@@ -16,6 +16,7 @@ from src.card_parser import (
     extract_set_name,
     normalize_text,
     CARD_STOPWORDS,
+    clean_card_title,
 )
 
 
@@ -219,6 +220,7 @@ def _bare_card_number(title: str, *, set_name: str | None, season: str | None, p
 
 def build_research_title_identity(title: str, base_features: dict | None = None) -> dict:
     """Return conservative title-derived fields usable only for research search."""
+    title = clean_card_title(title)
     base = dict(base_features or {})
     base_player = _txt(base.get("player_name"))
     parsed_player = _txt(extract_player_name(title)) if not base_player else ""

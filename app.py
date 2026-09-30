@@ -334,7 +334,16 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.86"
+APP_VERSION = "v0.14.87"
+import src.card_parser as _literal_parser_runtime
+import src.research_title_identity as _literal_research_runtime
+import src.asking_price_ui as _literal_ui_runtime
+for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, resumable_search):
+    if getattr(_literal_module, "_flipfynd_loaded_version", None) != APP_VERSION:
+        importlib.reload(_literal_module)
+        _literal_module._flipfynd_loaded_version = APP_VERSION
+render_asking_price_opportunity = _literal_ui_runtime.render_asking_price_opportunity
+render_asking_price_shortlist = _literal_ui_runtime.render_asking_price_shortlist
 import src.ebay_quota as _ebay_quota_runtime
 import src.ebay_quota_ui as _ebay_quota_ui_runtime
 for _quota_module in (_ebay_quota_runtime, _ebay_quota_ui_runtime):
@@ -1934,6 +1943,10 @@ if run:
     st.rerun()
 
 if _saved_search and _saved_search.get("status") == "RUNNING":
+    from src.search_progress import progress_text
+    _progress_label, _progress_detail, _progress_fraction = progress_text(_saved_search)
+    st.progress(_progress_fraction, text=_progress_label)
+    st.caption(_progress_detail)
     st.info("Analysen fortsätter i bakgrunden. Du kan lämna appen och återvända till samma länk.")
     if st_autorefresh:
         st_autorefresh(interval=3000, key="resume_search_poll")
@@ -2191,6 +2204,12 @@ def render_card_explanation_button(item: dict, key: str) -> None:
 
 
 if st.session_state.get("results") is not None:
+    _result_version = (_saved_search or {}).get("params", {}).get("app_version")
+    if _result_version and _result_version != APP_VERSION:
+        st.warning("Sparad sökning från en äldre prisanalys. Kortmatchningen har rättats. Tryck Hitta fynd för en ny prisjämförelse; dina filter är kvar.")
+        # Preserve the snapshot, but don't present obsolete calculated profits
+        # as current finds after the identity correction.
+        st.stop()
     filtered = []
 
     for item in st.session_state["results"]:
@@ -2212,6 +2231,9 @@ if st.session_state.get("results") is not None:
             _price_problem = price_research_problem(st.session_state.get("debug"))
             simple_buy = build_buy_view(filtered)
             st.subheader("🎯 Ditt beslut just nu")
+            _unchecked_prices = int((st.session_state.get("debug") or {}).get("inventory_price_remaining") or 0)
+            if _unchecked_prices:
+                st.warning(f"Ofullständig prisjämförelse: {_unchecked_prices} sökbara kort återstår. Resultaten gäller bara kontrollerade kort.")
             st.caption("Ett tydligt förstaval – eller ett tydligt besked att avstå.")
             if simple_buy.get("status") == "READY" and simple_buy.get("card"):
                 card = simple_buy["card"]
