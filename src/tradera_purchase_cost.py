@@ -80,5 +80,11 @@ def refine_purchase_costs(rows, *, limit=24):
         if row.get("purchase_cost_verified"):
             context = row.get("ebay_active_context") or {}
             row["asking_price_opportunity"] = build_asking_price_opportunity(row, context, fx=_cached_fx(int(time.time() // 3600)))
+            scenario = row["asking_price_opportunity"]
+            if scenario.get("total_cost") is not None:
+                # The ranking card must show the same confirmed acquisition
+                # cost as the profit scenario, including the auction buffer.
+                row["analysis_total_cost"] = scenario["total_cost"]
+                row["total_cost"] = round(row["pris"] + row["frakt"] + row.get("buyer_protection_fee", 0), 2)
         report_phase("Kontrollerar frakt och köparskydd i annonserna", checked=i, total=len(candidates))
     return len(candidates)
