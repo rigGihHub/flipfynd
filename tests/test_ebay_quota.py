@@ -103,3 +103,20 @@ def test_pause_label_uses_daily_reset_and_shows_only_search_quota(monkeypatch):
     assert len(lines) == 2
     assert "bulk" not in str(lines)
     assert lines[0].split("Återställs ")[1].split(" svensk")[0] in lines[1]
+
+
+def test_counter_excludes_unused_bulk_allowance_and_expired_previous_day():
+    from src.ebay_quota_ui import counter_details
+    data = quota.parse_quota(payload(42))
+    data["rates"] += quota.parse_quota(payload(5000, "buy.browse.item.bulk"))["rates"]
+    assert counter_details(data)["remaining"] == 42
+    assert counter_details(data, now=data["rates"][0]["reset_at"] + 1) is None
+
+
+def test_counter_does_not_present_failed_refresh_as_current_data():
+    from src.ebay_quota_ui import counter_details
+    data = quota.parse_quota(payload(1234))
+    data["status"] = "QUOTA_CHECK_FAILED"
+    assert counter_details(data)["remaining"] == 1234
+    assert counter_details(data)["stale"] is True
+    assert counter_details({"status": "QUOTA_CHECK_FAILED"}) is None

@@ -5,6 +5,43 @@ from zoneinfo import ZoneInfo
 import time
 
 
+def counter_details(quota, *, now=None):
+    quota = quota or {}
+    now = time.time() if now is None else now
+    rates = [r for r in quota.get("rates", []) if r.get("applies_to_search")
+             and r.get("reset_at", 0) > now]
+    if not rates:
+        return None
+    rate = min(rates, key=lambda r: r["remaining"])
+    reset = datetime.fromtimestamp(rate["reset_at"], ZoneInfo("Europe/Stockholm"))
+    checked = quota.get("last_check")
+    checked_text = datetime.fromtimestamp(checked, ZoneInfo("Europe/Stockholm")).strftime("%H:%M") if checked else None
+    return {"remaining": rate["remaining"], "limit": rate["limit"],
+            "reset": reset.strftime("%d/%m kl. %H:%M"), "checked": checked_text,
+            "stale": quota.get("status") != "OK"}
+
+
+def render_quota_counter(quota):
+    import streamlit as st
+    details = counter_details(quota)
+    if details:
+        remaining = f"{details['remaining']:,}".replace(",", " ")
+        limit = f"{details['limit']:,}".replace(",", " ")
+        title = f"eBay-anrop kvar: {remaining} / {limit}"
+        note = f"Återställs {details['reset']} svensk tid."
+        if details["checked"]:
+            note += f" Kontrollerat kl. {details['checked']}."
+        if details["stale"]:
+            note += " Senast kända antal – aktuell kvot kunde inte hämtas."
+    else:
+        title = "eBay-anrop kvar: okänt"
+        note = "Antalet kunde inte hämtas från eBay."
+    st.markdown('<div style="color:#f7eee4;background:#17212b;border-left:3px solid #e2a45c;'
+                'padding:12px 14px;margin:8px 0"><strong style="font-size:1.15rem">'
+                + escape(title) + '</strong><div style="margin-top:4px;font-size:.9rem">'
+                + escape(note) + '</div></div>', unsafe_allow_html=True)
+
+
 def quota_lines(quota):
     quota = quota or {}
     lines = []
