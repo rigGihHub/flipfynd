@@ -337,6 +337,7 @@ def match_active_rows(raw_rows, identity):
             and number_present and player_present and core_identity_match
             and target_graded == candidate_graded and not extra_serial
             and premium_traits_match
+            and target_parallel != "dufex (side unknown)"
             and (not target_graded or ((identity or {}).get("grade") and (identity or {}).get("grading_company")))
             and "FIXED_PRICE" in row["buying_options"]
             and integrity["eligible_physical_single_card"] and not integrity["reprint_risk"]

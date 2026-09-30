@@ -110,7 +110,11 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     reference = round(observed_reference * 0.85, 2)
     fee = round(min(200.0, max(3.0, reference * 0.10)), 2)
     packaging = 3.0
-    total = round(price + freight, 2)
+    buyer_fee = _number(item.get("buyer_protection_fee")) or 0.0
+    sale_text = str(item.get("sale_type") or title).casefold()
+    auction = bool(re.search(r"auktion|utropspris|ledande bud", sale_text)) and "köp nu" not in sale_text
+    auction_buffer = round(max(15.0, min(price * 0.12, 75.0)), 2) if auction else 0.0
+    total = round(price + freight + buyer_fee + auction_buffer, 2)
     margin = round(reference - total - fee - packaging, 2)
     single_comp_signal = bool(len(rows) == 1 and margin >= 1)
     # Active asking prices are not realised sales. A lone listing may signal
@@ -133,6 +137,9 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         "minimum_net_profit": 1.0,
         "evidence_sufficient_for_possible_find": evidence_sufficient,
         "purchase_price": price,
+        "buyer_protection_fee": buyer_fee, "auction_buffer": auction_buffer,
+        "purchase_cost_verified": bool(item.get("purchase_cost_verified")),
+        "condition_warning": bool(re.search(r"corner\s*wear|hörnslitage|white\s*corner|excellent\s*/\s*ex", str(item.get("full_description") or ""), re.I)),
         "shipping": freight, "shipping_known": shipping["known"],
         "total_cost": total, "reference_asking_price": reference, "observed_asking_price": observed_reference,
         "reference_method": reference_method,

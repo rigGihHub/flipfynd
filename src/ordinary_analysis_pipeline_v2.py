@@ -558,6 +558,19 @@ def analyze_data(
     price_rows.update({_listing_key(row): row for row in results
                        if isinstance(row.get("asking_price_opportunity"), dict)})
     price_results = list(price_rows.values())
+    from src.tradera_purchase_cost import refine_purchase_costs
+    debug["purchase_cost_checks"] = refine_purchase_costs(price_results)
+    result_keys = {_listing_key(row) for row in results}
+    recovered = [row for row in price_results if _listing_key(row) not in result_keys
+                 and (row.get("asking_price_opportunity") or {}).get("possible_find")]
+    recovered.sort(key=lambda row: row["asking_price_opportunity"].get("net_margin", 0), reverse=True)
+    for row in recovered[:10]:
+        full = analyze_item(row, all_items=market_items, mode="full", strategy_mode=strategy, sport=sport)
+        full = attach_asking_price_opportunity(full)
+        results.append(full)
+        price_results = [full if _listing_key(existing) == _listing_key(row) else existing for existing in price_results]
+        debug["full_analysis"] += 1
+    begin_phase("Sammanställer kontrollerade förslag", 0)
     all_route_keys = {_listing_key(route["source_item"]) for route in all_price_routes}
     debug["asking_price_eligible_pool"] = len(all_route_keys | set(price_rows))
     debug["mispricing_sweep_target"] = debug["asking_price_eligible_pool"]

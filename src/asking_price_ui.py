@@ -27,8 +27,15 @@ def render_asking_price_opportunity(opportunity):
     shipping_label = "frakt" if data["shipping_known"] else "antagen frakt"
     st.write(
         f"Inköp {data['purchase_price']:.0f} kr + {shipping_label} {data['shipping']:.0f} kr "
+        + (f"+ köparskydd {data['buyer_protection_fee']:.0f} kr " if data.get('buyer_protection_fee') else "")
+        + (f"+ budmarginal {data['auction_buffer']:.0f} kr " if data.get('auction_buffer') else "")
+        +
         f"= **{data['total_cost']:.0f} kr totalt**"
     )
+    if not data.get("purchase_cost_verified"):
+        st.caption("Inköpskostnaden är inte kontrollerad mot annonsen; frakt och eventuellt köparskydd behöver bekräftas.")
+    if data.get("condition_warning"):
+        st.warning("Säljaren beskriver slitage/EX-skick. Jämförelsepriset kan avse bättre skick; kontrollera bilderna och räkna med lägre försäljningspris.")
     st.write(
         f"Lägsta jämförbara begärda kortpris: **{data.get('observed_asking_price', data['reference_asking_price']):.2f} kr** · "
         f"{data['comparison_count']} annonser"

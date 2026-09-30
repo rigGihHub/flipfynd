@@ -204,6 +204,8 @@ def _bare_card_number(title: str, *, set_name: str | None, season: str | None, p
     work = re.sub(r"(?<!\d)\d{2}\s*[-/]\s*\d{2}(?!\d)", " ", work)
     work = re.sub(r"\b(?:pris|price|buy\s*now|köp\s*nu|utropspris)\s*[:=]?\s*\d+(?:[.,]\d+)?\s*(?:kr|sek|usd|eur|\$|€)?\b", " ", work, flags=re.I)
     work = re.sub(r"\b\d{1,2}:\d{2}\b", " ", work)
+    # Product release numbers are not checklist numbers (Upper Deck Series 2).
+    work = re.sub(r"\b(?:series|serie|wave|volume|edition)\s*\d{1,2}\b", " ", work, flags=re.I)
 
     # Remove explicit checklist forms; the strict parser already handles them.
     work = re.sub(r"(?<![\w/])#\s*[A-Za-z]{0,5}[- ]?\d{1,4}\b", " ", work)
