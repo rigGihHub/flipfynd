@@ -17,6 +17,7 @@ from src.card_listing_integrity import assess_listing_integrity
 from src.comp_source_intelligence import exact_identity_query
 from src.ebay_browse_context import configured_credentials, fetch_configured_ebay_active_context
 from src.shipping_truth import resolve_shipping
+from src.description_price_identity import recover_description_identity, price_program
 
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 
@@ -59,6 +60,8 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     """Compare acquisition costs to the lowest usable asking price, not a sale."""
     out = {"status": "NO_COMPARISON", "possible_find": False,
            "evidence_type": "ACTIVE_ASKING_PRICE", "creates_sold_evidence": False}
+    if item.get("listing_inactive"):
+        return {**out, "status": "LISTING_ENDED"}
     title = str(item.get("titel") or item.get("title") or "")
     integrity = assess_listing_integrity(title)
     if (not integrity["eligible_physical_single_card"] or integrity["reprint_risk"]
@@ -165,7 +168,7 @@ def asking_research_identity(item):
         # A recovered gate can contain older parser output. Literal clean-title
         # player/number conflicts must not send research for a different card.
         fields.update(gated)
-        for key in ("player_name", "card_number", "parallel"):
+        for key in ("player_name", "card_number", "parallel", "set_name", "season"):
             if parsed.get(key):
                 fields[key] = parsed[key]
         if not parsed.get("card_number"):
@@ -178,6 +181,11 @@ def asking_research_identity(item):
         recovered = build_research_title_identity(title)
         if recovered.get("complete"):
             fields.update({key: value for key, value in recovered["fields"].items() if value})
+        if parsed.get("set_name"):
+            fields["set_name"] = parsed["set_name"]
+    description_fields = recover_description_identity(item)
+    fields.update(description_fields)
+    fields["price_program"] = price_program(title)
     fields["serial_denominator"] = fields.get("serial_denominator") or parsed.get("serial_number")
     return fields
 
@@ -194,6 +202,8 @@ def select_asking_price_research(rows, *, limit=24):
     eligible = []
     for row in rows:
         item = row.get("source_item") or row
+        if item.get("listing_inactive"):
+            continue
         identity = asking_research_identity(item)
         # The downstream eBay evidence gate requires player + exact card number
         # and season/set context. Routing looser identities here only consumed
