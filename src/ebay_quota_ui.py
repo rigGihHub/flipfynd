@@ -26,5 +26,8 @@ def render_quota_status(quota, error_ids=None):
     import streamlit as st
     for line in quota_lines(quota):
         st.write(line)
+    if quota and quota.get("status") == "NO_QUOTA_DATA":
+        st.caption("Kvotendpointens HTTP-status: " + str(quota.get("http_status", "okänd")))
+        st.json(quota.get("provider_metadata", []), expanded=False)
     if error_ids:
         st.caption("eBays felkoder: " + ", ".join(error_ids))

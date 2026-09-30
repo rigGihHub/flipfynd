@@ -51,7 +51,7 @@ def test_metadata_calls_are_single_flight_and_never_store_token_or_listings():
     class Session:
         def get(self, url, **kw):
             assert url == quota.URL
-            assert kw["params"] == {"api_name": "browse", "api_context": "buy"}
+            assert kw["params"] == {"api_context": "buy"}
             calls.append(1)
             return Response()
     with ThreadPoolExecutor(max_workers=6) as pool:
@@ -79,4 +79,14 @@ def test_failed_analytics_does_not_discard_known_provider_limit():
         def get(self, *a, **kw): raise requests.Timeout()
     result = quota.read_quota("app", "token", session=Session())
     assert result["status"] == "QUOTA_CHECK_FAILED"
+    assert not quota.reserve_call("app")
+
+
+def test_provider_labels_and_missing_optional_count_still_enforce_limit():
+    data = payload(0)
+    data["rateLimits"][0]["apiName"] = "Browse API"
+    del data["rateLimits"][0]["resources"][0]["rates"][0]["count"]
+    result = quota.parse_quota(data)
+    assert result["status"] == "OK"
+    quota._save("app", result)
     assert not quota.reserve_call("app")
