@@ -334,11 +334,12 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.87"
+APP_VERSION = "v0.14.88"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
-for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, resumable_search):
+import src.search_progress as _progress_runtime
+for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, _progress_runtime, resumable_search):
     if getattr(_literal_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_literal_module)
         _literal_module._flipfynd_loaded_version = APP_VERSION
@@ -1943,10 +1944,8 @@ if run:
     st.rerun()
 
 if _saved_search and _saved_search.get("status") == "RUNNING":
-    from src.search_progress import progress_text
-    _progress_label, _progress_detail, _progress_fraction = progress_text(_saved_search)
-    st.progress(_progress_fraction, text=_progress_label)
-    st.caption(_progress_detail)
+    from src.search_progress import render_search_progress
+    render_search_progress(_saved_search)
     st.info("Analysen fortsätter i bakgrunden. Du kan lämna appen och återvända till samma länk.")
     if st_autorefresh:
         st_autorefresh(interval=3000, key="resume_search_poll")
@@ -2205,7 +2204,7 @@ def render_card_explanation_button(item: dict, key: str) -> None:
 
 if st.session_state.get("results") is not None:
     _result_version = (_saved_search or {}).get("params", {}).get("app_version")
-    if _result_version and _result_version != APP_VERSION:
+    if _result_version and tuple(int(part) for part in re.findall(r"\d+", _result_version)[:3]) < (0, 14, 87):
         st.warning("Sparad sökning från en äldre prisanalys. Kortmatchningen har rättats. Tryck Hitta fynd för en ny prisjämförelse; dina filter är kvar.")
         # Preserve the snapshot, but don't present obsolete calculated profits
         # as current finds after the identity correction.

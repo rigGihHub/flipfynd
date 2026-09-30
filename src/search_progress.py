@@ -4,7 +4,7 @@ from contextvars import ContextVar
 from threading import RLock
 import time
 
-_CURRENT = ContextVar("search_progress", default=None)
+_CURRENT = globals().get("_CURRENT") or ContextVar("search_progress", default=None)
 
 
 @contextmanager
@@ -68,3 +68,16 @@ def progress_text(job):
     else:
         detail += " · beräknar återstående tid"
     return label, detail, min(.99, checked / total) if total else 0.0
+
+
+def render_search_progress(job):
+    from html import escape
+    import streamlit as st
+    label, detail, fraction = progress_text(job)
+    # The app uses a dark surface even when the browser selects a light theme.
+    # Explicit text colours keep the phase and ETA readable in both themes.
+    st.markdown('<div style="color:#f7eee4;background:#17212b;border-left:3px solid #e2a45c;'
+                'padding:12px 14px;margin:8px 0"><strong>' + escape(label)
+                + '</strong><div style="margin-top:5px">' + escape(detail) + '</div></div>',
+                unsafe_allow_html=True)
+    st.progress(fraction)
