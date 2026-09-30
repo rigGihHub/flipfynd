@@ -1,5 +1,7 @@
 """Show asking-price arithmetic separately from verified SOLD valuations."""
 from __future__ import annotations
+from math import isfinite
+from urllib.parse import urlsplit
 
 
 def _net_roi(data):
@@ -18,9 +20,11 @@ def render_asking_price_opportunity(opportunity):
     import streamlit as st
 
     data = opportunity or {}
-    if data.get("status") not in {"POSSIBLE_FIND", "NO_MARGIN"}:
+    if data.get("status") not in {"POSSIBLE_FIND", "NO_MARGIN", "RESEARCH_SINGLE_ACTIVE"}:
         return
-    if data.get("possible_find"):
+    if data.get("status") == "RESEARCH_SINGLE_ACTIVE":
+        st.markdown("**Osäkert fyndförslag · endast 1 jämförelsepris**")
+    elif data.get("possible_find"):
         st.markdown("**Möjligt fynd · svagt underlag (1 exakt jämförelse)**" if data.get("weak_find_signal") else "**Möjligt fynd · begärda priser**")
     else:
         st.markdown("**Ingen marginal mot begärda priser**")
@@ -76,18 +80,51 @@ def _shortlist_rank(row):
     return margin, roi if roi is not None else float("-inf")
 
 
-def render_asking_price_shortlist(results, *, heading="Möjliga fynd mot begärda priser"):
+def positive_price_suggestions(results, research_leads=None):
+    """Rank all positive scenarios without upgrading their evidence status."""
+    candidates = list(results or []) + [
+        {"titel": lead.get("title"), "lank": lead.get("url"), "asking_price_opportunity": lead.get("scenario") or {}}
+        for lead in research_leads or [] if isinstance(lead, dict)
+    ]
+    rows, seen = [], set()
+    for row in candidates:
+        data = row.get("asking_price_opportunity") or {}
+        try:
+            margin = float(data.get("net_margin"))
+        except (TypeError, ValueError):
+            continue
+        if not isfinite(margin) or margin < 1 or not (
+                data.get("possible_find") or data.get("status") == "RESEARCH_SINGLE_ACTIVE"):
+            continue
+        url = str(row.get("lank") or row.get("url") or "")
+        parts = urlsplit(url)
+        key = (parts.netloc, parts.path) if url else str(row.get("titel") or row.get("title") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(row)
+    return sorted(rows, key=_shortlist_rank, reverse=True)
+
+
+def render_asking_price_shortlist(results, *, heading="Fyndförslag med positivt scenario", research_leads=None):
     import streamlit as st
 
-    rows = [row for row in results or [] if (row.get("asking_price_opportunity") or {}).get("possible_find")]
-    rows.sort(key=_shortlist_rank, reverse=True)
+    rows = positive_price_suggestions(results, research_leads)
     if not rows:
         return
     st.markdown("### " + heading)
-    st.caption("Minst 1 kr möjlig nettovinst efter inköp, frakt, avgift och emballage. Störst nettovinst visas först. Begärda priser är osäkert underlag.")
-    for row in rows[:5]:
+    multiple = sum(int((row.get("asking_price_opportunity") or {}).get("comparison_count") or 0) >= 2 for row in rows)
+    st.caption(f"{len(rows)} positiva förslag · {multiple} med flera jämförelsepriser · {len(rows) - multiple} med ett enda pris. "
+               "Minst 1 kr möjlig nettovinst efter alla kostnader. Störst netto visas först. Begärda priser är osäkert underlag.")
+    def render_row(row):
         st.markdown(f"#### {row.get('titel') or row.get('title') or 'Kortannons'}")
         render_asking_price_opportunity(row["asking_price_opportunity"])
         url = row.get("lank") or row.get("url")
         if url:
             st.link_button("Öppna annonsen på Tradera ↗", url)
+    for row in rows[:5]:
+        render_row(row)
+    if len(rows) > 5:
+        with st.expander(f"Visa övriga {len(rows) - 5} positiva förslag"):
+            for row in rows[5:]:
+                render_row(row)

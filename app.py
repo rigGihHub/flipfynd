@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.90"
+APP_VERSION = "v0.14.91"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -2270,14 +2270,28 @@ if st.session_state.get("results") is not None:
                 if _price_problem:
                     st.warning(_price_problem)
                 else:
-                    st.info("Inget SOLD-verifierat förstaval just nu. Möjliga fynd med minst 1 kr nettovinst visas nedan.")
-                st.caption(simple_buy.get("note") or "")
+                    from src.asking_price_ui import positive_price_suggestions
+                    _positive_suggestions = positive_price_suggestions(
+                        st.session_state.get("results") or [],
+                        (st.session_state.get("debug") or {}).get("single_price_research_leads") or [])
+                    if _positive_suggestions:
+                        from src.card_parser import clean_card_title
+                        _best_suggestion = _positive_suggestions[0]
+                        _best_scenario = _best_suggestion["asking_price_opportunity"]
+                        st.info(f"Bästa prisuppslaget: {clean_card_title(_best_suggestion.get('titel') or '')} · "
+                                f"möjligt netto +{_best_scenario['net_margin']:.2f} kr i scenariot.")
+                        st.caption("Begärda jämförelsepriser. Underlaget och alla kostnader visas nedan; faktisk försäljning är inte bekräftad.")
+                    else:
+                        st.info("Inget positivt fyndscenario just nu.")
+                        st.caption(simple_buy.get("note") or "")
 
             if _price_problem and _saved_search:
                 _previous = (_saved_search.get("params") or {}).get("previous_search_run")
                 if resumable_search.valid_token(_previous):
                     st.link_button("Visa föregående sparade sökning", f"?search_run={_previous}")
-            render_asking_price_shortlist(st.session_state.get("results") or [])
+            render_asking_price_shortlist(
+                st.session_state.get("results") or [],
+                research_leads=(st.session_state.get("debug") or {}).get("single_price_research_leads") or [])
             _local_rows = (st.session_state.get("debug") or {}).get("tradera_price_find_rows") or []
             render_asking_price_shortlist(_local_rows, heading="Möjliga fynd mot begärda Tradera-priser")
 
@@ -2373,37 +2387,6 @@ if st.session_state.get("results") is not None:
                             f"sökbara kort. {usable} fick användbart jämförpris; {finds} möjliga fynd med flera jämförpriser, "
                             f"{len(current_debug.get('single_price_research_leads') or [])} osäkra positiva prisspår."
                         )
-
-            research_leads = current_debug.get("single_price_research_leads") or []
-            if research_leads:
-                st.subheader("🔍 Positiva prisspår att kontrollera")
-                st.caption("Ett enda jämförpris per kort. Detta är osäkra undersökningsförslag, inte köprekommendationer eller bevisat marknadsvärde.")
-                for lead in sorted(research_leads, key=lambda lead: lead["scenario"]["net_margin"], reverse=True)[:5]:
-                    scenario = lead["scenario"]
-                    with st.expander(str(lead.get("title") or "Kort att undersöka"), expanded=True):
-                        st.write(
-                            f"Pris {scenario['purchase_price']:.0f} kr · "
-                            f"{'Frakt' if scenario.get('shipping_known') else 'Antagen frakt'} {scenario['shipping']:.0f} kr · "
-                            + (f"Köparskydd {scenario['buyer_protection_fee']:.0f} kr · " if scenario.get('buyer_protection_fee') else "")
-                            + (f"Budmarginal {scenario['auction_buffer']:.0f} kr · " if scenario.get('auction_buffer') else "")
-                            +
-                            f"Totalt {scenario['total_cost']:.0f} kr"
-                        )
-                        st.write(
-                            f"Begärt jämförpris {scenario['observed_asking_price']:.0f} kr · "
-                            f"Försiktigt försäljningsscenario {scenario['reference_asking_price']:.0f} kr · "
-                            f"Möjlig nettomarginal i scenariot +{scenario['net_margin']:.0f} kr"
-                        )
-                        st.caption("Scenariot drar av 15 % från jämförpriset samt säljavgift och emballage. Faktiskt försäljningspris och efterfrågan är inte bekräftade.")
-                        if scenario.get("auction_current_bid"):
-                            st.info("Auktion: nettovinsten gäller om du vinner på det visade budet. Ett högre slutbud minskar vinsten.")
-                        if scenario.get("condition_warning"):
-                            st.warning("Säljaren beskriver slitage/EX-skick. Kontrollera bilderna; jämförelsepriset kan avse bättre skick.")
-                        if str(lead.get("url") or "").startswith("https://"):
-                            st.link_button("Öppna Tradera-annons", lead["url"])
-                        for comp in scenario.get("comparisons") or []:
-                            if str(comp.get("url") or "").startswith("https://"):
-                                st.link_button("Granska det enda jämförpriset", comp["url"])
 
             actual_find_count = sum(
                 1 for row in top_rows

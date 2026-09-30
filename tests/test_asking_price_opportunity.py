@@ -256,7 +256,7 @@ render_asking_price_shortlist(st.session_state["results"])
     app.run()
     assert not app.exception
     text = "\n".join(element.value for element in app.markdown)
-    assert "Möjliga fynd mot begärda priser" in text
+    assert "Fyndförslag med positivt scenario" in text
     assert "Möjlig nettovinst +26.2 kr" in text
     assert "32 kr totalt" in text
     assert len(app.get("link_button")) == 3
