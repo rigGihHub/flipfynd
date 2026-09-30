@@ -11,6 +11,50 @@ from src.inventory_price_sweep import sweep_inventory
 GIORDANO = '2020-21 OPC Platinum Rainbow Color Wheel - Mark Giordano Sluttid 1 okt 22:14 . Pris: 10 kr , Köp nu .'
 
 
+def test_series_number_is_not_a_checklist_number():
+    identity = asking_research_identity({'titel': '2021-22 Upper Deck Series 2 Honor Roll Kole Lind'})
+    assert identity['player_name'] == 'Kole Lind'
+    assert identity['card_number'] is None
+    assert asking_research_identity({'titel': '2021-22 Upper Deck Series 2 #451 Kole Lind'})['card_number'] == '451'
+
+
+def test_dufex_sides_are_distinct_and_unknown_side_cannot_price_a_find():
+    target = asking_research_identity({'titel': 'Team Pinnacle 1994-95 #TP9 – Mark Messier (Dufex) / Wayne Gretzky'})
+    assert target['parallel'] == 'Dufex Back'
+    titles = ['1994-95 Team Pinnacle #TP9 Mark Messier Wayne Gretzky Dufex Back',
+              '1994-95 Team Pinnacle #TP9 Mark Messier Wayne Gretzky Dufex Front',
+              '1994-95 Team Pinnacle #TP9 Mark Messier Wayne Gretzky Dufex']
+    rows = match_active_rows([{'title': title, 'price': 30, 'url': str(i), 'buying_options': ['FIXED_PRICE']}
+                              for i, title in enumerate(titles)], target)
+    assert [row['url'] for row in rows if row['asking_comparison_eligible']] == ['0']
+
+
+def test_purchase_detail_uses_exact_item_and_excludes_free_collection():
+    import json
+    from src.tradera_purchase_cost import verify_purchase_cost
+    details = {'itemDetails': {'itemId': 751837261, 'leadingBid': 99, 'openingBid': 99,
+        'paymentCalculations': {'paymentAmountForBid': 106}, 'isAuction': True,
+        'shippingOptions': [{'cost': 0, 'isTakeaway': True, 'toCountryCodeIso2': 'SE'},
+                            {'cost': 49, 'isTakeaway': False, 'toCountryCodeIso2': 'SE'}]}}
+    html = '<script>self.__next_f.push(' + json.dumps([1, json.dumps(details)]) + ')</script>'
+    class Response:
+        text = html
+        def raise_for_status(self): pass
+    class Session:
+        @staticmethod
+        def get(*args, **kwargs): return Response()
+    item = verify_purchase_cost({'lank': 'https://www.tradera.com/item/293316/751837261/title',
+                                 'titel': '1994-95 Team Pinnacle #TP9 Mark Messier Ledande bud', 'pris': 99}, session=Session)
+    assert item['frakt'] == 49 and item['buyer_protection_fee'] == 7
+    assert item['purchase_cost_verified']
+    context = {'rows': [{'price': 300, 'currency': 'SEK', 'url': str(i), 'asking_comparison_eligible': True} for i in range(2)]}
+    scenario = build_asking_price_opportunity(item, context)
+    assert scenario['total_cost'] == 170  # bid + actual freight + buyer fee + 15 kr bid buffer
+    assert scenario['net_margin'] == 56.5
+    wrong = verify_purchase_cost({'lank': 'https://www.tradera.com/item/293316/999/title', 'pris': 99}, session=Session)
+    assert not wrong.get('purchase_cost_verified')
+
+
 def test_giordano_never_uses_mcdavid_name_or_auction_date_as_number():
     parsed = parse_card_features(GIORDANO)
     recovered = build_research_title_identity(GIORDANO)

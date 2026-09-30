@@ -92,6 +92,7 @@ def has_relic_material_evidence(text: str) -> bool:
 
 
 CARD_STOPWORDS = {
+    "honor", "honour", "roll", "dufex", "reflections",
     "upper",
     "deck",
     "ud",
@@ -450,8 +451,17 @@ def detect_parallel_info(norm: str) -> tuple[Optional[str], str, str]:
     """
     text = norm or ""
 
+    # TP9 has two distinct Dufex sides. The explicit player annotation in
+    # this title identifies the Messier/Back version, not Gretzky/Front.
+    if (re.search(r"\bteam\s+pinnacle\b", text) and re.search(r"\btp9\b", text)
+            and re.search(r"mark\s+messier\s+dufex\s*/?\s*wayne\s+gretzky", text)):
+        return "Dufex Back", "strong", "high"
+
     # Highly distinctive names first.
     patterns = [
+        (r"\bdufex\s+(?:back|reverse)\b", "Dufex Back", "strong", "high"),
+        (r"\bdufex\s+front\b", "Dufex Front", "strong", "high"),
+        (r"\bdufex\b", "Dufex (side unknown)", "strong", "medium"),
         (r"\brainbow\s+colou?r\s+wheel\b", "Rainbow Color Wheel", "strong", "high"),
         (r"\bgold\s+outburst\b", "Gold Outburst", "elite", "high"),
         (r"\bred\s+outburst\b", "Red Outburst", "elite", "high"),

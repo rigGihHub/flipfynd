@@ -1226,6 +1226,8 @@ def analyze_data(*args, **kwargs):
         importlib.reload(_inventory_sweep_module)
         importlib.reload(_ebay_context_module)
         importlib.reload(_asking_price_module)
+        import src.analyzer as _analyzer_module
+        importlib.reload(_analyzer_module)
         importlib.reload(_ordinary_pipeline)
         _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
     return _ordinary_pipeline.analyze_data(*args, **kwargs)
@@ -1934,6 +1936,8 @@ if run:
         importlib.reload(_inventory_sweep_module)
         importlib.reload(_ebay_context_module)
         importlib.reload(_asking_price_module)
+        import src.analyzer as _analyzer_module
+        importlib.reload(_analyzer_module)
         importlib.reload(_ordinary_pipeline)
         _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
     _job_fn = _ordinary_pipeline.analyze_data
@@ -2204,7 +2208,7 @@ def render_card_explanation_button(item: dict, key: str) -> None:
 
 if st.session_state.get("results") is not None:
     _result_version = (_saved_search or {}).get("params", {}).get("app_version")
-    if _result_version and tuple(int(part) for part in re.findall(r"\d+", _result_version)[:3]) < (0, 14, 87):
+    if _result_version and tuple(int(part) for part in re.findall(r"\d+", _result_version)[:3]) < (0, 14, 88):
         st.warning("Sparad sökning från en äldre prisanalys. Kortmatchningen har rättats. Tryck Hitta fynd för en ny prisjämförelse; dina filter är kvar.")
         # Preserve the snapshot, but don't present obsolete calculated profits
         # as current finds after the identity correction.
@@ -2370,6 +2374,9 @@ if st.session_state.get("results") is not None:
                         st.write(
                             f"Pris {scenario['purchase_price']:.0f} kr · "
                             f"{'Frakt' if scenario.get('shipping_known') else 'Antagen frakt'} {scenario['shipping']:.0f} kr · "
+                            + (f"Köparskydd {scenario['buyer_protection_fee']:.0f} kr · " if scenario.get('buyer_protection_fee') else "")
+                            + (f"Budmarginal {scenario['auction_buffer']:.0f} kr · " if scenario.get('auction_buffer') else "")
+                            +
                             f"Totalt {scenario['total_cost']:.0f} kr"
                         )
                         st.write(

@@ -566,6 +566,9 @@ def compute_entry_cost(item, total_cost):
     if total_cost is None:
         return None, 0
 
+    # Confirmed mandatory buyer protection is part of acquisition, too.
+    total_cost = float(total_cost) + float(item.get("buyer_protection_fee") or 0)
+
     if detect_sale_type(item) != "Auktion":
         return float(total_cost), 0
 
