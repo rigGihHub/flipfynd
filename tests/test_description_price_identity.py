@@ -117,3 +117,55 @@ def test_next_search_reuses_descriptions_and_advances_to_unchecked_ads():
     assert second['description_identity_checked'] == 1 and second['description_identity_reused'] == 2
     assert second['description_identity_recovered'] == 3 and second['description_identity_remaining'] == 0
     recovery._DETAIL_CACHE.clear()
+
+
+def test_program_comparisons_do_not_share_context_with_another_insert(monkeypatch):
+    from src import ebay_browse_context as ebay
+    keys = []
+    monkeypatch.setattr(ebay, 'configured_credentials', lambda: ('test', 'test'))
+    monkeypatch.setattr(ebay, 'fetch_once', lambda key, callback: keys.append(key))
+    identity = {'player_name': 'Kole Lind', 'season': '2021-22', 'set_name': 'Upper Deck', 'card_number': 'HR-71'}
+    ebay.fetch_configured_ebay_active_context('Kole Lind 2021-22 HR-71', dict(identity, price_program='Honor Roll'))
+    ebay.fetch_configured_ebay_active_context('Kole Lind 2021-22 HR-71', dict(identity, price_program=''))
+    assert keys[0] != keys[1]
+
+
+def test_synergy_cannot_inherit_flagship_price_for_the_same_player_and_number():
+    identity = asking_research_identity({'titel': 'Mitch Marner 2023-24 Upper Deck Synergy #4'})
+    titles = ['2023-24 Upper Deck Synergy Mitch Marner #4', '2023-24 Upper Deck Mitch Marner #4']
+    rows = match_active_rows([dict(title=t, price=10, url=str(i), buying_options=['FIXED_PRICE']) for i,t in enumerate(titles)], identity)
+    assert [r['url'] for r in rows if r['asking_comparison_eligible']] == ['0']
+
+
+def test_one_krona_at_current_bid_is_a_conditional_find_and_higher_bid_removes_it():
+    row = {'titel': '2023-24 Upper Deck #451 Connor Bedard Utropspris', 'pris': 4,
+           'frakt': 22, 'buyer_protection_fee': 2, 'sale_type': 'Auktion'}
+    context = {'rows': [dict(price=43, currency='SEK', url=str(i), asking_comparison_eligible=True) for i in range(2)]}
+    current = build_asking_price_opportunity(row, context)
+    assert current['possible_find'] and current['auction_current_bid']
+    assert current['total_cost'] == 28 and current['net_margin'] == 1.9
+    higher = build_asking_price_opportunity(dict(row, pris=6), context)
+    assert not higher['possible_find'] and higher['net_margin'] == -0.1
+
+
+def test_literal_bare_number_does_not_consume_description_budget():
+    from src import description_price_identity as recovery
+    recovery._DETAIL_CACHE.clear()
+    row = primary('1995-96 Pinnacle 101 Wayne Gretzky', '')
+    def unexpected(row): raise AssertionError('Already searchable without an HTTP detail read')
+    debug = enrich_description_routes([row], verifier=unexpected)
+    assert debug['description_identity_checked'] == 0
+
+
+def test_relisted_redirect_never_keeps_the_old_price_or_opportunity():
+    class Response:
+        url = 'https://www.tradera.com/item/293316/999/new-card'
+        text = ''
+        def raise_for_status(self): pass
+    class Session:
+        @staticmethod
+        def get(*args, **kwargs): return Response()
+    item = primary('Patrik Elias Silver Script MVP 08-09', '')
+    row = verify_purchase_cost(item, session=Session)
+    assert row['listing_inactive'] and row['purchase_cost_verification'] == 'RELISTED'
+    assert not build_asking_price_opportunity(row, {})['possible_find']

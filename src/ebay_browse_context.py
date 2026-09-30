@@ -415,7 +415,7 @@ def fetch_configured_ebay_active_context(query, identity=None):
     # Extra parser scores do not change the same exact-card lookup.
     fields = {key: identity_obj.get(key) for key in (
         "player_name", "season", "set_name", "card_number", "parallel",
-        "serial_denominator", "grading_company", "grade", "is_lot", "is_auto", "is_patch")}
+        "serial_denominator", "grading_company", "grade", "is_lot", "is_auto", "is_patch", "price_program")}
     key = (_limit_key(client_id, client_secret), " ".join(str(query).casefold().split()),
            json.dumps(fields, sort_keys=True, default=str))
     return fetch_once(key, lambda: fetch_ebay_active_context(

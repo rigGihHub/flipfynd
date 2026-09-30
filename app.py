@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.89"
+APP_VERSION = "v0.14.90"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -2395,6 +2395,8 @@ if st.session_state.get("results") is not None:
                             f"Möjlig nettomarginal i scenariot +{scenario['net_margin']:.0f} kr"
                         )
                         st.caption("Scenariot drar av 15 % från jämförpriset samt säljavgift och emballage. Faktiskt försäljningspris och efterfrågan är inte bekräftade.")
+                        if scenario.get("auction_current_bid"):
+                            st.info("Auktion: nettovinsten gäller om du vinner på det visade budet. Ett högre slutbud minskar vinsten.")
                         if scenario.get("condition_warning"):
                             st.warning("Säljaren beskriver slitage/EX-skick. Kontrollera bilderna; jämförelsepriset kan avse bättre skick.")
                         if str(lead.get("url") or "").startswith("https://"):

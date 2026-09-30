@@ -116,7 +116,10 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     buyer_fee = _number(item.get("buyer_protection_fee")) or 0.0
     sale_text = str(item.get("sale_type") or title).casefold()
     auction = bool(re.search(r"auktion|utropspris|ledande bud", sale_text)) and "köp nu" not in sale_text
-    auction_buffer = round(max(15.0, min(price * 0.12, 75.0)), 2) if auction else 0.0
+    # Discovery uses the actual current bid. A hypothetical higher closing bid
+    # is not an acquisition cost and must not hide a >=1 kr current-bid edge.
+    # The UI explicitly makes these opportunities conditional on winning here.
+    auction_buffer = 0.0
     total = round(price + freight + buyer_fee + auction_buffer, 2)
     margin = round(reference - total - fee - packaging, 2)
     single_comp_signal = bool(len(rows) == 1 and margin >= 1)
@@ -141,6 +144,7 @@ def build_asking_price_opportunity(item, context, *, fx=None):
         "evidence_sufficient_for_possible_find": evidence_sufficient,
         "purchase_price": price,
         "buyer_protection_fee": buyer_fee, "auction_buffer": auction_buffer,
+        "auction_current_bid": auction,
         "purchase_cost_verified": bool(item.get("purchase_cost_verified")),
         "condition_warning": bool(re.search(r"corner\s*wear|hörnslitage|white\s*corner|excellent\s*/\s*ex", str(item.get("full_description") or ""), re.I)),
         "shipping": freight, "shipping_known": shipping["known"],

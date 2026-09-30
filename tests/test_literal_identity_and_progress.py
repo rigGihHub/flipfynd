@@ -49,8 +49,8 @@ def test_purchase_detail_uses_exact_item_and_excludes_free_collection():
     assert item['purchase_cost_verified']
     context = {'rows': [{'price': 300, 'currency': 'SEK', 'url': str(i), 'asking_comparison_eligible': True} for i in range(2)]}
     scenario = build_asking_price_opportunity(item, context)
-    assert scenario['total_cost'] == 170  # bid + actual freight + buyer fee + 15 kr bid buffer
-    assert scenario['net_margin'] == 56.5
+    assert scenario['total_cost'] == 155  # current bid + actual freight + buyer fee
+    assert scenario['net_margin'] == 71.5 and scenario['auction_current_bid']
     wrong = verify_purchase_cost({'lank': 'https://www.tradera.com/item/293316/999/title', 'pris': 99}, session=Session)
     assert not wrong.get('purchase_cost_verified')
 

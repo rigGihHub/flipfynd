@@ -34,6 +34,8 @@ def render_asking_price_opportunity(opportunity):
     )
     if not data.get("purchase_cost_verified"):
         st.caption("Inköpskostnaden är inte kontrollerad mot annonsen; frakt och eventuellt köparskydd behöver bekräftas.")
+    if data.get("auction_current_bid"):
+        st.info("Auktion: nettovinsten gäller om du vinner på det visade budet. Ett högre slutbud minskar vinsten.")
     if data.get("condition_warning"):
         st.warning("Säljaren beskriver slitage/EX-skick. Jämförelsepriset kan avse bättre skick; kontrollera bilderna och räkna med lägre försäljningspris.")
     st.write(
