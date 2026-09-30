@@ -1,4 +1,5 @@
 """Human-readable provider quotas, including their actual reset time."""
+from html import escape
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import time
@@ -29,7 +30,7 @@ def quota_lines(quota):
 def render_quota_status(quota, error_ids=None):
     import streamlit as st
     for line in quota_lines(quota):
-        st.write(line)
+        st.markdown('<div style="color:#f7eee4;background:#17212b;border-left:3px solid #e2a45c;padding:10px 14px;margin:8px 0">' + escape(line) + '</div>', unsafe_allow_html=True)
     if quota and quota.get("status") == "NO_QUOTA_DATA":
         st.caption("Kvotendpointens HTTP-status: " + str(quota.get("http_status", "okänd")))
         st.json(quota.get("provider_metadata", []), expanded=False)
