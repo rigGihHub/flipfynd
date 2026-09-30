@@ -24,14 +24,17 @@ def timestamp(value):
 
 def parse_quota(payload):
     rows = []
+    observed = []
     for api in payload.get("rateLimits") or []:
-        if api.get("apiName") != "browse" or api.get("apiContext") != "buy":
+        observed.append({"apiName": api.get("apiName"), "apiContext": api.get("apiContext"),
+            "resources": [{"name": r.get("name"), "rates": [{k: rate.get(k) for k in ("limit", "remaining", "count", "timeWindow", "reset")} for rate in r.get("rates", [])]} for r in api.get("resources", [])]})
+        if "browse" not in str(api.get("apiName") or "").casefold() or str(api.get("apiContext") or "").casefold() != "buy":
             continue
         for resource in api.get("resources") or []:
             name = str(resource.get("name") or "")
             for rate in resource.get("rates") or []:
                 if not all(isinstance(rate.get(k), int) and rate[k] >= 0
-                           for k in ("limit", "remaining", "count", "timeWindow")):
+                           for k in ("limit", "remaining", "timeWindow")):
                     continue
                 reset = timestamp(rate.get("reset"))
                 if reset is None:
@@ -40,9 +43,9 @@ def parse_quota(payload):
                 normalized = name.casefold().replace("_", "").replace("/", ".")
                 applies = ("search" in normalized or normalized in {"browse", "buy.browse", "*", "all"})
                 rows.append({"resource": name, **{k: rate[k] for k in
-                    ("limit", "remaining", "count", "timeWindow")},
+                    ("limit", "remaining", "timeWindow")}, "count": rate.get("count"),
                     "reset": rate["reset"], "reset_at": reset, "applies_to_search": applies})
-    return {"status": "OK" if rows else "NO_QUOTA_DATA", "rates": rows,
+    return {"status": "OK" if rows else "NO_QUOTA_DATA", "rates": rows, "provider_metadata": observed,
             "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
@@ -97,10 +100,11 @@ def read_quota(key, token, *, session=requests, timeout=5):
         if time.time() - prior.get("last_check", 0) < 60:
             return deepcopy(prior)
         try:
-            response = session.get(URL, params={"api_context": "buy", "api_name": "browse"},
+            response = session.get(URL, params={"api_context": "buy"},
                 headers={"Authorization": "Bearer " + token}, timeout=timeout)
             response.raise_for_status()
             fresh = parse_quota(response.json()) if response.status_code != 204 else {"status": "NO_QUOTA_DATA"}
+            fresh["http_status"] = response.status_code
         except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
             fresh = {"status": "QUOTA_CHECK_FAILED", "http_status": getattr(getattr(exc, "response", None), "status_code", None)}
         fresh["last_check"] = time.time()

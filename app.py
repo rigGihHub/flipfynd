@@ -334,7 +334,13 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.82"
+APP_VERSION = "v0.14.83"
+import src.ebay_quota as _ebay_quota_runtime
+import src.ebay_quota_ui as _ebay_quota_ui_runtime
+for _quota_module in (_ebay_quota_runtime, _ebay_quota_ui_runtime):
+    if getattr(_quota_module, "_flipfynd_loaded_version", None) != APP_VERSION:
+        importlib.reload(_quota_module)
+        _quota_module._flipfynd_loaded_version = APP_VERSION
 import src.ebay_browse_context as _ebay_runtime
 if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
     importlib.reload(_ebay_runtime)
