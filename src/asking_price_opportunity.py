@@ -115,7 +115,8 @@ def build_asking_price_opportunity(item, context, *, fx=None):
     packaging = 3.0
     buyer_fee = _number(item.get("buyer_protection_fee")) or 0.0
     sale_text = str(item.get("sale_type") or title).casefold()
-    auction = bool(re.search(r"auktion|utropspris|ledande bud", sale_text)) and "köp nu" not in sale_text
+    auction = (bool(re.search(r"auktion|utropspris|ledande bud", sale_text)) and "köp nu" not in sale_text
+               or bool(re.search(r"eller\s+köp\s+nu", title, re.I)))
     # Discovery uses the actual current bid. A hypothetical higher closing bid
     # is not an acquisition cost and must not hide a >=1 kr current-bid edge.
     # The UI explicitly makes these opportunities conditional on winning here.

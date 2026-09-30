@@ -2,6 +2,7 @@
 from __future__ import annotations
 from math import isfinite
 from urllib.parse import urlsplit
+import re
 
 
 def _net_roi(data):
@@ -118,7 +119,13 @@ def render_asking_price_shortlist(results, *, heading="Fyndförslag med positivt
                "Minst 1 kr möjlig nettovinst efter alla kostnader. Störst netto visas först. Begärda priser är osäkert underlag.")
     def render_row(row):
         st.markdown(f"#### {row.get('titel') or row.get('title') or 'Kortannons'}")
-        render_asking_price_opportunity(row["asking_price_opportunity"])
+        display_data = dict(row["asking_price_opportunity"])
+        # Older saved searches can call a hybrid listing "Köp nu" even though
+        # their calculation used its lower current bid. Keep that distinction
+        # visible without changing or rerunning the saved calculation.
+        if re.search(r"eller\s+köp\s+nu", str(row.get("titel") or row.get("title") or ""), re.I):
+            display_data["auction_current_bid"] = True
+        render_asking_price_opportunity(display_data)
         url = row.get("lank") or row.get("url")
         if url:
             st.link_button("Öppna annonsen på Tradera ↗", url)

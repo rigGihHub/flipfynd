@@ -51,3 +51,33 @@ render_asking_price_shortlist(st.session_state['results'], research_leads=st.ses
     assert text.index('#### One price') < text.index('#### Two prices')
     assert 'Osäkert fyndförslag · endast 1 jämförelsepris' in text
     assert 'Ingen marginal' not in text
+
+
+def test_hybrid_bid_is_conditional_even_when_legacy_sale_type_says_buy_now():
+    from src.asking_price_opportunity import build_asking_price_opportunity
+    item = {'titel': '2023-24 OPC Platinum #241 Arturs Silovs Pris: 20 kr, eller köp nu 50 kr',
+            'pris': 20, 'frakt': 27, 'buyer_protection_fee': 3, 'sale_type': 'Köp nu'}
+    result = build_asking_price_opportunity(item, {'rows': [
+        dict(price=85, currency='SEK', url=str(i), asking_comparison_eligible=True) for i in range(2)]})
+    assert result['auction_current_bid'] and result['total_cost'] == 50
+    assert result['purchase_price'] == 20 and result['possible_find']
+
+
+def test_restored_hybrid_scenario_displays_bid_condition_without_mutating_saved_evidence():
+    from streamlit.testing.v1 import AppTest
+    from src.asking_price_opportunity import build_asking_price_opportunity
+    item = {'titel': '2023-24 OPC Platinum #241 Arturs Silovs Pris: 20 kr, eller köp nu 50 kr',
+            'pris': 20, 'frakt': 27, 'lank': 'https://www.tradera.com/item/1/123/card'}
+    scenario = build_asking_price_opportunity(item, {'rows': [
+        dict(price=85, currency='SEK', url='https://www.ebay.com/itm/456', asking_comparison_eligible=True)]})
+    scenario['auction_current_bid'] = False  # legacy saved result
+    app = AppTest.from_string('''
+import streamlit as st
+from src.asking_price_ui import render_asking_price_shortlist
+render_asking_price_shortlist(st.session_state['results'])
+''')
+    app.session_state['results'] = [dict(item, asking_price_opportunity=scenario)]
+    app.run()
+    assert not app.exception
+    assert any('Auktion: nettovinsten gäller' in element.value for element in app.info)
+    assert app.session_state['results'][0]['asking_price_opportunity']['auction_current_bid'] is False
