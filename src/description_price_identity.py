@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlsplit
 
 from src.card_parser import parse_card_features, extract_season, clean_card_title
+from src.research_title_identity import build_research_title_identity
 
 _DETAIL_CACHE = globals().get("_DETAIL_CACHE", {})
 _DETAIL_LOCK = globals().get("_DETAIL_LOCK", Lock())
@@ -31,6 +32,7 @@ def price_program(title):
         (r"star\s*quest", "Starquest"),
         (r"reflections", "Reflections"),
         (r"radiance", "Radiance"),
+        (r"synergy", "Synergy"),
     )
     return "|".join(name for pattern, name in patterns if re.search(pattern, title or "", re.I))
 
@@ -97,11 +99,12 @@ def enrich_description_routes(rows, *, limit=80, verifier=None):
             reused += 1
             continue
         parsed = parse_card_features(str(row.get("titel") or row.get("title") or ""))
+        title_number = parsed.get("card_number") or build_research_title_identity(str(row.get("titel") or row.get("title") or ""))["fields"].get("card_number")
         parts = urlsplit(str(row.get("lank") or row.get("url") or ""))
         if (parts.hostname in {"www.tradera.com", "tradera.com"}
                 and re.match(r"/item/\d+/\d+(?:/|$)", parts.path)
                 and parsed.get("player_name") and parsed.get("set_name")
-                and not parsed.get("card_number") and not parsed.get("is_lot")):
+                and not title_number and not parsed.get("is_lot")):
             candidates.append(row)
     # Give low entry costs the first chance; retain the rest for a later scan.
     candidates.sort(key=lambda row: float(row.get("pris") or row.get("price") or 999999))

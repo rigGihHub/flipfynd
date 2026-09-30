@@ -83,7 +83,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "description-identity-v01489",
+        "analysis_engine_marker": "current-bid-description-v01490",
         "ebay_quota": ebay_quota,
         "total_items": raw_total_items,
         "performance_items": len(data),

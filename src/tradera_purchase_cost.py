@@ -35,6 +35,15 @@ def verify_purchase_cost(item, *, session=requests):
     try:
         response = session.get(url, timeout=10)
         response.raise_for_status()
+        final_parts = urlsplit(str(getattr(response, "url", None) or url))
+        final_match = re.match(r"/item/\d+/(\d+)(?:/|$)", final_parts.path)
+        if (final_parts.hostname in {"www.tradera.com", "tradera.com"}
+                and final_match and final_match[1] != match[1]):
+            # Tradera redirects ended listings to a newly relisted item. That
+            # new ad has a different price/availability and must be scanned as
+            # its own listing, never priced under the old link and costs.
+            out.update(listing_inactive=True, purchase_cost_verification="RELISTED")
+            return out
         detail = parse_purchase_detail(response.text, match[1])
         if not detail:
             out["purchase_cost_verification"] = "UNAVAILABLE"
