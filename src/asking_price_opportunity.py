@@ -12,6 +12,7 @@ from urllib.parse import urlsplit, urlunsplit
 import requests
 
 from src.card_parser import parse_card_features
+from src.seller_collector_signals import collector_signals
 from src.research_title_identity import build_research_title_identity
 from src.card_listing_integrity import assess_listing_integrity
 from src.comp_source_intelligence import exact_identity_query
@@ -248,7 +249,7 @@ def select_asking_price_research(rows, *, limit=24):
         variant_bonus = 0.0
         if re.search(r"\b(?:rookie|\brc\b|refractor|prizm|parallel|rainbow|color wheel|silver|gold|red|blue|green|ssp|sp)\b", title_fold):
             variant_bonus += 10.0
-        if re.search(r"(?<!\d)\d{1,4}\s*/\s*\d{1,4}(?!\d)|\b(?:auto|autograph|patch|relic|jersey|game[- ]used)\b", title_fold):
+        if set(collector_signals(item)["signals"]) & {"serial_numbered", "one_of_one", "autograph", "patch_relic"}:
             variant_bonus += 18.0
         route_score = total_cost - min(45.0, discovery * 0.35) - min(12.0, freshness) - min(15.0, sold_hint * 3.0) - variant_bonus
         eligible.append((route_score, total_cost, -sold_hint, row))

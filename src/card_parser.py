@@ -30,6 +30,7 @@ SET_PATTERNS = [
     ("engrained", "Engrained"),
     ("allure", "Allure"),
     ("stature", "Stature"),
+    ("synergy", "Synergy"),
     ("young guns", "Young Guns"),
     ("canvas", "Canvas"),
     ("opc platinum", "OPC Platinum"),
@@ -78,13 +79,26 @@ SET_PATTERNS = [
 ]
 
 
-def has_relic_material_evidence(text: str) -> bool:
+def _material_claim_text(text: str) -> str:
     """Require an explicit material claim; 'memorabilia' alone is ambiguous.
 
     Several products print *Memorabilia* as branding or a set descriptor on
     ordinary cards. It must not create a jersey/patch premium by itself.
     """
     norm = normalize_text(text)
+    # Team names and photo/product labels are not material claims. Upper
+    # Deck's Synergy checklist lists Rookie Journey Home/Away Jersey as
+    # numbered photo variants with no memorabilia designation.
+    norm = re.sub(r"\bnew\s+jersey\b", " ", norm)
+    norm = re.sub(r"\bsp\s+game[- ]?used\b", " ", norm)
+    norm = re.sub(r"\brookie\s+journey\s*[-:]?\s*(?:home|away)\s+jersey\b", " ", norm)
+    norm = re.sub(r"\bjersey[- ](?:number(?:ed)?|photo|design)\b", " ", norm)
+    return norm
+
+
+def has_relic_material_evidence(text: str) -> bool:
+    """Require material wording outside team/product/photo labels."""
+    norm = _material_claim_text(text)
     return bool(re.search(
         r"\b(?:patch|relic|jersey|swatch|material\s+piece|game[- ]?used|game[- ]?worn|player[- ]?worn|event[- ]?worn|match[- ]?worn)\b",
         norm,
@@ -183,6 +197,7 @@ CARD_STOPWORDS = {
     "uncommon",
     "rainbow", "color", "colour", "wheel", "sunset", "surge", "pixels",
     "refractor", "amethyst", "aquamarine", "seismic", "matte", "pink",
+    "journey", "away", "home", "uer",
 }
 
 
@@ -659,7 +674,8 @@ def parse_card_features(title: str) -> dict:
     relic_evidence = has_relic_material_evidence(norm)
     is_patch = bool(re.search(r"\b(?:patch|relic)\b", norm))
     is_jersey = relic_evidence
-    is_game_worn = "game worn" in norm or "game-used" in norm or "game used" in norm
+    material_text = _material_claim_text(norm)
+    is_game_worn = bool(re.search(r"\bgame (?:worn|used)\b", material_text))
     is_graded = grade is not None or any(x in norm for x in ["psa", "bgs", "sgc"])
     lot_info = detect_lot_info(title)
     is_lot = lot_info["is_lot"]

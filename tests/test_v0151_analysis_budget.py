@@ -8,7 +8,7 @@ def test_small_search_analyzes_every_candidate():
 
 def test_large_search_has_bounded_top_five_budget():
     assert 80 <= fast_analysis_budget(1800, context="ordinary") <= 160
-    assert 60 <= fast_analysis_budget(9000, context="seller") <= 120
+    assert 60 <= fast_analysis_budget(9000, context="seller") <= 360
 
 
 def test_budget_is_monotonic_until_ceiling():
@@ -25,3 +25,8 @@ def test_main_and_seller_search_use_shared_budget_contract():
     seller = (root / "src" / "seller_top5.py").read_text(encoding="utf-8")
     assert 'fast_analysis_budget(len(fast_pool_source), context="ordinary")' in pipeline
     assert 'fast_analysis_budget(len(unique_inventory), context="seller")' in seller
+
+
+def test_cardland_size_gets_broader_fast_coverage_without_unbounded_work():
+    assert fast_analysis_budget(4311, context="seller") == 360
+    assert fast_analysis_budget(9000, context="seller") == 360

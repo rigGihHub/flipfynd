@@ -17,6 +17,7 @@ from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
 from src.seller_card_merit import assess_seller_card_merit
+from src.seller_collector_signals import collector_signals
 from src.fast_analysis_pool import select_fast_analysis_pool
 from src.analysis_budget import fast_analysis_budget, seller_deep_analysis_budget
 from src.deal_readiness import assess_deal_readiness
@@ -38,7 +39,7 @@ from src.seller_analysis_registry import (
 
 
 HIDDEN_FIND_EXPLORATION_SLOTS = 4
-SELLER_DEEP_ANALYSIS_CAP = 30
+SELLER_DEEP_ANALYSIS_CAP = 72
 
 
 def _emit(callback, **payload):
@@ -475,6 +476,49 @@ def _select_hidden_find_exploration(rows: list[dict], *, exclude_keys=None, slot
     return selected
 
 
+def _refresh_collector_research(row: dict) -> dict:
+    row = dict(row)
+    signals = collector_signals(row.get("source_item") or row)
+    row["collector_signal_score"] = signals["score"]
+    row["collector_signals"] = signals["signals"]
+    row["seller_card_merit"] = assess_seller_card_merit(row)
+    row["seller_opportunity_score"] = _seller_opportunity_score(row)
+    return row
+
+
+def _select_deep_route_candidates(merit, asking, exploration, *, registry, budget):
+    """Share analysis slots across routes; new listings always precede repeats.
+
+    Two merit turns for each price probe leave a low-cost discovery lane open
+    while preventing piles of cheap listings from monopolising deep analysis.
+    Exploration retains its own small lane. Duplicate listings of one exact
+    card do not spend multiple slots in the same batch.
+    """
+    routes = [rotate_unseen_first(rows, registry, stage="full")
+              for rows in (merit, asking, exploration)]
+    selected, keys, opportunities = [], set(), set()
+    entries = registry.get("entries") or {}
+    for seen in (False, True):
+        pools = [[row for row in rows if bool(entries.get(
+            listing_key(row.get("source_item") or row), {}).get("full_count")) == seen]
+                 for rows in routes]
+        while any(pools) and len(selected) < budget:
+            for route in (0, 0, 1, 2):
+                if len(selected) >= budget:
+                    break
+                while pools[route]:
+                    row = pools[route].pop(0)
+                    key = listing_key(row.get("source_item") or row)
+                    opportunity = _card_opportunity_key(row)
+                    if not key or key in keys or opportunity in opportunities:
+                        continue
+                    selected.append(row)
+                    keys.add(key)
+                    opportunities.add(opportunity)
+                    break
+    return selected
+
+
 def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyze_fn: Callable,
                       sport: str = "all", quick_limit: int = 60, full_limit: int = 10,
                       analysis_registry=None, progress_callback=None) -> dict:
@@ -505,6 +549,11 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
 
     registry = begin_analysis_run(analysis_registry)
     previous_coverage = analysis_coverage(registry, inventory)
+    previous_displayed = set(registry.get("displayed_keys") or [])
+    if not previous_displayed:
+        prior_rows, _, _ = _select_diverse_rows(sorted(
+            registry.get("best_rows", {}).values(), key=_seller_opportunity_rank_key, reverse=True), 5)
+        previous_displayed = {listing_key(row.get("source_item") or row) for row in prior_rows}
     fallback_sport = sport if sport in {"hockey", "football"} else "hockey"
     quick = _quick_scan_inventory(
         alias, inventory, analyze_fn=analyze_fn, sport=fallback_sport,
@@ -523,6 +572,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     }
     for row in quick.get("rows") or []:
         pending[listing_key(row.get("source_item") or row)] = row
+    pending = {key: _refresh_collector_research(row) for key, row in pending.items()}
     all_quick_rows = sorted(pending.values(), key=_quick_rank_key)
     deep_budget = min(
         SELLER_DEEP_ANALYSIS_CAP,
@@ -532,14 +582,14 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     asking_candidates = rotate_unseen_first(
         select_asking_price_research(all_quick_rows, limit=max(24, len(all_quick_rows))),
         registry, stage="full"
-    )[:24]
+    )[:max(24, deep_budget // 2)]
     asking_keys = {_identity_key(row.get("source_item") or row) for row in asking_candidates}
     qualified_quick_rows = [
         row for row in all_quick_rows
         if assess_seller_card_merit(row)["eligible"]
     ]
     merit_pool = rotate_unseen_first(
-        [row for row in qualified_quick_rows if _identity_key(row.get("source_item") or row) not in asking_keys],
+        qualified_quick_rows,
         registry,
         stage="full",
     )
@@ -552,18 +602,12 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     exploration_candidates = _select_hidden_find_exploration(
         all_quick_rows,
         exclude_keys=merit_keys | asking_keys,
-        slots=max(HIDDEN_FIND_EXPLORATION_SLOTS, deep_budget - len(asking_candidates) - len(merit_candidates)),
+        slots=HIDDEN_FIND_EXPLORATION_SLOTS,
     )
-    candidates = []
-    candidate_keys = set()
-    for candidate in asking_candidates + merit_candidates + exploration_candidates:
-        key = _identity_key(candidate.get("source_item") or candidate)
-        if not key or key in candidate_keys:
-            continue
-        candidates.append(candidate)
-        candidate_keys.add(key)
-    # Apply coverage priority across routes before spending the shared budget.
-    candidates = rotate_unseen_first(candidates, registry, stage="full")[:deep_budget]
+    candidates = _select_deep_route_candidates(
+        merit_candidates, asking_candidates, exploration_candidates,
+        registry=registry, budget=deep_budget,
+    )
     candidate_limit = len(candidates)
     full_rows = []
     completed_full_keys = set()
@@ -601,7 +645,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["seller_deep_route"] = qrow.get("seller_deep_route") or "MERIT"
             row["seller_card_merit"] = assess_seller_card_merit(row)
             row["deal_readiness"] = assess_deal_readiness(row)
-            full_rows.append(_seller_presentation_label(row))
+            full_rows.append(_seller_presentation_label(_refresh_collector_research(row)))
         _emit(progress_callback, phase="full_progress", done=idx, total=len(candidates), percent=66 + int(28 * idx / max(1, len(candidates))))
 
     registry = record_analysis(
@@ -618,17 +662,14 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     }
 
     full_rows.sort(key=_seller_opportunity_rank_key, reverse=True)
-    presentable_full_rows = [
-        row for row in full_rows
-        if (
-            seller_result_tier(row) != "WEAK"
-            and seller_has_positive_purchase_price(row)
-            and not known_negative_net_profit(row)
-        )
-    ]
+    registry["best_rows"] = {
+        key: _refresh_collector_research(row)
+        for key, row in registry.get("best_rows", {}).items()
+        if listing_key(row.get("source_item") or row) in inventory_keys
+    }
     registry, presentable_full_rows = merge_best_rows(
         registry,
-        presentable_full_rows,
+        full_rows,
         rank_key=_seller_opportunity_rank_key,
         presentable=lambda row: (
             seller_result_tier(row) != "WEAK"
@@ -669,6 +710,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         selected_keys.add(key)
         selected_opportunities.add(opportunity_key)
 
+    registry["displayed_keys"] = [listing_key(row.get("source_item") or row) for row in selected]
+    top5_new_count = len(set(registry["displayed_keys"]) - previous_displayed)
     _emit(progress_callback, phase="ranking", done=len(selected), total=5, percent=97)
     coverage = analysis_coverage(registry, inventory)
     current_profit_summaries = [build_seller_net_profit_summary(row) for row in full_rows]
@@ -724,7 +767,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "full_candidate_limit": candidate_limit,
         "hidden_find_exploration_count": len(exploration_candidates),
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v6-persistent-queue-source-coverage",
+        "seller_analysis_contract": "v7-balanced-research-current-signals",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
         "duplicate_opportunities_removed": duplicate_opportunities_removed,
@@ -735,6 +778,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "new_quick_analysed": max(0, coverage["quick_unique"] - previous_coverage["quick_unique"]),
         "new_full_analysed": max(0, coverage["full_unique"] - previous_coverage["full_unique"]),
         "pending_deep_analysis": len(registry["pending_rows"]),
+        "top5_new_count": top5_new_count,
         "quick_unique_analysed": coverage["quick_unique"],
         "quick_remaining": coverage["quick_remaining"],
         "full_unique_analysed": coverage["full_unique"],

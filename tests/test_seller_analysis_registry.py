@@ -75,3 +75,13 @@ def test_quick_row_uses_source_listing_id_for_full_coverage_rotation():
     rows = [{"url": "url-1", "source_item": old},
             {"url": "url-2", "source_item": new}]
     assert rotate_unseen_first(rows, registry, stage="full") == rows[::-1]
+
+
+def test_new_invalid_analysis_removes_previous_positive_highlight():
+    registry, _ = merge_best_rows(begin_run(None), [{'id': '1', 'rank_score': 90}],
+                                 rank_key=lambda row: row['rank_score'],
+                                 presentable=lambda row: row['rank_score'] > 0)
+    _, rows = merge_best_rows(registry, [{'id': '1', 'rank_score': -1}],
+                             rank_key=lambda row: row['rank_score'],
+                             presentable=lambda row: row['rank_score'] > 0)
+    assert rows == []

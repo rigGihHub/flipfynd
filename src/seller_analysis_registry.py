@@ -41,6 +41,8 @@ def normalize_registry(value: dict | None) -> dict:
         "schema": SCHEMA,
         "run": max(0, int(value.get("run") or 0)),
         "entries": clean_entries,
+        "displayed_keys": [str(key) for key in value.get("displayed_keys", [])
+                           if isinstance(key, (str, int))][:5],
         "pending_rows": {str(key): deepcopy(row) for key, row in pending_rows.items()
                          if str(key).strip() and isinstance(row, dict)},
         "best_rows": {
@@ -125,13 +127,18 @@ def coverage(registry: dict | None, inventory) -> dict:
 
 def merge_best_rows(registry: dict, rows, *, rank_key, presentable) -> tuple[dict, list[dict]]:
     registry = normalize_registry(registry)
-    merged = dict(registry.get("best_rows") or {})
+    merged = {key: row for key, row in (registry.get("best_rows") or {}).items()
+              if presentable(row)}
     for row in rows or []:
-        if not isinstance(row, dict) or not presentable(row):
+        if not isinstance(row, dict):
             continue
         key = listing_key(row.get("source_item") or row)
         if key:
-            merged[key] = deepcopy(row)
+            if presentable(row):
+                merged[key] = deepcopy(row)
+            else:
+                # A current loss/invalid result supersedes its old highlight.
+                merged.pop(key, None)
     ordered = sorted(merged.values(), key=rank_key, reverse=True)[:BEST_ROW_LIMIT]
     registry["best_rows"] = {
         listing_key(row.get("source_item") or row): deepcopy(row)

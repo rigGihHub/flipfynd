@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.96"
+APP_VERSION = "v0.14.97"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1176,7 +1176,7 @@ def _fast_signature(item, sport, strategy):
         "price": item.get("pris"), "shipping": item.get("frakt"),
         "raw_text": item.get("raw_text"),
         "full_description": item.get("full_description"),
-        "sport": sport, "strategy": strategy,
+        "sport": sport, "strategy": strategy, "seller_parser_contract": "material-identity-v2",
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
@@ -1194,7 +1194,7 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
     signature = build_analysis_signature(
         item,
         data_size=inventory_size,
-        mode=f"seller_v7_verified_profit_gate_{sport}_{strategy_mode}",
+        mode=f"seller_v8_material_identity_balanced_routes_{sport}_{strategy_mode}",
     )
     cached = get_cached_analysis(signature)
     if cached:
@@ -2009,6 +2009,8 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 f"{seller_top5_result['new_full_analysed']} nya djupanalyser. "
                 "Topplistan uppdateras när bättre kandidater hittas."
             )
+        if "top5_new_count" in seller_top5_result:
+            st.caption(f"{int(seller_top5_result['top5_new_count'])} nya kort i topplistan denna omgång.")
         _result_funnel = seller_top5_result.get("analysis_funnel") or {}
         if _result_funnel and _seller_result_status != "INVENTORY_PARTIAL":
             with st.expander("Analystäckning och diagnostik", expanded=False):
@@ -2052,7 +2054,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         if rejected_count:
             st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
-            st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
+            st.caption("Preliminär topplista bland hittills analyserade kort. Den använder samma analysmotor som ordinarie FlipFynd-sökningen.")
         if not rows:
             if _full_remaining > 0:
                 st.info("Inget verifierat fynd i den analyserade delen ännu. Fortsatt sökning roterar vidare till tidigare oanalyserade annonser.")
