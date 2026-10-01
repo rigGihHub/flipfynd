@@ -45,7 +45,7 @@ def test_app_has_visible_reset_without_touching_ordinary_results():
 
     app = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
     assert '"Rensa säljsökningen"' in app
-    callback = app[app.index("def _clear_seller_top5_ui"):app.index("with st.sidebar.expander", app.index("def _clear_seller_top5_ui"))]
+    callback = app[app.index("def _clear_seller_top5_ui"):app.index('with st.expander("🏪 Top 5 per säljare"', app.index("def _clear_seller_top5_ui"))]
     assert 'reset_seller_top5_search(' in callback
     assert 'seller_top5_result' in callback
     assert 'seller_top5_alias' in callback

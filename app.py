@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.92"
+APP_VERSION = "v0.14.93"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1506,6 +1506,658 @@ if (
     # Preserve the last completed cards across refresh/navigation. They are
     # labelled stale until a new analysis completes instead of disappearing.
     st.session_state["results_stale_notice"] = True
+
+# Seller search stays above the main search, including its early stop paths.
+# SELLER_TOP5_UI_V1
+# Restore Seller Top 5 form values after a Streamlit websocket/session reset.
+try:
+    _seller_qp_alias = str(st.query_params.get("seller", "") or "").strip()
+    _seller_qp_profile = str(st.query_params.get("seller_profile", "") or "").strip()
+except Exception:
+    _seller_qp_alias = ""
+    _seller_qp_profile = ""
+if "seller_top5_alias" not in st.session_state and _seller_qp_alias:
+    st.session_state["seller_top5_alias"] = _seller_qp_alias
+if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
+    st.session_state["seller_top5_profile_url"] = _seller_qp_profile
+
+
+def _clear_seller_top5_ui():
+    old_alias = str(st.session_state.get("seller_top5_alias") or "").strip()
+    old_profile = str(st.session_state.get("seller_top5_profile_url") or "").strip()
+    reset_seller_top5_search(
+        old_alias,
+        old_profile,
+        database_url=DATABASE_URL,
+        session=st.session_state,
+    )
+    for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url"):
+        st.session_state.pop(key, None)
+    if DATABASE_URL:
+        try:
+            save_persistent_namespace(DATABASE_URL, "seller_last_result", None)
+        except Exception:
+            pass
+    try:
+        for key in ("seller", "seller_profile"):
+            if key in st.query_params:
+                del st.query_params[key]
+    except Exception:
+        pass
+
+
+if not st.session_state.get("seller_top5_result") and DATABASE_URL:
+    try:
+        _saved_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {})
+        if isinstance(_saved_seller, dict) and isinstance(_saved_seller.get("result"), dict):
+            _saved_alias = str(_saved_seller.get("alias") or "").strip()
+            _saved_profile = str(_saved_seller.get("profile_url") or "").strip()
+            _saved_result = dict(_saved_seller["result"])
+            # The compact seller_last_result may lag behind the per-seller
+            # durable checkpoint. On a fresh browser session, merge the newer
+            # checkpoint before restoring the UI so leaving for a Tradera ad
+            # can never rewind thousands of already saved listings.
+            try:
+                _restore_alias = _saved_alias or str(_saved_result.get("seller") or "").strip()
+                _restore_profile = _saved_profile
+                if _restore_profile:
+                    _restore_key = _seller_top5_controller._checkpoint_key(_restore_alias, _restore_profile)
+                    _durable_cp = _seller_top5_controller.load_checkpoint(
+                        _restore_key, session=st.session_state, database_url=DATABASE_URL
+                    )
+                    _saved_cp = _saved_result.get("public_checkpoint") or {}
+                    if isinstance(_durable_cp, dict) and int(_durable_cp.get("next_page") or 0) > int(_saved_cp.get("next_page") or 0):
+                        _saved_result["public_checkpoint"] = _durable_cp
+                        _saved_result["public_next_page"] = int(_durable_cp.get("next_page") or 1)
+                        _saved_result["public_pages_read"] = max(0, int(_durable_cp.get("next_page") or 1) - 1)
+                        _saved_result["inventory_count"] = len(_durable_cp.get("items") or {})
+                        _saved_result["total_listing_estimate"] = _durable_cp.get("total_listing_estimate")
+            except Exception:
+                pass
+            if _saved_alias and not st.session_state.get("seller_top5_alias"):
+                st.session_state["seller_top5_alias"] = _saved_alias
+            if _saved_profile and not st.session_state.get("seller_top5_profile_url"):
+                st.session_state["seller_top5_profile_url"] = _saved_profile
+            st.session_state["seller_top5_result"] = _saved_result
+    except Exception:
+        pass
+
+_seller_existing_result = st.session_state.get("seller_top5_result") or {}
+# The durable namespace can lag one click behind the in-session crawl result.
+# Prefer whichever checkpoint has progressed furthest so "Sök vidare" cannot
+# regress from page 10 back to the older page-1/9 block.
+try:
+    _persisted_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
+    _persisted_result = (_persisted_seller or {}).get("result") if isinstance(_persisted_seller, dict) else {}
+    _session_next = int(((_seller_existing_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
+    _persisted_next = int(((_persisted_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
+    if isinstance(_persisted_result, dict) and _persisted_next > _session_next:
+        _seller_existing_result = _persisted_result
+        st.session_state["seller_top5_result"] = _persisted_result
+except Exception:
+    pass
+_seller_existing_status = str(_seller_existing_result.get("status") or "")
+_seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
+
+with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention):
+    st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
+    seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
+    seller_top5_profile_url = st.text_input(
+        "Tradera-profil",
+        key="seller_top5_profile_url",
+        placeholder="https://www.tradera.com/profile/items/...",
+        help="Klistra in säljarens profilsida, till exempel https://www.tradera.com/profile/items/5412219/",
+    )
+    try:
+        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
+            st.query_params["seller"] = str(seller_top5_alias)
+        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
+            st.query_params["seller_profile"] = str(seller_top5_profile_url)
+    except Exception:
+        pass
+    seller_top5_sport_label = "Alla"
+    seller_top5_profile_url_resolved = str(seller_top5_profile_url or "").strip()
+    _profile_alias = str(seller_top5_alias or "").strip()
+    if seller_top5_profile_url_resolved and _profile_alias:
+        _profile_base, _profile_sep, _profile_query = seller_top5_profile_url_resolved.partition("?")
+        _profile_clean = _profile_base.rstrip("/")
+        if "/profile/items/" in _profile_clean and _profile_clean.rsplit("/", 1)[-1].isdigit():
+            _profile_base = _profile_clean + "/" + _profile_alias.replace(" ", "%20")
+            seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
+    _seller_previous_result = _seller_existing_result
+    _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
+    _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
+    if _seller_continue_inventory:
+        _seller_button_label = "🔎 Sök vidare – läs nästa annonser"
+    elif _seller_has_saved_inventory:
+        _seller_button_label = "🔄 Sök igen – uppdatera säljaren"
+    else:
+        _seller_button_label = "🔎 Hitta säljarens bästa kort"
+    if _seller_has_saved_inventory:
+        st.caption(
+            f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
+            "Nästa sökning behåller dem och fortsätter/uppdaterar samma säljare."
+        )
+    if seller_top5_profile_url_resolved and jobs_available():
+        try:
+            _bg_job = seller_inventory_job_status(
+                profile_url=seller_top5_profile_url_resolved,
+                seller=str(seller_top5_alias or "").strip(),
+            )
+            if _bg_job:
+                _bg_status = str(_bg_job.get("status") or "")
+                _bg_result = _bg_job.get("result") or {}
+                _bg_checkpoint = _bg_result.get("checkpoint") or {}
+                _bg_saved = int(_bg_result.get("inventory_count") or len(_bg_checkpoint.get("items") or {}))
+                _bg_next = int(_bg_checkpoint.get("next_page") or 1)
+                if _bg_status in {"QUEUED", "RUNNING"}:
+                    st.info(f"Bakgrundssökning pågår · {_bg_saved} unika annonser sparade · fortsätter från sida {_bg_next}")
+                elif _bg_status == "COMPLETED":
+                    st.success(f"Bakgrundsinläsning klar · {_bg_saved} unika annonser sparade")
+                elif _bg_status == "FAILED":
+                    st.warning("Bakgrundsinläsningen avbröts. Sparat checkpoint finns kvar och nästa körning kan fortsätta.")
+        except Exception:
+            pass
+    if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
+        alias = str(seller_top5_alias or "").strip()
+        if not alias and not seller_top5_profile_url_resolved:
+            st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
+        else:
+            # Public seller profiles can be crawled by the persistent worker.
+            # Queue that I/O-heavy part first so leaving the browser does not
+            # cancel inventory discovery. Ranking remains on the existing path
+            # until the headless analyser is fully separated.
+            if seller_top5_profile_url_resolved and jobs_available():
+                _resume_page = int(((_seller_previous_result.get("public_checkpoint") or {}).get("next_page")) or 1)
+                _active = ensure_seller_inventory_job(
+                    profile_url=seller_top5_profile_url_resolved,
+                    seller=alias,
+                    start_page=_resume_page,
+                    max_pages=120,
+                )
+                if _active:
+                    st.session_state["seller_background_job_id"] = _active.get("job_id")
+                st.info("Säljarens annonser har lagts i bakgrundskön. Du kan lämna sidan utan att kön försvinner.")
+
+            creds = _resolve_tradera_api_credentials()
+            sport_key = "all"
+            local_market = get_data(get_data_version())
+            seller_status = st.status(f"🔎 Söker {alias}", expanded=False)
+            seller_progress_line = seller_status.empty()
+            seller_progress_bar = st.progress(0, text="Startar…")
+
+            def _seller_search_progress(info):
+                phase = str((info or {}).get("phase") or "")
+                page = int((info or {}).get("page") or 0)
+                found = int((info or {}).get("found_count") or 0)
+                pages_read = int((info or {}).get("pages_read") or 0)
+                max_pages = int((info or {}).get("max_pages") or 0)
+                progress_percent = (info or {}).get("percent")
+                if progress_percent is None:
+                    if phase in {"starting", "fetching", "page_complete", "exhausted"}:
+                        progress_percent = min(20, 2 + int(18 * pages_read / max(1, max_pages)))
+                    elif phase.startswith("filter"):
+                        progress_percent = 24
+                    elif phase.startswith("quick"):
+                        progress_percent = 45
+                    elif phase.startswith("full"):
+                        progress_percent = 75
+                    elif phase == "ranking":
+                        progress_percent = 97
+                    elif phase == "complete":
+                        progress_percent = 100
+                    else:
+                        progress_percent = 1
+                progress_percent = max(0, min(100, int(progress_percent)))
+                done = int((info or {}).get("done") or 0)
+                total = int((info or {}).get("total") or 0)
+                if phase in {"starting", "fetching", "fetch_retry", "page_complete", "exhausted"}:
+                    progress_text = f"{progress_percent}% · {found} annonser hittade"
+                elif phase.startswith("filter"):
+                    progress_text = f"{progress_percent}% · Filtrerar kort" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("quick"):
+                    progress_text = f"{progress_percent}% · Prioriterar" + (f" · {done}/{total}" if total else "")
+                elif phase.startswith("full"):
+                    progress_text = f"{progress_percent}% · Analyserar toppkandidater" + (f" · {done}/{total}" if total else "")
+                elif phase == "ranking":
+                    progress_text = f"{progress_percent}% · Rankar Top 5"
+                elif phase == "complete":
+                    progress_text = "100% · Klart"
+                else:
+                    progress_text = f"{progress_percent}% · Bearbetar…"
+                seller_progress_bar.progress(progress_percent, text=progress_text)
+                if phase == "fetching":
+                    seller_progress_line.caption(f"Sida {page} · {found} annonser")
+                elif phase == "fetch_retry":
+                    attempt = int((info or {}).get("attempt") or 1)
+                    maximum = int((info or {}).get("max_attempts") or 3)
+                    seller_progress_line.caption(
+                        f"Tillfälligt hämtningsfel på sida {page} · försöker automatiskt igen {attempt}/{maximum}"
+                    )
+                elif phase == "page_complete":
+                    seller_progress_line.caption(f"Sida {page} klar · {found} annonser")
+                elif phase == "exhausted":
+                    seller_progress_line.caption(f"Alla sidor lästa · {found} annonser")
+                elif phase == "complete":
+                    seller_progress_line.caption(f"{found} annonser · rankar bästa korten")
+
+            try:
+                try:
+                    # Read continuation state at click-time. Streamlit reruns can
+                    # make the earlier module-scope snapshot stale/empty.
+                    _click_result = st.session_state.get("seller_top5_result") or {}
+                    if not isinstance(_click_result, dict) or not (_click_result.get("public_checkpoint") or {}):
+                        try:
+                            _click_saved = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
+                            _click_persisted = (_click_saved or {}).get("result") if isinstance(_click_saved, dict) else {}
+                            if isinstance(_click_persisted, dict):
+                                _click_result = _click_persisted
+                        except Exception:
+                            pass
+                    _visible_cp = (_click_result.get("public_checkpoint") or {}) if isinstance(_click_result, dict) else {}
+                    # Streamlit can hot-reload app.py while retaining an older
+                    # imported controller module. Reload it on each explicit
+                    # seller-search click so continuation code matches GitHub.
+                    import importlib as _seller_importlib
+                    import src.seller_top5_controller as _seller_controller_live
+                    _seller_controller_live = _seller_importlib.reload(_seller_controller_live)
+                    _controller_start_debug = {
+                        "source": "visible_result",
+                        "next_page": int(_visible_cp.get("next_page") or 1),
+                        "pages_read": int(_visible_cp.get("pages_read") or 0),
+                        "items": len(_visible_cp.get("items") or {}),
+                    }
+                    st.session_state["seller_controller_start_debug"] = _controller_start_debug
+                    top5 = _seller_controller_live.resolve_seller_top5(
+                        alias,
+                        local_market,
+                        analyze_fn=_cached_seller_analysis,
+                        sport=sport_key,
+                        credentials=creds,
+                        profile_url=seller_top5_profile_url_resolved,
+                        progress_callback=_seller_search_progress,
+                        quick_limit=60,
+                        full_limit=8,
+                        database_url=DATABASE_URL,
+                        # The visible result is the freshest checkpoint from
+                        # the immediately preceding block. Pass it explicitly so
+                        # continuation survives DB/session checkpoint lag.
+                        resume_checkpoint=_visible_cp,
+                        analysis_registry=(
+                            (_click_result.get("analysis_registry") if isinstance(_click_result, dict) else None)
+                            or (_visible_cp.get("analysis_registry") if isinstance(_visible_cp, dict) else None)
+                            or {}
+                        ),
+                    )
+                except TypeError as exc:
+                    # Streamlit may hot-reload app.py while keeping an older imported
+                    # controller module in memory. Refresh that module automatically and
+                    # continue the same user action instead of asking for another click.
+                    if not any(name in str(exc) for name in ("profile_url", "progress_callback", "database_url", "analysis_registry")):
+                        raise
+                    seller_progress_bar.progress(2, text="2% · Synkar analysmotorn automatiskt…")
+                    seller_progress_line.info("Ny kod upptäcktes · laddar om Seller Top 5-motorn utan att avbryta sökningen")
+                    import importlib
+                    import src.seller_top5_controller as _seller_top5_controller
+                    _seller_top5_controller = importlib.reload(_seller_top5_controller)
+                    top5 = _seller_top5_controller.resolve_seller_top5(
+                        alias,
+                        local_market,
+                        analyze_fn=_cached_seller_analysis,
+                        sport="all",
+                        credentials=creds,
+                        profile_url=seller_top5_profile_url_resolved,
+                        progress_callback=_seller_search_progress,
+                        quick_limit=60,
+                        full_limit=8,
+                        database_url=DATABASE_URL,
+                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
+                        analysis_registry=_seller_previous_result.get("analysis_registry") or {},
+                    )
+                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
+                    top5 = dict(top5)
+                    top5["status"] = "PROFILE_INCOMPLETE"
+                    top5["rows"] = []
+                st.session_state["seller_top5_result"] = top5
+                # Persist seller continuation/result independently of the
+                # browser websocket so leaving the app cannot reset the crawl.
+                if DATABASE_URL:
+                    try:
+                        save_persistent_namespace(
+                            DATABASE_URL,
+                            "seller_last_result",
+                            {
+                                "alias": alias,
+                                "profile_url": seller_top5_profile_url_resolved,
+                                "result": top5,
+                            },
+                        )
+                    except Exception:
+                        pass
+                found_count = int(top5.get("inventory_count") or 0)
+                quick_count = int(top5.get("quick_analysed") or 0)
+                full_count = int(top5.get("full_unique_analysed") or top5.get("full_analysed") or 0)
+                source = top5.get("inventory_source") or "okänd källa"
+                result_status = str(top5.get("status") or "")
+                if result_status == "INVENTORY_PARTIAL":
+                    pages_read = int(top5.get("public_pages_read") or 0)
+                    next_page = int(top5.get("public_next_page") or 1)
+                    seller_progress_bar.progress(100, text=f"{found_count} annonser inlästa · block klart")
+                    seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
+                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt till nästa sida", state="complete", expanded=False)
+                    st.rerun()  # refresh Seller Top 5 continuation UI
+                elif result_status == "PROFILE_INCOMPLETE":
+                    seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Läs nästa sida")
+                    seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
+                    st.rerun()  # refresh continuation button after incomplete profile
+                else:
+                    seller_status.write(
+                        f"{found_count} annonser hittade · {quick_count} snabbanalyserade · "
+                        f"{full_count} fullanalyserade · källa: {source}."
+                    )
+                    seller_progress_bar.progress(100, text="100% · Klart")
+                    seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
+            except Exception:
+                try:
+                    seller_progress_bar.progress(0, text="Sökningen avbröts")
+                except Exception:
+                    pass
+                seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
+                raise
+
+    if seller_top5_alias or seller_top5_profile_url or _seller_previous_result:
+        st.button(
+            "Rensa säljsökningen",
+            key="seller_top5_clear",
+            use_container_width=True,
+            on_click=_clear_seller_top5_ui,
+            help="Tar bort säljarens resultat och fortsättningsläge. Den vanliga fyndsökningen påverkas inte.",
+        )
+
+
+
+    seller_top5_result = st.session_state.get("seller_top5_result")
+    _seller_result_status = str((seller_top5_result or {}).get("status") or "")
+    if seller_top5_result and _seller_result_status == "INVENTORY_PARTIAL":
+        _saved = int(seller_top5_result.get("inventory_count") or 0)
+        _pages = int(seller_top5_result.get("public_pages_read") or 0)
+        _next = int(seller_top5_result.get("public_next_page") or 1)
+        _total_est = seller_top5_result.get("total_listing_estimate")
+        _remaining_est = seller_top5_result.get("remaining_listing_estimate")
+        if _total_est:
+            _inventory_line = f"{_saved} inlästa · cirka {int(_remaining_est or 0)} kvar · {_pages} sidor lästa"
+        else:
+            _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
+        _diag_code = str(seller_top5_result.get("diagnostic_code") or "FF-SELLER-PARTIAL")
+        if seller_top5_result.get("resume_required"):
+            st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
+        else:
+            st.info(f"Delstopp efter ett sökblock · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
+        _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
+        _diag_lines = [
+            f"{_diag_code} | status={seller_top5_result.get('public_status')} | "
+            f"saved={_saved} | pages={_pages} | next={_next} | "
+            f"estimate={seller_top5_result.get('total_listing_estimate')} | "
+            f"resume={bool(seller_top5_result.get('resume_required'))}"
+        ]
+        _coverage = seller_top5_result.get("analysis_coverage") or {}
+        if _coverage:
+            _diag_lines.append(
+                f"FF-ANALYSIS-COVERAGE | quick={int(_coverage.get('quick_unique') or 0)}/"
+                f"{int(_coverage.get('inventory_unique') or 0)} | "
+                f"full={int(_coverage.get('full_unique') or 0)}/"
+                f"{int(_coverage.get('inventory_unique') or 0)} | "
+                f"full_remaining={int(_coverage.get('full_remaining') or 0)}"
+            )
+        _funnel = seller_top5_result.get("analysis_funnel") or {}
+        if _funnel:
+            _diag_lines.append(
+                f"FF-CANDIDATE-FUNNEL | cards={int(_funnel.get('card_inventory') or 0)} | "
+                f"quick={int(_funnel.get('quick_success') or 0)} | "
+                f"merit={int(_funnel.get('merit_eligible') or 0)} | "
+                f"full={int(_funnel.get('full_success') or 0)} | "
+                f"positive_net={int(_funnel.get('positive_net_current') or 0)} | "
+                f"verified_find={int(_funnel.get('verified_find_current') or 0)}"
+            )
+        if _start_dbg:
+            _diag_lines.append(
+                f"FF-CONTROLLER-START | source={_start_dbg.get('source')} | "
+                f"next={_start_dbg.get('next_page')} | pages={_start_dbg.get('pages_read')} | "
+                f"items={_start_dbg.get('items')}"
+            )
+        _public_error = seller_top5_result.get("public_error")
+        if _public_error:
+            _diag_lines.append(f"FF-PUBLIC-ERROR | {_public_error}")
+        st.code("\n".join(_diag_lines), language=None)
+        st.caption("Felsökning – allt ligger i samma kopierbara ruta.")
+    elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
+        st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
+    if seller_top5_result and not (seller_top5_result.get("rows") or []):
+        _public_status = str(seller_top5_result.get("public_status") or "")
+        _public_error = str(seller_top5_result.get("public_error") or "").strip()
+        if _public_status and _public_status != "OK":
+            st.error(f"Kunde inte läsa annonser från Tradera-profilen ({_public_status}).")
+            if _public_error:
+                st.caption(_public_error)
+            st.caption("Ingen Top 5 visas förrän minst en riktig annons har lästs in.")
+        elif _seller_result_status not in {"PROFILE_INCOMPLETE", "INVENTORY_PARTIAL"}:
+            st.warning("Sökningen gav ännu inga läsbara kortannonser. Försök igen; FlipFynd visar inte en tom körning som ett lyckat resultat.")
+    if (
+        seller_top5_result
+        and _seller_result_status != "PROFILE_INCOMPLETE"
+        and int(seller_top5_result.get("inventory_count") or 0) > 0
+    ):
+        seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
+        inv_count = int(seller_top5_result.get("inventory_count") or 0)
+        _ranked_rows = seller_top5_result.get("rows") or []
+        _safe_ranked_rows = [
+            row for row in _ranked_rows
+            if (
+                _seller_ui_row_is_safe(row)
+                and not known_negative_net_profit(row)
+                and seller_has_positive_purchase_price(row)
+            )
+        ]
+        _find_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "FIND"]
+        _research_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "RESEARCH"]
+        _seller_display_rows = (_find_rows + _research_rows)[:5]
+        if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
+            st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
+            st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
+        elif _find_rows:
+            st.markdown(f"### 🏆 Verifierade fynd · {seller_name}")
+        elif _seller_display_rows:
+            st.markdown(f"### 🔎 Kandidater värda fortsatt kontroll · {seller_name}")
+            st.caption("Inga verifierade fynd ännu. Dessa kort har kortspecifika signaler men är inte köpklara.")
+        else:
+            st.markdown(f"### Inga verifierade fynd i analyserade delen ännu · {seller_name}")
+            st.caption("FlipFynd visar inte minusaffärer, okänd nettovinst eller vanliga standardkort som utfyllnad.")
+        _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
+        _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
+        st.caption(
+            f"{inv_count} annonser hittade · "
+            f"{_full_unique} unika djupanalyserade · {_full_remaining} återstår"
+        )
+        _result_funnel = seller_top5_result.get("analysis_funnel") or {}
+        if _result_funnel and _seller_result_status != "INVENTORY_PARTIAL":
+            with st.expander("Analystäckning och diagnostik", expanded=False):
+                st.code(
+                    "\n".join([
+                        f"FF-SELLER-ANALYSIS | version={APP_VERSION} | seller={seller_name}",
+                        f"inventory={inv_count} | cards={int(_result_funnel.get('card_inventory') or 0)} | "
+                        f"unique={int(_result_funnel.get('inventory_unique') or 0)}",
+                        f"quick={int(_result_funnel.get('quick_success') or 0)} | "
+                        f"merit={int(_result_funnel.get('merit_eligible') or 0)} | "
+                        f"full={int(_result_funnel.get('full_success') or 0)}",
+                        f"positive_net={int(_result_funnel.get('positive_net_current') or 0)} | "
+                        f"verified_find={int(_result_funnel.get('verified_find_current') or 0)} | "
+                        f"shown={len(_seller_display_rows)}",
+                        f"full_unique={_full_unique} | full_remaining={_full_remaining} | "
+                        f"coverage={float(_result_funnel.get('cumulative_full_coverage_pct') or 0):.1f}%",
+                        "recall=not_measured_without_labelled_ground_truth",
+                    ]),
+                    language=None,
+                )
+        inventory_source = seller_top5_result.get("inventory_source")
+        if inventory_source == "TRADERA_API":
+            st.caption("Live via Tradera")
+        elif inventory_source == "TRADERA_PUBLIC_PROFILE":
+            pages_read = int(seller_top5_result.get("public_pages_read") or 0)
+            st.caption(f"Tradera-profil · {pages_read} sidor lästa")
+            if seller_top5_result.get("public_inventory_complete"):
+                st.caption("✅ Hela säljarprofilen är inläst.")
+        elif inventory_source == "LOCAL_MARKET":
+            reason = seller_top5_result.get("fallback_reason")
+            if reason == "NO_API_CREDENTIALS":
+                st.caption("Källa: redan inläst FlipFynd-data · Tradera API är inte konfigurerat.")
+            elif reason == "API_FAILED":
+                api_status = seller_top5_result.get("api_status") or "okänt fel"
+                st.caption(f"Källa: redan inläst FlipFynd-data · API-fallback efter {api_status}.")
+            else:
+                st.caption("Källa: redan inläst FlipFynd-data.")
+        rows = _seller_display_rows
+        rejected_count = int(seller_top5_result.get("domain_rejected_count") or 0)
+        card_count = int(seller_top5_result.get("card_inventory_count") or 0)
+        if rejected_count:
+            st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
+        if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
+            st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
+        if not rows:
+            if _full_remaining > 0:
+                st.info("Inget verifierat fynd i den analyserade delen ännu. Fortsatt sökning roterar vidare till tidigare oanalyserade annonser.")
+            else:
+                st.info("Hela det sparade kortlagret är analyserat och inget kort klarade den positiva nettovinst- och evidensgränsen.")
+        elif len(rows) < 5:
+            st.caption(
+                f"Topplistan innehåller {len(rows)} kort eftersom bara {len(rows)} "
+                "klarade pris-, kvalitets- och evidensgränsen hittills."
+            )
+        _find_rank = 0
+        _research_rank = 0
+        _research_heading_shown = False
+        for row in rows[:5]:
+            title = row.get("title") or "Kortannons"
+            price = row.get("price")
+            decision = str(row.get("decision") or "SKIP").upper()
+            _row_tier = seller_result_tier(row)
+            # Reuse the final tier already computed above. A new named import
+            # can crash a hot deployment with an older loaded seller module.
+            if _row_tier == "FIND":
+                badge = "🟢 KÖP"
+            elif (row.get("asking_price_opportunity") or {}).get("possible_find"):
+                badge = "🟡 Möjligt fynd · begärda priser"
+            elif decision.startswith(("KÖP", "UNDERSÖK")):
+                badge = "🟡 Värt att undersöka"
+            else:
+                badge = "⚪ Kandidat · ej verifierad"
+            if _row_tier == "FIND":
+                _find_rank += 1
+                _position_label = f"Fynd #{_find_rank}"
+            else:
+                _research_rank += 1
+                _position_label = f"Research #{_research_rank}"
+                if _find_rows and not _research_heading_shown:
+                    st.markdown("### 🔎 Researchkandidater – inte fynd")
+                    st.caption("Kortspecifika signaler gör dem värda kontroll, men ekonomin är inte verifierad.")
+                    _research_heading_shown = True
+            st.markdown(f"#### {_position_label} · {title}")
+            _rank_score = float(row.get("rank_score") or 0)
+            try:
+                if price is not None and float(price) > 0:
+                    st.markdown(f"**{float(price):.0f} kr** · {badge}")
+                else:
+                    st.markdown(badge)
+            except (TypeError, ValueError):
+                st.markdown(badge)
+            _profit = build_seller_net_profit_summary(row)
+            if _profit["available"]:
+                st.markdown(
+                    f"**{_profit['label']}: {_profit['value']:+.0f} kr** · "
+                    f"{_profit['basis']}"
+                )
+            else:
+                st.markdown("**Nettovinst: ej beräkningsbar**")
+                st.caption(_profit["basis"].capitalize() + ".")
+            render_asking_price_opportunity(row.get("asking_price_opportunity"))
+            _opportunity_score = float(row.get("seller_opportunity_score") or _rank_score)
+            st.caption(f"Granskningsprioritet {_opportunity_score:.0f}/100")
+            _signal_labels = {
+                "one_of_one": "1/1",
+                "serial_numbered": "Numrerat",
+                "autograph": "Autograf",
+                "patch_relic": "Patch/relic",
+                "case_hit_ssp": "SSP/case hit",
+                "premium_insert": "Premiuminsert",
+                "rookie": "Rookie",
+                "premium_parallel": "Premium parallel",
+                "error_variation": "Variation/feltryck",
+                "short_print": "Short print",
+                "football_named_chase": "Checklistad fotbolls-chase",
+                "flagship_rookie_variant": "Young Guns-variant",
+                "upper_deck_day_with_cup": "Day With The Cup",
+                "upper_deck_population_count": "Population Count",
+                "upper_deck_program_of_excellence": "Program of Excellence",
+                "named_chase_insert": "Checklistad chase-insert",
+                "elite_parallel": "Extrem parallel",
+                "premium_autograph_structure": "Premiumautografstruktur",
+                "premium_relic_structure": "Premium patch/relic-struktur",
+                "premium_issue_variant": "Premiumutgåva/variant",
+            }
+            _signals = [
+                _signal_labels.get(signal, str(signal))
+                for signal in (row.get("collector_signals") or [])
+                if signal
+            ]
+            if _signals:
+                st.caption("Varför den prioriteras: " + " · ".join(_signals))
+            if _row_tier != "FIND":
+                st.caption("Prioriterad för kontroll – inte en köpsignal.")
+            reason = str(row.get("reason") or "").strip()
+            if reason:
+                st.caption(reason)
+            with st.expander("Analysdetaljer", expanded=False):
+                st.caption(
+                    f"Spelare {float(row.get('player_market_score') or 0):.0f}/100 · "
+                    f"Market edge {float(row.get('market_edge') or 0):.0f}/100 · "
+                    f"Värderingssäkerhet {float(row.get('valuation_confidence') or 0):.0f}/100"
+                )
+                st.caption(
+                    f"Exact SOLD {int(row.get('sold_comps') or 0)} · "
+                    f"riskjusterad vinst {float(row.get('risk_adjusted_profit') or 0):.0f} kr"
+                )
+                _ebay = row.get("ebay_active_context") or {}
+                if _ebay.get("ok"):
+                    _median = _ebay.get("median_usd")
+                    _range = ""
+                    if _ebay.get("min_usd") is not None and _ebay.get("max_usd") is not None:
+                        _range = f" · spann ${_ebay['min_usd']:.2f}–${_ebay['max_usd']:.2f}"
+                    st.caption(
+                        f"eBay aktiva annonser: {int(_ebay.get('listing_count') or 0)} identitetsmatchade av "
+                        f"{int(_ebay.get('raw_listing_count') or 0)} träffar"
+                        + (f" · median ${_median:.2f}" if _median is not None else "")
+                        + _range
+                    )
+                    st.caption("Begärda priser kan ge möjliga fynd. De visar inte vad korten har sålts för.")
+                _readiness = row.get("deal_readiness") or {}
+                if _readiness.get("blockers"):
+                    st.caption("Inte köpklar: " + " · ".join(_readiness["blockers"][:3]))
+            if row.get("analysis_level") == "quick_fallback":
+                st.caption("Preliminär analys – djupanalys återstår.")
+            elif row.get("seller_deep_route") == "HIDDEN_FIND_EXPLORATION":
+                st.caption("Dolt fynd-urval: annonsen djupanalyserades trots svag rubrik. Detta är inte i sig en köpsignal.")
+            if row.get("url"):
+                _ad_url = str(row.get("url") or "").replace('"', "%22")
+                st.markdown(
+                    f'<a href="{_ad_url}" target="_blank" rel="noopener noreferrer" '
+                    f'style="display:block;text-align:center;padding:.55rem .75rem;'
+                    f'border:1px solid rgba(128,128,128,.45);border-radius:.5rem;'
+                    f'text-decoration:none;font-weight:600;">Öppna annonsen ↗</a>',
+                    unsafe_allow_html=True,
+                )
+            st.divider()
+        for empty_rank in range(len(rows) + 1, 6):
+            st.caption(f"#{empty_rank} — Ingen kandidat klarade kvalitetsgränsen ännu")
+
 
 # FlipFynd har en huvuduppgift: visa de bästa fynden just nu.
 # Slutar snart/bevakning/research finns kvar som analysmotorer i bakgrunden,
@@ -6174,654 +6826,3 @@ with st.expander("⚙️ Administration & data"):
                 st.caption("Saknad spelarkunskap gissas inte; den lämnas okänd tills den verifierats.")
         except Exception:
             pass
-
-
-# SELLER_TOP5_UI_V1
-# Restore Seller Top 5 form values after a Streamlit websocket/session reset.
-try:
-    _seller_qp_alias = str(st.query_params.get("seller", "") or "").strip()
-    _seller_qp_profile = str(st.query_params.get("seller_profile", "") or "").strip()
-except Exception:
-    _seller_qp_alias = ""
-    _seller_qp_profile = ""
-if "seller_top5_alias" not in st.session_state and _seller_qp_alias:
-    st.session_state["seller_top5_alias"] = _seller_qp_alias
-if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
-    st.session_state["seller_top5_profile_url"] = _seller_qp_profile
-
-
-def _clear_seller_top5_ui():
-    old_alias = str(st.session_state.get("seller_top5_alias") or "").strip()
-    old_profile = str(st.session_state.get("seller_top5_profile_url") or "").strip()
-    reset_seller_top5_search(
-        old_alias,
-        old_profile,
-        database_url=DATABASE_URL,
-        session=st.session_state,
-    )
-    for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url"):
-        st.session_state.pop(key, None)
-    if DATABASE_URL:
-        try:
-            save_persistent_namespace(DATABASE_URL, "seller_last_result", None)
-        except Exception:
-            pass
-    try:
-        for key in ("seller", "seller_profile"):
-            if key in st.query_params:
-                del st.query_params[key]
-    except Exception:
-        pass
-
-
-if not st.session_state.get("seller_top5_result") and DATABASE_URL:
-    try:
-        _saved_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {})
-        if isinstance(_saved_seller, dict) and isinstance(_saved_seller.get("result"), dict):
-            _saved_alias = str(_saved_seller.get("alias") or "").strip()
-            _saved_profile = str(_saved_seller.get("profile_url") or "").strip()
-            _saved_result = dict(_saved_seller["result"])
-            # The compact seller_last_result may lag behind the per-seller
-            # durable checkpoint. On a fresh browser session, merge the newer
-            # checkpoint before restoring the UI so leaving for a Tradera ad
-            # can never rewind thousands of already saved listings.
-            try:
-                _restore_alias = _saved_alias or str(_saved_result.get("seller") or "").strip()
-                _restore_profile = _saved_profile
-                if _restore_profile:
-                    _restore_key = _seller_top5_controller._checkpoint_key(_restore_alias, _restore_profile)
-                    _durable_cp = _seller_top5_controller.load_checkpoint(
-                        _restore_key, session=st.session_state, database_url=DATABASE_URL
-                    )
-                    _saved_cp = _saved_result.get("public_checkpoint") or {}
-                    if isinstance(_durable_cp, dict) and int(_durable_cp.get("next_page") or 0) > int(_saved_cp.get("next_page") or 0):
-                        _saved_result["public_checkpoint"] = _durable_cp
-                        _saved_result["public_next_page"] = int(_durable_cp.get("next_page") or 1)
-                        _saved_result["public_pages_read"] = max(0, int(_durable_cp.get("next_page") or 1) - 1)
-                        _saved_result["inventory_count"] = len(_durable_cp.get("items") or {})
-                        _saved_result["total_listing_estimate"] = _durable_cp.get("total_listing_estimate")
-            except Exception:
-                pass
-            if _saved_alias and not st.session_state.get("seller_top5_alias"):
-                st.session_state["seller_top5_alias"] = _saved_alias
-            if _saved_profile and not st.session_state.get("seller_top5_profile_url"):
-                st.session_state["seller_top5_profile_url"] = _saved_profile
-            st.session_state["seller_top5_result"] = _saved_result
-    except Exception:
-        pass
-
-_seller_existing_result = st.session_state.get("seller_top5_result") or {}
-# The durable namespace can lag one click behind the in-session crawl result.
-# Prefer whichever checkpoint has progressed furthest so "Sök vidare" cannot
-# regress from page 10 back to the older page-1/9 block.
-try:
-    _persisted_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
-    _persisted_result = (_persisted_seller or {}).get("result") if isinstance(_persisted_seller, dict) else {}
-    _session_next = int(((_seller_existing_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
-    _persisted_next = int(((_persisted_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
-    if isinstance(_persisted_result, dict) and _persisted_next > _session_next:
-        _seller_existing_result = _persisted_result
-        st.session_state["seller_top5_result"] = _persisted_result
-except Exception:
-    pass
-_seller_existing_status = str(_seller_existing_result.get("status") or "")
-_seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
-
-with st.sidebar.expander("🏪 Säljare – Top 5 kort", expanded=_seller_search_needs_attention):
-    st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
-    seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
-    seller_top5_profile_url = st.text_input(
-        "Tradera-profil",
-        key="seller_top5_profile_url",
-        placeholder="https://www.tradera.com/profile/items/...",
-        help="Klistra in säljarens profilsida, till exempel https://www.tradera.com/profile/items/5412219/",
-    )
-    try:
-        if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
-            st.query_params["seller"] = str(seller_top5_alias)
-        if seller_top5_profile_url and str(st.query_params.get("seller_profile", "") or "") != str(seller_top5_profile_url):
-            st.query_params["seller_profile"] = str(seller_top5_profile_url)
-    except Exception:
-        pass
-    seller_top5_sport_label = "Alla"
-    seller_top5_profile_url_resolved = str(seller_top5_profile_url or "").strip()
-    _profile_alias = str(seller_top5_alias or "").strip()
-    if seller_top5_profile_url_resolved and _profile_alias:
-        _profile_base, _profile_sep, _profile_query = seller_top5_profile_url_resolved.partition("?")
-        _profile_clean = _profile_base.rstrip("/")
-        if "/profile/items/" in _profile_clean and _profile_clean.rsplit("/", 1)[-1].isdigit():
-            _profile_base = _profile_clean + "/" + _profile_alias.replace(" ", "%20")
-            seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
-    _seller_previous_result = _seller_existing_result
-    _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
-    _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
-    if _seller_continue_inventory:
-        _seller_button_label = "🔎 Sök vidare – läs nästa annonser"
-    elif _seller_has_saved_inventory:
-        _seller_button_label = "🔄 Sök igen – uppdatera säljaren"
-    else:
-        _seller_button_label = "🔎 Hitta säljarens bästa kort"
-    if _seller_has_saved_inventory:
-        st.caption(
-            f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
-            "Nästa sökning behåller dem och fortsätter/uppdaterar samma säljare."
-        )
-    if seller_top5_profile_url_resolved and jobs_available():
-        try:
-            _bg_job = seller_inventory_job_status(
-                profile_url=seller_top5_profile_url_resolved,
-                seller=str(seller_top5_alias or "").strip(),
-            )
-            if _bg_job:
-                _bg_status = str(_bg_job.get("status") or "")
-                _bg_result = _bg_job.get("result") or {}
-                _bg_checkpoint = _bg_result.get("checkpoint") or {}
-                _bg_saved = int(_bg_result.get("inventory_count") or len(_bg_checkpoint.get("items") or {}))
-                _bg_next = int(_bg_checkpoint.get("next_page") or 1)
-                if _bg_status in {"QUEUED", "RUNNING"}:
-                    st.info(f"Bakgrundssökning pågår · {_bg_saved} unika annonser sparade · fortsätter från sida {_bg_next}")
-                elif _bg_status == "COMPLETED":
-                    st.success(f"Bakgrundsinläsning klar · {_bg_saved} unika annonser sparade")
-                elif _bg_status == "FAILED":
-                    st.warning("Bakgrundsinläsningen avbröts. Sparat checkpoint finns kvar och nästa körning kan fortsätta.")
-        except Exception:
-            pass
-    if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
-        alias = str(seller_top5_alias or "").strip()
-        if not alias and not seller_top5_profile_url_resolved:
-            st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
-        else:
-            # Public seller profiles can be crawled by the persistent worker.
-            # Queue that I/O-heavy part first so leaving the browser does not
-            # cancel inventory discovery. Ranking remains on the existing path
-            # until the headless analyser is fully separated.
-            if seller_top5_profile_url_resolved and jobs_available():
-                _resume_page = int(((_seller_previous_result.get("public_checkpoint") or {}).get("next_page")) or 1)
-                _active = ensure_seller_inventory_job(
-                    profile_url=seller_top5_profile_url_resolved,
-                    seller=alias,
-                    start_page=_resume_page,
-                    max_pages=120,
-                )
-                if _active:
-                    st.session_state["seller_background_job_id"] = _active.get("job_id")
-                st.info("Säljarens annonser har lagts i bakgrundskön. Du kan lämna sidan utan att kön försvinner.")
-
-            creds = _resolve_tradera_api_credentials()
-            sport_key = "all"
-            local_market = get_data(get_data_version())
-            seller_status = st.status(f"🔎 Söker {alias}", expanded=False)
-            seller_progress_line = seller_status.empty()
-            seller_progress_bar = st.progress(0, text="Startar…")
-
-            def _seller_search_progress(info):
-                phase = str((info or {}).get("phase") or "")
-                page = int((info or {}).get("page") or 0)
-                found = int((info or {}).get("found_count") or 0)
-                pages_read = int((info or {}).get("pages_read") or 0)
-                max_pages = int((info or {}).get("max_pages") or 0)
-                progress_percent = (info or {}).get("percent")
-                if progress_percent is None:
-                    if phase in {"starting", "fetching", "page_complete", "exhausted"}:
-                        progress_percent = min(20, 2 + int(18 * pages_read / max(1, max_pages)))
-                    elif phase.startswith("filter"):
-                        progress_percent = 24
-                    elif phase.startswith("quick"):
-                        progress_percent = 45
-                    elif phase.startswith("full"):
-                        progress_percent = 75
-                    elif phase == "ranking":
-                        progress_percent = 97
-                    elif phase == "complete":
-                        progress_percent = 100
-                    else:
-                        progress_percent = 1
-                progress_percent = max(0, min(100, int(progress_percent)))
-                done = int((info or {}).get("done") or 0)
-                total = int((info or {}).get("total") or 0)
-                if phase in {"starting", "fetching", "fetch_retry", "page_complete", "exhausted"}:
-                    progress_text = f"{progress_percent}% · {found} annonser hittade"
-                elif phase.startswith("filter"):
-                    progress_text = f"{progress_percent}% · Filtrerar kort" + (f" · {done}/{total}" if total else "")
-                elif phase.startswith("quick"):
-                    progress_text = f"{progress_percent}% · Prioriterar" + (f" · {done}/{total}" if total else "")
-                elif phase.startswith("full"):
-                    progress_text = f"{progress_percent}% · Analyserar toppkandidater" + (f" · {done}/{total}" if total else "")
-                elif phase == "ranking":
-                    progress_text = f"{progress_percent}% · Rankar Top 5"
-                elif phase == "complete":
-                    progress_text = "100% · Klart"
-                else:
-                    progress_text = f"{progress_percent}% · Bearbetar…"
-                seller_progress_bar.progress(progress_percent, text=progress_text)
-                if phase == "fetching":
-                    seller_progress_line.caption(f"Sida {page} · {found} annonser")
-                elif phase == "fetch_retry":
-                    attempt = int((info or {}).get("attempt") or 1)
-                    maximum = int((info or {}).get("max_attempts") or 3)
-                    seller_progress_line.caption(
-                        f"Tillfälligt hämtningsfel på sida {page} · försöker automatiskt igen {attempt}/{maximum}"
-                    )
-                elif phase == "page_complete":
-                    seller_progress_line.caption(f"Sida {page} klar · {found} annonser")
-                elif phase == "exhausted":
-                    seller_progress_line.caption(f"Alla sidor lästa · {found} annonser")
-                elif phase == "complete":
-                    seller_progress_line.caption(f"{found} annonser · rankar bästa korten")
-
-            try:
-                try:
-                    # Read continuation state at click-time. Streamlit reruns can
-                    # make the earlier module-scope snapshot stale/empty.
-                    _click_result = st.session_state.get("seller_top5_result") or {}
-                    if not isinstance(_click_result, dict) or not (_click_result.get("public_checkpoint") or {}):
-                        try:
-                            _click_saved = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
-                            _click_persisted = (_click_saved or {}).get("result") if isinstance(_click_saved, dict) else {}
-                            if isinstance(_click_persisted, dict):
-                                _click_result = _click_persisted
-                        except Exception:
-                            pass
-                    _visible_cp = (_click_result.get("public_checkpoint") or {}) if isinstance(_click_result, dict) else {}
-                    # Streamlit can hot-reload app.py while retaining an older
-                    # imported controller module. Reload it on each explicit
-                    # seller-search click so continuation code matches GitHub.
-                    import importlib as _seller_importlib
-                    import src.seller_top5_controller as _seller_controller_live
-                    _seller_controller_live = _seller_importlib.reload(_seller_controller_live)
-                    _controller_start_debug = {
-                        "source": "visible_result",
-                        "next_page": int(_visible_cp.get("next_page") or 1),
-                        "pages_read": int(_visible_cp.get("pages_read") or 0),
-                        "items": len(_visible_cp.get("items") or {}),
-                    }
-                    st.session_state["seller_controller_start_debug"] = _controller_start_debug
-                    top5 = _seller_controller_live.resolve_seller_top5(
-                        alias,
-                        local_market,
-                        analyze_fn=_cached_seller_analysis,
-                        sport=sport_key,
-                        credentials=creds,
-                        profile_url=seller_top5_profile_url_resolved,
-                        progress_callback=_seller_search_progress,
-                        quick_limit=60,
-                        full_limit=8,
-                        database_url=DATABASE_URL,
-                        # The visible result is the freshest checkpoint from
-                        # the immediately preceding block. Pass it explicitly so
-                        # continuation survives DB/session checkpoint lag.
-                        resume_checkpoint=_visible_cp,
-                        analysis_registry=(
-                            (_click_result.get("analysis_registry") if isinstance(_click_result, dict) else None)
-                            or (_visible_cp.get("analysis_registry") if isinstance(_visible_cp, dict) else None)
-                            or {}
-                        ),
-                    )
-                except TypeError as exc:
-                    # Streamlit may hot-reload app.py while keeping an older imported
-                    # controller module in memory. Refresh that module automatically and
-                    # continue the same user action instead of asking for another click.
-                    if not any(name in str(exc) for name in ("profile_url", "progress_callback", "database_url", "analysis_registry")):
-                        raise
-                    seller_progress_bar.progress(2, text="2% · Synkar analysmotorn automatiskt…")
-                    seller_progress_line.info("Ny kod upptäcktes · laddar om Seller Top 5-motorn utan att avbryta sökningen")
-                    import importlib
-                    import src.seller_top5_controller as _seller_top5_controller
-                    _seller_top5_controller = importlib.reload(_seller_top5_controller)
-                    top5 = _seller_top5_controller.resolve_seller_top5(
-                        alias,
-                        local_market,
-                        analyze_fn=_cached_seller_analysis,
-                        sport="all",
-                        credentials=creds,
-                        profile_url=seller_top5_profile_url_resolved,
-                        progress_callback=_seller_search_progress,
-                        quick_limit=60,
-                        full_limit=8,
-                        database_url=DATABASE_URL,
-                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
-                        analysis_registry=_seller_previous_result.get("analysis_registry") or {},
-                    )
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
-                st.session_state["seller_top5_result"] = top5
-                # Persist seller continuation/result independently of the
-                # browser websocket so leaving the app cannot reset the crawl.
-                if DATABASE_URL:
-                    try:
-                        save_persistent_namespace(
-                            DATABASE_URL,
-                            "seller_last_result",
-                            {
-                                "alias": alias,
-                                "profile_url": seller_top5_profile_url_resolved,
-                                "result": top5,
-                            },
-                        )
-                    except Exception:
-                        pass
-                found_count = int(top5.get("inventory_count") or 0)
-                quick_count = int(top5.get("quick_analysed") or 0)
-                full_count = int(top5.get("full_unique_analysed") or top5.get("full_analysed") or 0)
-                source = top5.get("inventory_source") or "okänd källa"
-                result_status = str(top5.get("status") or "")
-                if result_status == "INVENTORY_PARTIAL":
-                    pages_read = int(top5.get("public_pages_read") or 0)
-                    next_page = int(top5.get("public_next_page") or 1)
-                    seller_progress_bar.progress(100, text=f"{found_count} annonser inlästa · block klart")
-                    seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
-                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt till nästa sida", state="complete", expanded=False)
-                    st.rerun()  # refresh Seller Top 5 continuation UI
-                elif result_status == "PROFILE_INCOMPLETE":
-                    seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Läs nästa sida")
-                    seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
-                    st.rerun()  # refresh continuation button after incomplete profile
-                else:
-                    seller_status.write(
-                        f"{found_count} annonser hittade · {quick_count} snabbanalyserade · "
-                        f"{full_count} fullanalyserade · källa: {source}."
-                    )
-                    seller_progress_bar.progress(100, text="100% · Klart")
-                    seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
-            except Exception:
-                try:
-                    seller_progress_bar.progress(0, text="Sökningen avbröts")
-                except Exception:
-                    pass
-                seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
-                raise
-
-    if seller_top5_alias or seller_top5_profile_url or _seller_previous_result:
-        st.button(
-            "Rensa säljsökningen",
-            key="seller_top5_clear",
-            use_container_width=True,
-            on_click=_clear_seller_top5_ui,
-            help="Tar bort säljarens resultat och fortsättningsläge. Den vanliga fyndsökningen påverkas inte.",
-        )
-
-
-
-    seller_top5_result = st.session_state.get("seller_top5_result")
-    _seller_result_status = str((seller_top5_result or {}).get("status") or "")
-    if seller_top5_result and _seller_result_status == "INVENTORY_PARTIAL":
-        _saved = int(seller_top5_result.get("inventory_count") or 0)
-        _pages = int(seller_top5_result.get("public_pages_read") or 0)
-        _next = int(seller_top5_result.get("public_next_page") or 1)
-        _total_est = seller_top5_result.get("total_listing_estimate")
-        _remaining_est = seller_top5_result.get("remaining_listing_estimate")
-        if _total_est:
-            _inventory_line = f"{_saved} inlästa · cirka {int(_remaining_est or 0)} kvar · {_pages} sidor lästa"
-        else:
-            _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
-        _diag_code = str(seller_top5_result.get("diagnostic_code") or "FF-SELLER-PARTIAL")
-        if seller_top5_result.get("resume_required"):
-            st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
-        else:
-            st.info(f"Delstopp efter ett sökblock · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
-        _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
-        _diag_lines = [
-            f"{_diag_code} | status={seller_top5_result.get('public_status')} | "
-            f"saved={_saved} | pages={_pages} | next={_next} | "
-            f"estimate={seller_top5_result.get('total_listing_estimate')} | "
-            f"resume={bool(seller_top5_result.get('resume_required'))}"
-        ]
-        _coverage = seller_top5_result.get("analysis_coverage") or {}
-        if _coverage:
-            _diag_lines.append(
-                f"FF-ANALYSIS-COVERAGE | quick={int(_coverage.get('quick_unique') or 0)}/"
-                f"{int(_coverage.get('inventory_unique') or 0)} | "
-                f"full={int(_coverage.get('full_unique') or 0)}/"
-                f"{int(_coverage.get('inventory_unique') or 0)} | "
-                f"full_remaining={int(_coverage.get('full_remaining') or 0)}"
-            )
-        _funnel = seller_top5_result.get("analysis_funnel") or {}
-        if _funnel:
-            _diag_lines.append(
-                f"FF-CANDIDATE-FUNNEL | cards={int(_funnel.get('card_inventory') or 0)} | "
-                f"quick={int(_funnel.get('quick_success') or 0)} | "
-                f"merit={int(_funnel.get('merit_eligible') or 0)} | "
-                f"full={int(_funnel.get('full_success') or 0)} | "
-                f"positive_net={int(_funnel.get('positive_net_current') or 0)} | "
-                f"verified_find={int(_funnel.get('verified_find_current') or 0)}"
-            )
-        if _start_dbg:
-            _diag_lines.append(
-                f"FF-CONTROLLER-START | source={_start_dbg.get('source')} | "
-                f"next={_start_dbg.get('next_page')} | pages={_start_dbg.get('pages_read')} | "
-                f"items={_start_dbg.get('items')}"
-            )
-        _public_error = seller_top5_result.get("public_error")
-        if _public_error:
-            _diag_lines.append(f"FF-PUBLIC-ERROR | {_public_error}")
-        st.code("\n".join(_diag_lines), language=None)
-        st.caption("Felsökning – allt ligger i samma kopierbara ruta.")
-    elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
-        st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
-    if seller_top5_result and not (seller_top5_result.get("rows") or []):
-        _public_status = str(seller_top5_result.get("public_status") or "")
-        _public_error = str(seller_top5_result.get("public_error") or "").strip()
-        if _public_status and _public_status != "OK":
-            st.error(f"Kunde inte läsa annonser från Tradera-profilen ({_public_status}).")
-            if _public_error:
-                st.caption(_public_error)
-            st.caption("Ingen Top 5 visas förrän minst en riktig annons har lästs in.")
-        elif _seller_result_status not in {"PROFILE_INCOMPLETE", "INVENTORY_PARTIAL"}:
-            st.warning("Sökningen gav ännu inga läsbara kortannonser. Försök igen; FlipFynd visar inte en tom körning som ett lyckat resultat.")
-    if (
-        seller_top5_result
-        and _seller_result_status != "PROFILE_INCOMPLETE"
-        and int(seller_top5_result.get("inventory_count") or 0) > 0
-    ):
-        seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
-        inv_count = int(seller_top5_result.get("inventory_count") or 0)
-        _ranked_rows = seller_top5_result.get("rows") or []
-        _safe_ranked_rows = [
-            row for row in _ranked_rows
-            if (
-                _seller_ui_row_is_safe(row)
-                and not known_negative_net_profit(row)
-                and seller_has_positive_purchase_price(row)
-            )
-        ]
-        _find_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "FIND"]
-        _research_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "RESEARCH"]
-        _seller_display_rows = (_find_rows + _research_rows)[:5]
-        if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
-            st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
-            st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
-        elif _find_rows:
-            st.markdown(f"### 🏆 Verifierade fynd · {seller_name}")
-        elif _seller_display_rows:
-            st.markdown(f"### 🔎 Kandidater värda fortsatt kontroll · {seller_name}")
-            st.caption("Inga verifierade fynd ännu. Dessa kort har kortspecifika signaler men är inte köpklara.")
-        else:
-            st.markdown(f"### Inga verifierade fynd i analyserade delen ännu · {seller_name}")
-            st.caption("FlipFynd visar inte minusaffärer, okänd nettovinst eller vanliga standardkort som utfyllnad.")
-        _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
-        _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
-        st.caption(
-            f"{inv_count} annonser hittade · "
-            f"{_full_unique} unika djupanalyserade · {_full_remaining} återstår"
-        )
-        _result_funnel = seller_top5_result.get("analysis_funnel") or {}
-        if _result_funnel and _seller_result_status != "INVENTORY_PARTIAL":
-            with st.expander("Analystäckning och diagnostik", expanded=False):
-                st.code(
-                    "\n".join([
-                        f"FF-SELLER-ANALYSIS | version={APP_VERSION} | seller={seller_name}",
-                        f"inventory={inv_count} | cards={int(_result_funnel.get('card_inventory') or 0)} | "
-                        f"unique={int(_result_funnel.get('inventory_unique') or 0)}",
-                        f"quick={int(_result_funnel.get('quick_success') or 0)} | "
-                        f"merit={int(_result_funnel.get('merit_eligible') or 0)} | "
-                        f"full={int(_result_funnel.get('full_success') or 0)}",
-                        f"positive_net={int(_result_funnel.get('positive_net_current') or 0)} | "
-                        f"verified_find={int(_result_funnel.get('verified_find_current') or 0)} | "
-                        f"shown={len(_seller_display_rows)}",
-                        f"full_unique={_full_unique} | full_remaining={_full_remaining} | "
-                        f"coverage={float(_result_funnel.get('cumulative_full_coverage_pct') or 0):.1f}%",
-                        "recall=not_measured_without_labelled_ground_truth",
-                    ]),
-                    language=None,
-                )
-        inventory_source = seller_top5_result.get("inventory_source")
-        if inventory_source == "TRADERA_API":
-            st.caption("Live via Tradera")
-        elif inventory_source == "TRADERA_PUBLIC_PROFILE":
-            pages_read = int(seller_top5_result.get("public_pages_read") or 0)
-            st.caption(f"Tradera-profil · {pages_read} sidor lästa")
-            if seller_top5_result.get("public_inventory_complete"):
-                st.caption("✅ Hela säljarprofilen är inläst.")
-        elif inventory_source == "LOCAL_MARKET":
-            reason = seller_top5_result.get("fallback_reason")
-            if reason == "NO_API_CREDENTIALS":
-                st.caption("Källa: redan inläst FlipFynd-data · Tradera API är inte konfigurerat.")
-            elif reason == "API_FAILED":
-                api_status = seller_top5_result.get("api_status") or "okänt fel"
-                st.caption(f"Källa: redan inläst FlipFynd-data · API-fallback efter {api_status}.")
-            else:
-                st.caption("Källa: redan inläst FlipFynd-data.")
-        rows = _seller_display_rows
-        rejected_count = int(seller_top5_result.get("domain_rejected_count") or 0)
-        card_count = int(seller_top5_result.get("card_inventory_count") or 0)
-        if rejected_count:
-            st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
-        if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
-            st.caption("Slutlig ranking använder samma analysmotor som ordinarie FlipFynd-sökningen.")
-        if not rows:
-            if _full_remaining > 0:
-                st.info("Inget verifierat fynd i den analyserade delen ännu. Fortsatt sökning roterar vidare till tidigare oanalyserade annonser.")
-            else:
-                st.info("Hela det sparade kortlagret är analyserat och inget kort klarade den positiva nettovinst- och evidensgränsen.")
-        elif len(rows) < 5:
-            st.caption(
-                f"Topplistan innehåller {len(rows)} kort eftersom bara {len(rows)} "
-                "klarade pris-, kvalitets- och evidensgränsen hittills."
-            )
-        _find_rank = 0
-        _research_rank = 0
-        _research_heading_shown = False
-        for row in rows[:5]:
-            title = row.get("title") or "Kortannons"
-            price = row.get("price")
-            decision = str(row.get("decision") or "SKIP").upper()
-            _row_tier = seller_result_tier(row)
-            # Reuse the final tier already computed above. A new named import
-            # can crash a hot deployment with an older loaded seller module.
-            if _row_tier == "FIND":
-                badge = "🟢 KÖP"
-            elif (row.get("asking_price_opportunity") or {}).get("possible_find"):
-                badge = "🟡 Möjligt fynd · begärda priser"
-            elif decision.startswith(("KÖP", "UNDERSÖK")):
-                badge = "🟡 Värt att undersöka"
-            else:
-                badge = "⚪ Kandidat · ej verifierad"
-            if _row_tier == "FIND":
-                _find_rank += 1
-                _position_label = f"Fynd #{_find_rank}"
-            else:
-                _research_rank += 1
-                _position_label = f"Research #{_research_rank}"
-                if _find_rows and not _research_heading_shown:
-                    st.markdown("### 🔎 Researchkandidater – inte fynd")
-                    st.caption("Kortspecifika signaler gör dem värda kontroll, men ekonomin är inte verifierad.")
-                    _research_heading_shown = True
-            st.markdown(f"#### {_position_label} · {title}")
-            _rank_score = float(row.get("rank_score") or 0)
-            try:
-                if price is not None and float(price) > 0:
-                    st.markdown(f"**{float(price):.0f} kr** · {badge}")
-                else:
-                    st.markdown(badge)
-            except (TypeError, ValueError):
-                st.markdown(badge)
-            _profit = build_seller_net_profit_summary(row)
-            if _profit["available"]:
-                st.markdown(
-                    f"**{_profit['label']}: {_profit['value']:+.0f} kr** · "
-                    f"{_profit['basis']}"
-                )
-            else:
-                st.markdown("**Nettovinst: ej beräkningsbar**")
-                st.caption(_profit["basis"].capitalize() + ".")
-            render_asking_price_opportunity(row.get("asking_price_opportunity"))
-            _opportunity_score = float(row.get("seller_opportunity_score") or _rank_score)
-            st.caption(f"Granskningsprioritet {_opportunity_score:.0f}/100")
-            _signal_labels = {
-                "one_of_one": "1/1",
-                "serial_numbered": "Numrerat",
-                "autograph": "Autograf",
-                "patch_relic": "Patch/relic",
-                "case_hit_ssp": "SSP/case hit",
-                "premium_insert": "Premiuminsert",
-                "rookie": "Rookie",
-                "premium_parallel": "Premium parallel",
-                "error_variation": "Variation/feltryck",
-                "short_print": "Short print",
-                "football_named_chase": "Checklistad fotbolls-chase",
-                "flagship_rookie_variant": "Young Guns-variant",
-                "upper_deck_day_with_cup": "Day With The Cup",
-                "upper_deck_population_count": "Population Count",
-                "upper_deck_program_of_excellence": "Program of Excellence",
-                "named_chase_insert": "Checklistad chase-insert",
-                "elite_parallel": "Extrem parallel",
-                "premium_autograph_structure": "Premiumautografstruktur",
-                "premium_relic_structure": "Premium patch/relic-struktur",
-                "premium_issue_variant": "Premiumutgåva/variant",
-            }
-            _signals = [
-                _signal_labels.get(signal, str(signal))
-                for signal in (row.get("collector_signals") or [])
-                if signal
-            ]
-            if _signals:
-                st.caption("Varför den prioriteras: " + " · ".join(_signals))
-            if _row_tier != "FIND":
-                st.caption("Prioriterad för kontroll – inte en köpsignal.")
-            reason = str(row.get("reason") or "").strip()
-            if reason:
-                st.caption(reason)
-            with st.expander("Analysdetaljer", expanded=False):
-                st.caption(
-                    f"Spelare {float(row.get('player_market_score') or 0):.0f}/100 · "
-                    f"Market edge {float(row.get('market_edge') or 0):.0f}/100 · "
-                    f"Värderingssäkerhet {float(row.get('valuation_confidence') or 0):.0f}/100"
-                )
-                st.caption(
-                    f"Exact SOLD {int(row.get('sold_comps') or 0)} · "
-                    f"riskjusterad vinst {float(row.get('risk_adjusted_profit') or 0):.0f} kr"
-                )
-                _ebay = row.get("ebay_active_context") or {}
-                if _ebay.get("ok"):
-                    _median = _ebay.get("median_usd")
-                    _range = ""
-                    if _ebay.get("min_usd") is not None and _ebay.get("max_usd") is not None:
-                        _range = f" · spann ${_ebay['min_usd']:.2f}–${_ebay['max_usd']:.2f}"
-                    st.caption(
-                        f"eBay aktiva annonser: {int(_ebay.get('listing_count') or 0)} identitetsmatchade av "
-                        f"{int(_ebay.get('raw_listing_count') or 0)} träffar"
-                        + (f" · median ${_median:.2f}" if _median is not None else "")
-                        + _range
-                    )
-                    st.caption("Begärda priser kan ge möjliga fynd. De visar inte vad korten har sålts för.")
-                _readiness = row.get("deal_readiness") or {}
-                if _readiness.get("blockers"):
-                    st.caption("Inte köpklar: " + " · ".join(_readiness["blockers"][:3]))
-            if row.get("analysis_level") == "quick_fallback":
-                st.caption("Preliminär analys – djupanalys återstår.")
-            elif row.get("seller_deep_route") == "HIDDEN_FIND_EXPLORATION":
-                st.caption("Dolt fynd-urval: annonsen djupanalyserades trots svag rubrik. Detta är inte i sig en köpsignal.")
-            if row.get("url"):
-                _ad_url = str(row.get("url") or "").replace('"', "%22")
-                st.markdown(
-                    f'<a href="{_ad_url}" target="_blank" rel="noopener noreferrer" '
-                    f'style="display:block;text-align:center;padding:.55rem .75rem;'
-                    f'border:1px solid rgba(128,128,128,.45);border-radius:.5rem;'
-                    f'text-decoration:none;font-weight:600;">Öppna annonsen ↗</a>',
-                    unsafe_allow_html=True,
-                )
-            st.divider()
-        for empty_rank in range(len(rows) + 1, 6):
-            st.caption(f"#{empty_rank} — Ingen kandidat klarade kvalitetsgränsen ännu")
