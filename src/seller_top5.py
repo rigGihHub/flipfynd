@@ -309,7 +309,7 @@ def seller_result_badge(row: dict) -> str:
 
 
 def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Callable, sport: str,
-                          quick_limit: int, analysis_registry=None, progress_callback=None) -> dict:
+                          quick_limit: int, analysis_registry=None, progress_callback=None, round_limit=None) -> dict:
     anchor = {"saljare": alias, "tradera_item_id": "__seller_top5_anchor__"}
     batch_size = max(20, min(int(quick_limit or 60), 100))
     unique: dict[str, dict] = {}
@@ -319,6 +319,8 @@ def _quick_scan_inventory(alias: str, inventory: list[dict], *, analyze_fn: Call
             unique[key] = row
     unique_inventory = list(unique.values())
     quick_budget = fast_analysis_budget(len(unique_inventory), context="seller")
+    if round_limit is not None:
+        quick_budget = min(quick_budget, max(1, int(round_limit)))
     rotated_inventory = rotate_unseen_first(unique_inventory, analysis_registry, stage="quick")
     unseen = [
         row for row in rotated_inventory
@@ -521,7 +523,8 @@ def _select_deep_route_candidates(merit, asking, exploration, *, registry, budge
 
 def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyze_fn: Callable,
                       sport: str = "all", quick_limit: int = 60, full_limit: int = 10,
-                      analysis_registry=None, progress_callback=None) -> dict:
+                      analysis_registry=None, progress_callback=None,
+                      quick_round_limit=None, full_round_limit=None) -> dict:
     alias = str(seller_alias or "").strip()
     raw_inventory = [dict(x) for x in (items or []) if isinstance(x, dict)]
     if not alias:
@@ -558,7 +561,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     quick = _quick_scan_inventory(
         alias, inventory, analyze_fn=analyze_fn, sport=fallback_sport,
         quick_limit=quick_limit, analysis_registry=registry,
-        progress_callback=progress_callback,
+        progress_callback=progress_callback, round_limit=quick_round_limit,
     )
     quick_sources = [row.get("source_item") or row for row in (quick.get("rows") or [])]
     registry = record_analysis(registry, quick_sources, "quick")
@@ -578,6 +581,8 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         SELLER_DEEP_ANALYSIS_CAP,
         max(int(full_limit or 8), seller_deep_analysis_budget(len(inventory))),
     )
+    if full_round_limit is not None:
+        deep_budget = min(deep_budget, max(1, int(full_round_limit)))
     from src.asking_price_opportunity import select_asking_price_research
     asking_candidates = rotate_unseen_first(
         select_asking_price_research(all_quick_rows, limit=max(24, len(all_quick_rows))),

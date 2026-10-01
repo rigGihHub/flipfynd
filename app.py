@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.97"
+APP_VERSION = "v0.14.98"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1609,15 +1609,18 @@ try:
 except Exception:
     pass
 _seller_existing_status = str(_seller_existing_result.get("status") or "")
-_seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
+_seller_search_needs_attention = (_seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
+                                  or int(_seller_existing_result.get("full_remaining") or 0) > 0)
 
 with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention or bool(st.session_state.get("seller_top5_pending_request"))):
-    st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
+    st.caption("Sök i korta omgångar: högst 3 profilsidor, 80 snabbanalyser och 12 djupanalyser per tryck. Framstegen och topplistan sparas.")
     _seller_previous_result = _seller_existing_result
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
     _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
     if _seller_continue_inventory:
-        _seller_button_label = "🔎 Sök vidare – läs nästa annonser"
+        _seller_button_label = "🔎 Fortsätt – nästa omgång"
+    elif _seller_has_saved_inventory and int(_seller_previous_result.get("full_remaining") or 0) > 0:
+        _seller_button_label = "🔎 Fortsätt analysera – nästa omgång"
     elif _seller_has_saved_inventory:
         _seller_button_label = "🔄 Sök igen – uppdatera säljaren"
     else:
@@ -1915,9 +1918,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
         _diag_code = str(seller_top5_result.get("diagnostic_code") or "FF-SELLER-PARTIAL")
         if seller_top5_result.get("resume_required"):
-            st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt söka** för att försöka samma sida igen.")
+            st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt – nästa omgång** för att försöka samma sida igen.")
         else:
-            st.info(f"Delstopp efter ett sökblock · {_inventory_line}. Tryck på **Fortsätt söka** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
+            st.info(f"Omgång klar · {_inventory_line}. Tryck på **Fortsätt – nästa omgång** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
         _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
         _diag_lines = [
             f"{_diag_code} | status={seller_top5_result.get('public_status')} | "
@@ -2005,7 +2008,8 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         )
         if "new_full_analysed" in seller_top5_result:
             st.caption(
-                f"Denna analysomgång: {seller_top5_result['new_quick_analysed']} nya snabbanalyser · "
+                f"Omgång {int(seller_top5_result.get('analysis_round') or 1)} klar: "
+                f"{seller_top5_result['new_quick_analysed']} nya snabbanalyser · "
                 f"{seller_top5_result['new_full_analysed']} nya djupanalyser. "
                 "Topplistan uppdateras när bättre kandidater hittas."
             )

@@ -3,7 +3,7 @@
 One click owns the whole seller workflow. Public Tradera profiles are read in
 small checkpointed batches so Streamlit never needs to keep one very long
 request alive. Partial inventories may show a provisional Top 5; completed
-inventories get the final ranking.
+inventories continue through the saved analysis queue in later rounds.
 """
 from __future__ import annotations
 
@@ -19,7 +19,11 @@ from src.seller_card_domain import seller_item_domain_check
 from src.seller_top5_fallback import local_inventory_for_seller
 from src.tradera_seller_inventory import discover_active_seller_inventory
 
-PUBLIC_BATCH_PAGES = 9
+# Bound interactive work separately from the total inventory budget.
+# Checkpoints retain both the page cursor and pending deep-analysis candidates.
+PUBLIC_BATCH_PAGES = 3
+SELLER_ROUND_QUICK_LIMIT = 80
+SELLER_ROUND_FULL_LIMIT = 12
 PUBLIC_PAGE_ATTEMPTS = 3
 _CHECKPOINT_SCHEMA = "v3"
 
@@ -107,11 +111,16 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source,
         sport="all",
         quick_limit=quick_limit,
         full_limit=full_limit,
+        quick_round_limit=SELLER_ROUND_QUICK_LIMIT,
+        full_round_limit=SELLER_ROUND_FULL_LIMIT,
         analysis_registry=analysis_registry,
         progress_callback=combined_progress,
     )
     result = dict(result)
     result["inventory_source"] = source
+    result["analysis_round"] = int((result.get("analysis_registry") or {}).get("run") or 0)
+    result["round_quick_limit"] = SELLER_ROUND_QUICK_LIMIT
+    result["round_full_limit"] = SELLER_ROUND_FULL_LIMIT
     return result
 
 
