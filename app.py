@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.94"
+APP_VERSION = "v0.14.95"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1509,6 +1509,18 @@ if (
 
 # Seller search stays above the main search, including its early stop paths.
 # SELLER_TOP5_UI_V1
+def _queue_seller_top5_search():
+    """Latch the submitted request before recovery/components can rerun the app."""
+    st.session_state["seller_top5_pending_request"] = {
+        "alias": str(st.session_state.get("seller_top5_alias") or "").strip(),
+        "profile_url": str(st.session_state.get("seller_top5_profile_url") or "").strip(),
+    }
+
+
+if st.session_state.get("seller_top5_pending_request"):
+    st.info("🔎 Sökningen har startat · förbereder säljarens annonser…")
+
+
 # Restore Seller Top 5 form values after a Streamlit websocket/session reset.
 try:
     _seller_qp_alias = str(st.query_params.get("seller", "") or "").strip()
@@ -1531,7 +1543,7 @@ def _clear_seller_top5_ui():
         database_url=DATABASE_URL,
         session=st.session_state,
     )
-    for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url"):
+    for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url", "seller_top5_pending_request"):
         st.session_state.pop(key, None)
     if DATABASE_URL:
         try:
@@ -1599,7 +1611,7 @@ except Exception:
 _seller_existing_status = str(_seller_existing_result.get("status") or "")
 _seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
 
-with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention):
+with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention or bool(st.session_state.get("seller_top5_pending_request"))):
     st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
     _seller_previous_result = _seller_existing_result
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
@@ -1620,7 +1632,12 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         )
         seller_top5_run = st.form_submit_button(
             _seller_button_label, key="seller_top5_run", type="primary", use_container_width=True,
+            on_click=_queue_seller_top5_search,
         )
+    _seller_pending_request = st.session_state.get("seller_top5_pending_request")
+    if _seller_pending_request:
+        seller_top5_alias = _seller_pending_request["alias"]
+        seller_top5_profile_url = _seller_pending_request["profile_url"]
     try:
         if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
             st.query_params["seller"] = str(seller_top5_alias)
@@ -1662,9 +1679,10 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     st.warning("Bakgrundsinläsningen avbröts. Sparat checkpoint finns kvar och nästa körning kan fortsätta.")
         except Exception:
             pass
-    if seller_top5_run:
+    if _seller_pending_request:
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
+            st.session_state.pop("seller_top5_pending_request", None)
             st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
         else:
             seller_status = st.status(f"🔎 Söker {alias or 'säljaren'}", expanded=True)
@@ -1839,6 +1857,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                         )
                     except Exception:
                         pass
+                st.session_state.pop("seller_top5_pending_request", None)
                 found_count = int(top5.get("inventory_count") or 0)
                 quick_count = int(top5.get("quick_analysed") or 0)
                 full_count = int(top5.get("full_unique_analysed") or top5.get("full_analysed") or 0)
@@ -1867,6 +1886,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     seller_progress_bar.progress(0, text="Sökningen avbröts")
                 except Exception:
                     pass
+                st.session_state.pop("seller_top5_pending_request", None)
                 seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
                 raise
 
