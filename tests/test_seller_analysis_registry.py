@@ -67,3 +67,11 @@ def test_same_listing_count_prefers_registry_with_more_full_coverage():
     newer = record(begin_run(quick_only), [items[0]], "full")
 
     assert registry_progress(newer) > registry_progress(quick_only)
+
+
+def test_quick_row_uses_source_listing_id_for_full_coverage_rotation():
+    old, new = _item(1), _item(2)
+    registry = record(begin_run(None), [old], "full")
+    rows = [{"url": "url-1", "source_item": old},
+            {"url": "url-2", "source_item": new}]
+    assert rotate_unseen_first(rows, registry, stage="full") == rows[::-1]

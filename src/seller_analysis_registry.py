@@ -25,6 +25,7 @@ def listing_key(item: dict | None) -> str:
 def normalize_registry(value: dict | None) -> dict:
     value = value if isinstance(value, dict) and value.get("schema") == SCHEMA else {}
     entries = value.get("entries") if isinstance(value.get("entries"), dict) else {}
+    pending_rows = value.get("pending_rows") if isinstance(value.get("pending_rows"), dict) else {}
     best_rows = value.get("best_rows") if isinstance(value.get("best_rows"), dict) else {}
     clean_entries = {}
     for key, raw in entries.items():
@@ -40,6 +41,8 @@ def normalize_registry(value: dict | None) -> dict:
         "schema": SCHEMA,
         "run": max(0, int(value.get("run") or 0)),
         "entries": clean_entries,
+        "pending_rows": {str(key): deepcopy(row) for key, row in pending_rows.items()
+                         if str(key).strip() and isinstance(row, dict)},
         "best_rows": {
             str(key): deepcopy(row)
             for key, row in best_rows.items()
@@ -95,7 +98,7 @@ def rotate_unseen_first(items, registry: dict | None, *, stage: str) -> list[dic
 
     def key(pair):
         position, item = pair
-        entry = entries.get(listing_key(item), {})
+        entry = entries.get(listing_key(item.get("source_item") or item), {})
         count = max(0, int(entry.get(f"{stage}_count") or 0))
         last_run = max(0, int(entry.get(f"last_{stage}_run") or 0))
         return (count > 0, count, last_run, position)

@@ -504,6 +504,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
                 "domain_rejected_count": len(rejected)}
 
     registry = begin_analysis_run(analysis_registry)
+    previous_coverage = analysis_coverage(registry, inventory)
     fallback_sport = sport if sport in {"hockey", "football"} else "hockey"
     quick = _quick_scan_inventory(
         alias, inventory, analyze_fn=analyze_fn, sport=fallback_sport,
@@ -513,18 +514,28 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     quick_sources = [row.get("source_item") or row for row in (quick.get("rows") or [])]
     registry = record_analysis(registry, quick_sources, "quick")
 
-    all_quick_rows = list(quick.get("rows") or [])
+    # Keep quick candidates until deep analysis has examined them. A new fast
+    # batch must not erase the unfinished candidates from the previous batch.
+    inventory_keys = {listing_key(item) for item in inventory}
+    pending = {
+        key: row for key, row in registry.get("pending_rows", {}).items()
+        if key in inventory_keys and not registry["entries"].get(key, {}).get("full_count")
+    }
+    for row in quick.get("rows") or []:
+        pending[listing_key(row.get("source_item") or row)] = row
+    all_quick_rows = sorted(pending.values(), key=_quick_rank_key)
     deep_budget = min(
         SELLER_DEEP_ANALYSIS_CAP,
         max(int(full_limit or 8), seller_deep_analysis_budget(len(inventory))),
     )
     from src.asking_price_opportunity import select_asking_price_research
     asking_candidates = rotate_unseen_first(
-        select_asking_price_research(all_quick_rows), registry, stage="full"
-    )
+        select_asking_price_research(all_quick_rows, limit=max(24, len(all_quick_rows))),
+        registry, stage="full"
+    )[:24]
     asking_keys = {_identity_key(row.get("source_item") or row) for row in asking_candidates}
     qualified_quick_rows = [
-        row for row in (quick.get("rows") or [])
+        row for row in all_quick_rows
         if assess_seller_card_merit(row)["eligible"]
     ]
     merit_pool = rotate_unseen_first(
@@ -551,11 +562,12 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             continue
         candidates.append(candidate)
         candidate_keys.add(key)
-        if len(candidates) >= deep_budget:
-            break
+    # Apply coverage priority across routes before spending the shared budget.
+    candidates = rotate_unseen_first(candidates, registry, stage="full")[:deep_budget]
     candidate_limit = len(candidates)
     full_rows = []
     completed_full_keys = set()
+    completed_full_sources = []
     failed = 0
     _emit(progress_callback, phase="full_start", done=0, total=len(candidates), percent=66)
     for idx, qrow in enumerate(candidates, start=1):
@@ -575,6 +587,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             # A successful full result supersedes the fast result, even when
             # it is too weak to display. Retain the original listing key too:
             # full analysis can enrich the source with a higher-priority ID.
+            completed_full_sources.append(source_item)
             completed_full_keys.add(_identity_key(source_item))
             completed_full_keys.add(_identity_key(row.get("source_item") or row))
             row = dict(row)
@@ -593,9 +606,16 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
 
     registry = record_analysis(
         registry,
-        [row.get("source_item") or row for row in full_rows],
+        list({listing_key(item): item for item in completed_full_sources +
+              [row.get("source_item") or row for row in full_rows]}.values()),
         "full",
     )
+
+    registry["pending_rows"] = {
+        key: row for key, row in pending.items()
+        if key not in completed_full_keys
+        and not registry["entries"].get(key, {}).get("full_count")
+    }
 
     full_rows.sort(key=_seller_opportunity_rank_key, reverse=True)
     presentable_full_rows = [
@@ -704,7 +724,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "full_candidate_limit": candidate_limit,
         "hidden_find_exploration_count": len(exploration_candidates),
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v5-persistent-coverage-positive-net",
+        "seller_analysis_contract": "v6-persistent-queue-source-coverage",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
         "duplicate_opportunities_removed": duplicate_opportunities_removed,
@@ -712,6 +732,9 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "analysis_registry": registry,
         "analysis_coverage": coverage,
         "analysis_funnel": analysis_funnel,
+        "new_quick_analysed": max(0, coverage["quick_unique"] - previous_coverage["quick_unique"]),
+        "new_full_analysed": max(0, coverage["full_unique"] - previous_coverage["full_unique"]),
+        "pending_deep_analysis": len(registry["pending_rows"]),
         "quick_unique_analysed": coverage["quick_unique"],
         "quick_remaining": coverage["quick_remaining"],
         "full_unique_analysed": coverage["full_unique"],

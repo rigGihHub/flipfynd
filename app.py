@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.95"
+APP_VERSION = "v0.14.96"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -2003,6 +2003,12 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             f"{inv_count} annonser hittade · "
             f"{_full_unique} unika djupanalyserade · {_full_remaining} återstår"
         )
+        if "new_full_analysed" in seller_top5_result:
+            st.caption(
+                f"Denna analysomgång: {seller_top5_result['new_quick_analysed']} nya snabbanalyser · "
+                f"{seller_top5_result['new_full_analysed']} nya djupanalyser. "
+                "Topplistan uppdateras när bättre kandidater hittas."
+            )
         _result_funnel = seller_top5_result.get("analysis_funnel") or {}
         if _result_funnel and _seller_result_status != "INVENTORY_PARTIAL":
             with st.expander("Analystäckning och diagnostik", expanded=False):
