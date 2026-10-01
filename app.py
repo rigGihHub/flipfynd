@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.93"
+APP_VERSION = "v0.14.94"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1601,13 +1601,26 @@ _seller_search_needs_attention = _seller_existing_status in {"INVENTORY_PARTIAL"
 
 with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention):
     st.caption("Läs in en Tradera-säljare och se de bästa korten medan sökningen fortsätter.")
-    seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
-    seller_top5_profile_url = st.text_input(
-        "Tradera-profil",
-        key="seller_top5_profile_url",
-        placeholder="https://www.tradera.com/profile/items/...",
-        help="Klistra in säljarens profilsida, till exempel https://www.tradera.com/profile/items/5412219/",
-    )
+    _seller_previous_result = _seller_existing_result
+    _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
+    _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
+    if _seller_continue_inventory:
+        _seller_button_label = "🔎 Sök vidare – läs nästa annonser"
+    elif _seller_has_saved_inventory:
+        _seller_button_label = "🔄 Sök igen – uppdatera säljaren"
+    else:
+        _seller_button_label = "🔎 Hitta säljarens bästa kort"
+    with st.form("seller_top5_search_form", clear_on_submit=False):
+        seller_top5_alias = st.text_input("Säljare (valfritt)", key="seller_top5_alias", placeholder="hämtas automatiskt från profillänken")
+        seller_top5_profile_url = st.text_input(
+            "Tradera-profil",
+            key="seller_top5_profile_url",
+            placeholder="https://www.tradera.com/profile/items/...",
+            help="Klistra in säljarens profilsida, till exempel https://www.tradera.com/profile/items/5412219/",
+        )
+        seller_top5_run = st.form_submit_button(
+            _seller_button_label, key="seller_top5_run", type="primary", use_container_width=True,
+        )
     try:
         if seller_top5_alias and str(st.query_params.get("seller", "") or "") != str(seller_top5_alias):
             st.query_params["seller"] = str(seller_top5_alias)
@@ -1624,15 +1637,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         if "/profile/items/" in _profile_clean and _profile_clean.rsplit("/", 1)[-1].isdigit():
             _profile_base = _profile_clean + "/" + _profile_alias.replace(" ", "%20")
             seller_top5_profile_url_resolved = _profile_base + ((_profile_sep + _profile_query) if _profile_sep else "")
-    _seller_previous_result = _seller_existing_result
-    _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
-    _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
-    if _seller_continue_inventory:
-        _seller_button_label = "🔎 Sök vidare – läs nästa annonser"
-    elif _seller_has_saved_inventory:
-        _seller_button_label = "🔄 Sök igen – uppdatera säljaren"
-    else:
-        _seller_button_label = "🔎 Hitta säljarens bästa kort"
     if _seller_has_saved_inventory:
         st.caption(
             f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
@@ -1658,11 +1662,15 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     st.warning("Bakgrundsinläsningen avbröts. Sparat checkpoint finns kvar och nästa körning kan fortsätta.")
         except Exception:
             pass
-    if st.button(_seller_button_label, key="seller_top5_run", use_container_width=True):
+    if seller_top5_run:
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
             st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
         else:
+            seller_status = st.status(f"🔎 Söker {alias or 'säljaren'}", expanded=True)
+            seller_progress_line = seller_status.empty()
+            seller_progress_line.caption("Sökningen har startat · förbereder säljarens annonser…")
+            seller_progress_bar = st.progress(0, text="Startar…")
             # Public seller profiles can be crawled by the persistent worker.
             # Queue that I/O-heavy part first so leaving the browser does not
             # cancel inventory discovery. Ranking remains on the existing path
@@ -1682,9 +1690,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             creds = _resolve_tradera_api_credentials()
             sport_key = "all"
             local_market = get_data(get_data_version())
-            seller_status = st.status(f"🔎 Söker {alias}", expanded=False)
-            seller_progress_line = seller_status.empty()
-            seller_progress_bar = st.progress(0, text="Startar…")
 
             def _seller_search_progress(info):
                 phase = str((info or {}).get("phase") or "")
