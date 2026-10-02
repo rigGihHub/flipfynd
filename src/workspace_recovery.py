@@ -1,5 +1,6 @@
 """Per-browser recovery of UI state. Never serializes processes or credentials."""
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 import math
 import hashlib
 import json
@@ -14,6 +15,30 @@ from src.persistent_store import load_namespace, save_namespace
 _ROOT = Path(__file__).resolve().parent.parent / 'workspace_snapshots'
 _LOCK = globals().get('_LOCK') or RLock()
 _HASHES = globals().get('_HASHES', {})
+_BACKUP_POOL = globals().get('_BACKUP_POOL') or ThreadPoolExecutor(max_workers=2, thread_name_prefix='workspace-backup')
+_PENDING = globals().get('_PENDING', {})
+_BACKUP_ACTIVE = globals().get('_BACKUP_ACTIVE', set())
+
+
+def _queue_backup(token, value, database_url):
+    # Coalesce changes and keep database latency off the Streamlit thread.
+    with _LOCK:
+        _PENDING[token] = (database_url, deepcopy(value))
+        if token in _BACKUP_ACTIVE:
+            return
+        _BACKUP_ACTIVE.add(token)
+    def flush():
+        while True:
+            with _LOCK:
+                item = _PENDING.pop(token, None)
+                if item is None:
+                    _BACKUP_ACTIVE.discard(token)
+                    return
+            try:
+                save_namespace(item[0], 'workspace:' + token, item[1])
+            except Exception:
+                pass  # The synchronous local/browser copies remain available.
+    _BACKUP_POOL.submit(flush)
 WIDGETS = {'search_sport', 'search_budget', 'search_text', 'search_archive', 'search_sale_type',
            'ordinary_card_type_filter', 'show_advanced_terminal', 'onboarding_fetch_scope',
            'extra_fetch_mode', 'seller_top5_alias', 'seller_top5_profile_url',
@@ -84,14 +109,11 @@ def save(token, value, database_url=None):
             tmp.replace(path)
         except OSError:
             return False
-        if database_url:
-            try:
-                save_namespace(database_url, 'workspace:' + token, value)
-            except Exception:
-                pass
         _HASHES[token] = digest
         for old in list(_HASHES)[:-64]:
             _HASHES.pop(old, None)
+    if database_url:
+        _queue_backup(token, value, database_url)
     return True
 
 

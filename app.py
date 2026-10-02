@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.106"
+APP_VERSION = "v0.14.107"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1661,7 +1661,11 @@ _seller_existing_result = st.session_state.get("seller_top5_result") or {}
 # Prefer whichever checkpoint has progressed furthest so "Sök vidare" cannot
 # regress from page 10 back to the older page-1/9 block.
 try:
-    _persisted_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
+    _persisted_seller = {}
+    # Check the durable checkpoint once per browser session, not every rerun.
+    if DATABASE_URL and not st.session_state.get("_seller_durable_checked"):
+        _persisted_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {})
+        st.session_state["_seller_durable_checked"] = True
     _persisted_result = (_persisted_seller or {}).get("result") if isinstance(_persisted_seller, dict) else {}
     _session_next = int(((_seller_existing_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
     _persisted_next = int(((_persisted_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)

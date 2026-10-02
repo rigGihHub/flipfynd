@@ -150,3 +150,55 @@ def test_unsent_advanced_filters_restore_with_enum_and_range_checks():
         'ordinary_card_type_filter': 'Endast autograf', 'search_show_skip': False}})
     assert state['search_sport'] == 'Fotboll' and state['search_show_count'] == 8
     assert state['ordinary_card_type_filter'] == 'Endast autograf'
+
+
+def test_remote_workspace_backup_never_blocks_local_save(monkeypatch, tmp_path):
+    monkeypatch.setattr(recovery, '_ROOT', tmp_path)
+    entered, release = Event(), Event()
+    def slow_save(*args):
+        entered.set()
+        assert release.wait(3)
+    monkeypatch.setattr(recovery, 'save_namespace', slow_save)
+    token = jobs.new_token()
+    try:
+        assert recovery.save(token, recovery.snapshot({'search_text': 'saved'}, {}), 'test-db')
+        assert entered.wait(1)
+        # Even while the remote write is blocked, local recovery and another
+        # browser's save must remain available (no database call under _LOCK).
+        assert recovery.load(token)['state']['search_text'] == 'saved'
+        other = jobs.new_token()
+        assert recovery.save(other, recovery.snapshot({'search_text': 'other'}, {}))
+        assert recovery.load(other)['state']['search_text'] == 'other'
+    finally:
+        release.set()
+
+
+@pytest.mark.parametrize('component', ['workspace_browser_storage', 'search_browser_storage'])
+def test_browser_backup_updates_do_not_trigger_unsolicited_reruns(component):
+    import shutil
+    import subprocess
+    from pathlib import Path
+    if not shutil.which('node'):
+        pytest.skip('Node required to execute component event regression')
+    path = Path(__file__).resolve().parents[1] / 'src' / component / 'index.html'
+    script = r'''
+const fs=require('fs'), vm=require('vm'), assert=require('assert');
+const handlers={}, messages=[], storage=new Map();
+const parent={postMessage:m=>messages.push(m)};
+const context={parent, window:{parent,addEventListener:(k,f)=>handlers[k]=f},
+addEventListener:(k,f)=>handlers[k]=f, setTimeout,clearTimeout,
+localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
+vm.runInNewContext(fs.readFileSync(process.argv[1],'utf8').split('<script>')[1].split('</script>')[0],context);
+const render=args=>handlers.message({source:parent,data:{type:'streamlit:render',args}});
+const replies=()=>messages.filter(m=>m.type==='streamlit:setComponentValue');
+const token='a'.repeat(32);
+render({token,blob:'first'});
+assert.equal(replies().length,1);
+render({token,blob:'new snapshot'});
+render({token,blob:'another snapshot'});
+assert.equal(replies().length,1,'saving must not rerun app');
+assert([...storage.values()].includes('another snapshot'),'new snapshot must still be saved');
+render({token:'b'.repeat(32),blob:'next run'});
+assert.equal(replies().length,2,'new identity needs recovery handshake');
+'''
+    subprocess.run(['node', '-e', script, str(path)], check=True, capture_output=True, text=True)
