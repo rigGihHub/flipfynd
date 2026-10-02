@@ -1,4 +1,6 @@
-streamlit==1.64.0  # Rebuild server configuration for bounded session memory and server recovery (v0.14.111)
+streamlit==1.64.0
+# Match Community Cloud's Arrow workaround before Streamlit is imported.
+pyarrow==24.0.0
 streamlit-autorefresh>=1.0.1,<2
 requests>=2.32,<3
 playwright>=1.48,<2
