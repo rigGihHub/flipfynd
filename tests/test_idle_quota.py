@@ -74,3 +74,25 @@ def test_quota_state_read_and_pause_stay_available_during_http(monkeypatch, tmp_
         thread.join(timeout=3)
     assert not thread.is_alive()
     assert ebay_quota.quota_status(key)['paused_until'] > time.time()
+
+
+def test_closed_administration_does_not_probe_database(monkeypatch, tmp_path):
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    from src import persistent_store, workspace_recovery, resumable_search
+    monkeypatch.setenv('FLIPFYND_DATABASE_URL', 'test-db')
+    monkeypatch.setattr(workspace_recovery, '_ROOT', tmp_path)
+    # Ordinary boot reads are local/stubbed; hidden diagnostics must not run.
+    monkeypatch.setattr(persistent_store, 'load_namespace', lambda db, ns, default: default)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Closed administration must not access database diagnostics')
+    monkeypatch.setattr(persistent_store, 'namespace_status', forbidden)
+    monkeypatch.setattr(persistent_store, 'probe_database', forbidden)
+    token = resumable_search.new_token()
+    workspace_recovery.save(token, workspace_recovery.snapshot({}, {}))
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=10)
+    app.query_params['view_run'] = token
+    app.run()
+    assert not app.exception
+    assert app.text_input(key='search_text').label == 'Sök spelare, set eller kort'
+    assert app.session_state['admin_panel_open'] is False

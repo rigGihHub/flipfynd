@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.108"
+APP_VERSION = "v0.14.109"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -5599,7 +5599,11 @@ if st.session_state.get("results") is not None:
 fetch_state = load_fetch_state()
 
 st.divider()
-with st.expander("⚙️ Administration & data"):
+_admin_panel = st.expander("⚙️ Administration & data", key="admin_panel_open", on_change="rerun")
+# A collapsed expander still executes Python unless explicitly deferred.
+if not _admin_panel.open:
+    st.stop()
+with _admin_panel:
     st.caption(f"Version {APP_VERSION} · Build {RUNTIME_BUILD}")
     st.caption(f"Senaste hämtningen: {_latest_window_count} annonser · {_detail_enriched_count} med extra annonsuppgifter")
 

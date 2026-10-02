@@ -17,6 +17,6 @@ def test_older_fetch_modes_share_one_advanced_action():
 
 def test_admin_has_no_duplicate_refresh_actions():
     app = Path("app.py").read_text(encoding="utf-8")
-    admin = app[app.index('with st.expander("⚙️ Administration & data"):'):]
+    admin = app[app.index('with _admin_panel:'):]
     assert "start_fetch(" not in admin
     assert "stop_fetch(" not in admin
