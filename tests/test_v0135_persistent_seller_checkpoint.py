@@ -57,3 +57,22 @@ def test_stale_save_cannot_rewind_durable_checkpoint(monkeypatch, tmp_path):
     restored = store.load_checkpoint("seller", database_url="postgresql://test")
     assert restored["next_page"] == 29
     assert "new" in restored["items"]
+
+
+def test_removed_candidate_survives_stale_and_more_advanced_worker_checkpoints(monkeypatch, tmp_path):
+    from src.seller_analysis_registry import begin_run
+    monkeypatch.setattr(store, '_ROOT', tmp_path)
+    registry = begin_run(None)
+    checkpoint = {'next_page': 4, 'pages_read': 3, 'items': {'1': {}},
+                  'analysis_registry': registry}
+    session = {}
+    store.save_checkpoint('hidden-test', checkpoint, session=session)
+    removed_registry = dict(registry, dismissed_keys=['1'])
+    removed = dict(checkpoint, analysis_registry=removed_registry)
+    store.save_checkpoint('hidden-test', removed, session=session)
+    # The older snapshot must not resurrect the card, even with a newer page cursor.
+    store.save_checkpoint('hidden-test', dict(checkpoint, next_page=7, pages_read=6), session=session)
+    restored = store.load_checkpoint('hidden-test', session=session)
+    assert restored['next_page'] == 7
+    assert restored['analysis_registry']['dismissed_keys'] == ['1']
+    assert store.load_checkpoint('hidden-test')['analysis_registry']['dismissed_keys'] == ['1']

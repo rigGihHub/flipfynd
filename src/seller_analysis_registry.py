@@ -41,6 +41,8 @@ def normalize_registry(value: dict | None) -> dict:
     return {
         "schema": SCHEMA,
         "run": max(0, int(value.get("run") or 0)),
+        "dismissed_keys": sorted({str(key) for key in value.get("dismissed_keys", [])
+                                  if isinstance(key, (str, int)) and str(key).strip()}),
         "entries": clean_entries,
         "displayed_keys": [str(key) for key in value.get("displayed_keys", [])
                            if isinstance(key, (str, int))][:5],

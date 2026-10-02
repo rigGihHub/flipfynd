@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.99"
+APP_VERSION = "v0.14.100"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -357,6 +357,13 @@ import src.ebay_browse_context as _ebay_runtime
 if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
     importlib.reload(_ebay_runtime)
     _ebay_runtime._flipfynd_loaded_version = APP_VERSION
+import src.seller_analysis_registry as _seller_registry_runtime
+import src.seller_dynamic_top5 as _seller_dynamic_runtime
+import src.seller_checkpoint_store as _seller_checkpoint_runtime
+for _seller_module in (_seller_registry_runtime, _seller_dynamic_runtime, _seller_checkpoint_runtime):
+    if getattr(_seller_module, "_flipfynd_loaded_version", None) != APP_VERSION:
+        importlib.reload(_seller_module)
+        _seller_module._flipfynd_loaded_version = APP_VERSION
 SELLER_PRESENTATION_CONTRACT = "dynamic-top5-alternatives-v4"
 
 # Saved searches must also render with the current deployed UI after hot reload.
@@ -1514,6 +1521,28 @@ if (
 
 # Seller search stays above the main search, including its early stop paths.
 # SELLER_TOP5_UI_V1
+def _dismiss_seller_top5_alternative(key):
+    current = st.session_state.get("seller_top5_result") or {}
+    updated = _seller_dynamic_runtime.dismiss_seller_alternative(current, key)
+    st.session_state["seller_top5_result"] = updated
+    alias = str(updated.get("seller") or st.session_state.get("seller_top5_alias") or "").strip()
+    profile = str(st.session_state.get("seller_top5_profile_url") or "").strip()
+    checkpoint = updated.get("public_checkpoint")
+    if profile and checkpoint:
+        import src.seller_top5_controller as _dismiss_controller
+        _dismiss_controller.save_checkpoint(
+            _dismiss_controller._checkpoint_key(alias, profile), checkpoint,
+            session=st.session_state, database_url=DATABASE_URL,
+        )
+    if DATABASE_URL:
+        try:
+            save_persistent_namespace(DATABASE_URL, "seller_last_result", {
+                "alias": alias, "profile_url": profile, "result": updated,
+            })
+        except Exception:
+            pass
+
+
 def _queue_seller_top5_search():
     """Latch the submitted request before recovery/components can rerun the app."""
     st.session_state["seller_top5_pending_request"] = {
@@ -1969,7 +1998,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         st.caption("Felsökning – allt ligger i samma kopierbara ruta.")
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
-    if seller_top5_result and not (seller_top5_result.get("rows") or []):
+    if seller_top5_result and not (seller_top5_result.get("alternatives") or seller_top5_result.get("rows") or []):
         _public_status = str(seller_top5_result.get("public_status") or "")
         _public_error = str(seller_top5_result.get("public_error") or "").strip()
         if _public_status and _public_status != "OK":
@@ -1992,6 +2021,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                       if row.get("analysis_level") == "full" and seller_result_tier(row) == "FIND"]
         st.markdown(f"### 🏆 Topp 5 hittills · {seller_name}")
         st.caption("De bästa alternativen bland hittills analyserade annonser. Listan sparas och bättre alternativ ersätter lägre rankade kort i nästa omgång.")
+        st.caption("Ta bort ett alternativ för att direkt släppa in nästa rankade kort. Borttagna alternativ hålls undan tills du rensar säljsökningen.")
         st.caption(f"{len(_find_rows)} verifierade fynd i listan. Övriga alternativ har osäkert underlag eller klarar inte köpkraven.")
         _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
         _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
@@ -2055,7 +2085,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         if not rows:
             st.info("Inga läsbara kort med giltigt pris har analyserats ännu. Fortsätt med nästa omgång.")
         elif len(rows) < 5:
-            st.caption(f"{len(rows)} analyserade alternativ finns ännu. Listan fylls till fem när fler annonser har analyserats.")
+            st.caption(f"{len(rows)} sparade alternativ återstår. Fortsätt söka för att få fler alternativ till listan.")
         for _position, row in enumerate(rows[:5], start=1):
             title = row.get("title") or "Kortannons"
             price = row.get("price")
@@ -2074,6 +2104,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             else:
                 badge = "⚪ Alternativ · köpkraven är inte uppfyllda"
             st.markdown(f"#### #{_position} · {title}")
+            _remove_key = _seller_dynamic_runtime.alternative_listing_key(row)
+            st.button("Ta bort från topp 5", key=f"seller_remove_{_remove_key}",
+                      on_click=_dismiss_seller_top5_alternative, args=(_remove_key,))
             _rank_score = float(row.get("rank_score") or 0)
             try:
                 if price is not None and float(price) > 0:

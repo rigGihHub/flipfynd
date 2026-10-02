@@ -32,11 +32,60 @@ def displayable_alternative(row):
     return False
 
 
+
+def merge_dismissed(registry, *others):
+    registry = normalize_registry(registry)
+    hidden = set(registry['dismissed_keys'])
+    for other in others:
+        hidden.update(normalize_registry(other)['dismissed_keys'])
+    registry['dismissed_keys'] = sorted(hidden)
+    return registry
+
+
+def select_saved_top5(registry, *, rank_key, select_diverse):
+    registry = normalize_registry(registry)
+    hidden = set(registry['dismissed_keys'])
+    ordered = sorted((row for row in registry['alternative_rows'].values()
+                      if alternative_listing_key(row) not in hidden and displayable_alternative(row)),
+                     key=rank_key, reverse=True)
+    selected, _, _ = select_diverse(ordered, 5)
+    if len(selected) < 5:
+        used = {alternative_listing_key(row) for row in selected}
+        selected += [row for row in ordered if alternative_listing_key(row) not in used][:5-len(selected)]
+    return [dict(row, seller_top5_alternative=True) for row in selected]
+
+
+def dismiss_seller_alternative(result, key):
+    """Remove one listing and promote the next saved candidate, without fetching."""
+    # Late imports avoid a cycle with the builder's dynamic-list integration.
+    from src.seller_top5 import _seller_alternative_rank_key, _select_diverse_rows
+    result = deepcopy(result or {})
+    checkpoint = result.get('public_checkpoint') or {}
+    registry = merge_dismissed(result.get('analysis_registry'), checkpoint.get('analysis_registry'))
+    for row in result.get('alternatives', result.get('rows') or []):
+        registry['alternative_rows'].setdefault(alternative_listing_key(row), deepcopy(row))
+    available = set(registry['alternative_rows'])
+    if str(key) not in available:
+        return result
+    registry['dismissed_keys'] = sorted(set(registry['dismissed_keys']) | {str(key)})
+    alternatives = select_saved_top5(registry, rank_key=_seller_alternative_rank_key,
+                                     select_diverse=_select_diverse_rows)
+    previous = set(registry['displayed_keys'])
+    registry['displayed_keys'] = [alternative_listing_key(row) for row in alternatives]
+    result['alternatives'] = alternatives
+    result['analysis_registry'] = registry
+    result['top5_new_count'] = len(set(registry['displayed_keys']) - previous)
+    result['dismissed_count'] = len(registry['dismissed_keys'])
+    if checkpoint:
+        result['public_checkpoint']['analysis_registry'] = deepcopy(registry)
+    return result
+
 def update_dynamic_top5(registry, *, inventory, quick_rows, full_rows, seed_rows,
                         rank_key, refresh, quick_fallback, select_diverse):
     """Full results replace fast results; new rounds compete with retained rows."""
     registry = normalize_registry(registry)
-    keys = {listing_key(item) for item in inventory}
+    hidden = set(registry['dismissed_keys'])
+    keys = {listing_key(item) for item in inventory} - hidden
     retained = dict(registry.get('alternative_rows') or {})
     for row in seed_rows:
         retained.setdefault(alternative_listing_key(row), row)
@@ -45,6 +94,8 @@ def update_dynamic_top5(registry, *, inventory, quick_rows, full_rows, seed_rows
     for quick in quick_rows:
         source = quick.get('source_item') or quick
         key = listing_key(source)
+        if key in hidden:
+            continue
         if (registry['entries'].get(key) or {}).get('full_count'):
             continue
         if (retained.get(key) or {}).get('analysis_level') == 'full':
@@ -54,6 +105,8 @@ def update_dynamic_top5(registry, *, inventory, quick_rows, full_rows, seed_rows
             retained[key] = row
     for row in full_rows:
         key = alternative_listing_key(row)
+        if key in hidden:
+            continue
         if displayable_alternative(row):
             retained[key] = refresh(row)
         else:
@@ -66,9 +119,5 @@ def update_dynamic_top5(registry, *, inventory, quick_rows, full_rows, seed_rows
     saved = (distinct + [row for row in ordered
                          if alternative_listing_key(row) not in distinct_keys])[:BEST_ROW_LIMIT]
     registry['alternative_rows'] = {alternative_listing_key(row): deepcopy(row) for row in saved}
-    selected = distinct[:5]
-    if len(selected) < 5:
-        used = {alternative_listing_key(row) for row in selected}
-        selected += [row for row in ordered if alternative_listing_key(row) not in used][:5-len(selected)]
-    selected = [dict(row, seller_top5_alternative=True) for row in selected]
+    selected = select_saved_top5(registry, rank_key=rank_key, select_diverse=select_diverse)
     return registry, selected

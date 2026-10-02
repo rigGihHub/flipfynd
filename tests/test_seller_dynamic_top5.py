@@ -99,3 +99,51 @@ def test_streamlit_renders_all_five_uncertain_alternatives_with_loss_warning():
     assert 'Nettovinst efter kostnader: -30 kr' in rendered
     assert 'Topp 5 hittills' in rendered
     assert 'KÖP · verifierat fynd' not in rendered
+
+
+def test_removing_fifth_promotes_sixth_and_stays_removed_after_new_analysis():
+    from src.seller_dynamic_top5 import dismiss_seller_alternative
+    registry, alternatives = update(rows=[row(i, score=50-i) for i in range(7)])
+    original = {'seller': 'seller', 'inventory_count': 7, 'alternatives': alternatives,
+                'analysis_registry': registry, 'analysis_round': 4, 'full_unique_analysed': 7,
+                'public_checkpoint': {'next_page': 4, 'items': {}, 'analysis_registry': registry}}
+    removed = dismiss_seller_alternative(original, '4')
+    assert ids(removed['alternatives']) == ['0', '1', '2', '3', '5']
+    assert ids(original['alternatives']) == ['0', '1', '2', '3', '4']
+    assert removed['analysis_round'] == 4
+    assert removed['full_unique_analysed'] == 7
+    assert removed['public_checkpoint']['analysis_registry']['dismissed_keys'] == ['4']
+    registry, later = update(normalize_registry(removed['analysis_registry']), rows=[row(4, score=100)])
+    assert '4' not in ids(later)
+    assert len(later) == 5
+    twice = dismiss_seller_alternative(dict(removed, analysis_registry=registry, alternatives=later), '0')
+    assert ids(twice['alternatives']) == ['1', '2', '3', '5', '6']
+
+
+def test_removing_last_available_candidate_never_invents_a_replacement():
+    from src.seller_dynamic_top5 import dismiss_seller_alternative
+    registry, alternatives = update(rows=[row(1)])
+    removed = dismiss_seller_alternative({'alternatives': alternatives, 'analysis_registry': registry}, '1')
+    assert removed['alternatives'] == []
+    assert removed['analysis_registry']['dismissed_keys'] == ['1']
+
+
+def test_streamlit_remove_button_promotes_sixth_without_a_search():
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    registry, alternatives = update(rows=[row(i, score=50-i) for i in range(6)])
+    app = AppTest.from_file(str(Path('app.py').resolve()), default_timeout=30)
+    app.session_state['seller_top5_result'] = {
+        'status': 'INVENTORY_PARTIAL', 'seller': 'test', 'inventory_count': 6,
+        'alternatives': alternatives, 'rows': [], 'analysis_registry': registry,
+        'full_unique_analysed': 6,
+    }
+    app.run()
+    app.button(key='seller_remove_4').click().run()
+    assert not app.exception
+    result = app.session_state['seller_top5_result']
+    assert ids(result['alternatives']) == ['0', '1', '2', '3', '5']
+    assert result['full_unique_analysed'] == 6
+    rendered = '\n'.join(element.value for element in app.markdown)
+    assert '#5 · ' + row(5)['title'] in rendered
+    assert row(4)['title'] not in rendered

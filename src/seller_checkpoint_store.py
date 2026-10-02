@@ -21,9 +21,9 @@ def _namespace(key: str) -> str:
     return f'seller_checkpoint::{digest}'
 
 
-def _progress(value: dict | None) -> tuple[int, int, int, int, int, int]:
+def _progress(value: dict | None) -> tuple[int, int, int, int, int, int, int]:
     if not isinstance(value, dict):
-        return (0, 0, 0, 0, 0, 0)
+        return (0, 0, 0, 0, 0, 0, 0)
     items = value.get("items") or {}
     registry = value.get("analysis_registry") or {}
     full, quick, run = registry_progress(registry)
@@ -34,12 +34,22 @@ def _progress(value: dict | None) -> tuple[int, int, int, int, int, int]:
         full,
         quick,
         run,
+        len(registry.get("dismissed_keys") or []),
     )
 
 
 def furthest_checkpoint(*values) -> dict | None:
     candidates = [dict(v) for v in values if isinstance(v, dict)]
-    return max(candidates, key=_progress) if candidates else None
+    if not candidates:
+        return None
+    chosen = max(candidates, key=_progress)
+    # A worker may advance the page cursor with an older analysis snapshot.
+    # Preserve removal choices from every state layer even in that case.
+    from src.seller_dynamic_top5 import merge_dismissed
+    if any(v.get("analysis_registry") for v in candidates):
+        chosen["analysis_registry"] = merge_dismissed(
+            chosen.get("analysis_registry"), *(v.get("analysis_registry") for v in candidates))
+    return chosen
 
 
 def load_checkpoint(key: str, *, session=None, database_url=None) -> dict | None:

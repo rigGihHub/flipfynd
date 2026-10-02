@@ -416,7 +416,9 @@ def resolve_seller_top5(
         if isinstance(analysis_registry, dict):
             if registry_progress(analysis_registry) > registry_progress(checkpoint_registry):
                 checkpoint_registry = analysis_registry
-        checkpoint["analysis_registry"] = checkpoint_registry or {}
+        from src.seller_dynamic_top5 import merge_dismissed
+        checkpoint["analysis_registry"] = merge_dismissed(checkpoint_registry, analysis_registry,
+                                                        checkpoint.get("analysis_registry"))
         # pages_read must describe unique pages represented by the cursor, not
         # accumulate repeated blocks from stale checkpoints.
         checkpoint["pages_read"] = max(0, int(checkpoint.get("next_page") or 1) - 1)
