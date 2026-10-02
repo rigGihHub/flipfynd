@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.102"
+APP_VERSION = "v0.14.103"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1503,8 +1503,6 @@ if st.session_state.get("fetch_last_message"):
     message = st.session_state["fetch_last_message"]
     if st.session_state.get("fetch_status") == "finished":
         st.success(message)
-    elif _record and st.session_state.get("fetch_status") == "running":
-        st.session_state["fetch_process"] = _record["process"]
     elif st.session_state.get("fetch_status") == "running":
         live_message = fetch_progress_message()
         st.info(live_message or message)

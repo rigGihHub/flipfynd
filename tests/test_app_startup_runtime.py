@@ -41,3 +41,21 @@ def test_seller_badge_renders_without_new_module_export(monkeypatch, risk, expec
     assert expected_badge in rendered
     if risk > 65:
         assert "🟢 KÖP" not in rendered
+
+
+@pytest.mark.parametrize('status', ['running', 'failed', 'idle', 'finished'])
+def test_fetch_status_message_does_not_reference_function_local_process(monkeypatch, status):
+    class Process:
+        def poll(self): return None
+    if status == 'running':
+        monkeypatch.setattr('src.background_fetch_registry.get', lambda key: {
+            'process': Process(), 'category': 'hockey', 'mode': 'market'})
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=30)
+    app.session_state['fetch_status'] = status
+    app.session_state['fetch_last_message'] = 'Test av hämtningsstatus'
+    app.run()
+    assert not app.exception, [error.message for error in app.exception]
+    if status == 'finished':
+        assert any('Test av hämtningsstatus' in item.value for item in app.success)
+    elif status == 'running':
+        assert any('Test av hämtningsstatus' in item.value for item in app.info)
