@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.101"
+APP_VERSION = "v0.14.102"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -984,28 +984,23 @@ def start_fetch(
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
     try:
-        log_file = open(
-            FETCH_LOG_PATH,
-            "w",
-            encoding="utf-8",
-        )
-        process = subprocess.Popen(
-            command,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=str(BASE_DIR),
-            creationflags=creationflags,
-            env={
-                **os.environ,
-                **({"FLIPFYND_DATABASE_URL": DATABASE_URL} if DATABASE_URL else {}),
-            },
-        )
+        def _spawn_fetch():
+            with open(FETCH_LOG_PATH, "w", encoding="utf-8") as log_file:
+                return subprocess.Popen(
+                    command, stdout=log_file, stderr=subprocess.STDOUT,
+                    text=True, cwd=str(BASE_DIR), creationflags=creationflags,
+                    env={**os.environ, **({"FLIPFYND_DATABASE_URL": DATABASE_URL} if DATABASE_URL else {})},
+                )
+        from src.background_fetch_registry import start as _register_fetch
+        _fetch_key = str(st.query_params.get("view_run") or st.session_state.get("_fetch_owner") or "")
+        if not _fetch_key:
+            _fetch_key = resumable_search.new_token()
+            st.session_state["_fetch_owner"] = _fetch_key
+        _registered = _register_fetch(_fetch_key, _spawn_fetch, category=category, mode=mode)
+        process = _registered["process"]
+        category = _registered["category"]
+        st.session_state["continue_market_after_latest"] = _registered["mode"] == "latest"
     except Exception as exc:
-        try:
-            log_file.close()
-        except Exception:
-            pass
         st.session_state["fetch_process"] = None
         st.session_state["fetch_status"] = "failed"
         st.session_state["fetch_last_message"] = (
@@ -1038,6 +1033,20 @@ def start_fetch(
 
 
 def update_fetch_status():
+    from src.background_fetch_registry import get as _registered_fetch
+    _record = _registered_fetch(str(st.query_params.get("view_run") or st.session_state.get("_fetch_owner") or ""))
+    if _record and _record["process"].poll() is None:
+        st.session_state["fetch_process"] = _record["process"]
+        st.session_state["fetch_category"] = _record["category"]
+        if _record["process"].poll() is None:
+            st.session_state["fetch_status"] = "running"
+        if _record["mode"] == "latest":
+            st.session_state.setdefault("continue_market_after_latest", True)
+    elif _record and st.session_state.get("fetch_status") == "running":
+        st.session_state["fetch_process"] = _record["process"]
+    elif st.session_state.get("fetch_status") == "running":
+        st.session_state["fetch_status"] = "failed"
+        st.session_state["fetch_last_message"] = "Servern startades om. Inlästa annonser är sparade; nästa uppdatering fortsätter med återstående sidor."
     process = st.session_state.get(
         "fetch_process"
     )
@@ -1247,6 +1256,8 @@ def analyze_data(*args, **kwargs):
     return _ordinary_pipeline.analyze_data(*args, **kwargs)
 
 
+import src.workspace_recovery as _workspace_recovery
+_workspace_recovery.recover_ui(st.session_state, st.query_params, DATABASE_URL)
 ensure_state()
 update_fetch_status()
 
@@ -1492,6 +1503,8 @@ if st.session_state.get("fetch_last_message"):
     message = st.session_state["fetch_last_message"]
     if st.session_state.get("fetch_status") == "finished":
         st.success(message)
+    elif _record and st.session_state.get("fetch_status") == "running":
+        st.session_state["fetch_process"] = _record["process"]
     elif st.session_state.get("fetch_status") == "running":
         live_message = fetch_progress_message()
         st.info(live_message or message)
@@ -1524,6 +1537,7 @@ def _dismiss_seller_top5_alternative(key):
     current = st.session_state.get("seller_top5_result") or {}
     updated = _seller_dynamic_runtime.dismiss_seller_alternative(current, key)
     st.session_state["seller_top5_result"] = updated
+    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
     alias = str(updated.get("seller") or st.session_state.get("seller_top5_alias") or "").strip()
     profile = str(st.session_state.get("seller_top5_profile_url") or "").strip()
     checkpoint = updated.get("public_checkpoint")
@@ -1568,6 +1582,8 @@ if "seller_top5_profile_url" not in st.session_state and _seller_qp_profile:
 
 
 def _clear_seller_top5_ui():
+    st.query_params.pop("seller_run", None)
+    st.session_state.pop("_applied_seller_run", None)
     old_alias = str(st.session_state.get("seller_top5_alias") or "").strip()
     old_profile = str(st.session_state.get("seller_top5_profile_url") or "").strip()
     reset_seller_top5_search(
@@ -1590,8 +1606,10 @@ def _clear_seller_top5_ui():
     except Exception:
         pass
 
+    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
 
-if not st.session_state.get("seller_top5_result") and DATABASE_URL:
+
+if not st.session_state.get("seller_top5_result") and DATABASE_URL and not st.query_params.get("view_run") and not st.query_params.get("seller_run"):
     try:
         _saved_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {})
         if isinstance(_saved_seller, dict) and isinstance(_saved_seller.get("result"), dict):
@@ -1627,6 +1645,19 @@ if not st.session_state.get("seller_top5_result") and DATABASE_URL:
     except Exception:
         pass
 
+_seller_job_token = str(st.query_params.get("seller_run") or "")
+_seller_job = resumable_search.load(_seller_job_token, DATABASE_URL)
+if _seller_job and (_seller_job.get("params") or {}).get("kind") == "seller":
+    _seller_params = _seller_job["params"]
+    st.session_state.setdefault("seller_top5_alias", _seller_params.get("seller") or "")
+    st.session_state.setdefault("seller_top5_profile_url", _seller_params.get("profile_url") or "")
+    if _seller_job.get("status") == "COMPLETED" and st.session_state.get("_applied_seller_run") != _seller_job_token:
+        _seller_rows = _seller_job.get("results") or []
+        if _seller_rows:
+            st.session_state["seller_top5_result"] = _seller_rows[0]
+            st.session_state["_applied_seller_run"] = _seller_job_token
+            _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+
 _seller_existing_result = st.session_state.get("seller_top5_result") or {}
 # The durable namespace can lag one click behind the in-session crawl result.
 # Prefer whichever checkpoint has progressed furthest so "Sök vidare" cannot
@@ -1636,7 +1667,9 @@ try:
     _persisted_result = (_persisted_seller or {}).get("result") if isinstance(_persisted_seller, dict) else {}
     _session_next = int(((_seller_existing_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
     _persisted_next = int(((_persisted_result or {}).get("public_checkpoint") or {}).get("next_page") or 0)
-    if isinstance(_persisted_result, dict) and _persisted_next > _session_next:
+    if (isinstance(_persisted_result, dict) and _persisted_next > _session_next
+            and str(_persisted_result.get("seller") or "").casefold() == str(_seller_existing_result.get("seller") or "").casefold()
+            and _seller_existing_result):
         _seller_existing_result = _persisted_result
         st.session_state["seller_top5_result"] = _persisted_result
 except Exception:
@@ -1668,6 +1701,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         )
         seller_top5_run = st.form_submit_button(
             _seller_button_label, key="seller_top5_run", type="primary", use_container_width=True,
+            disabled=bool(_seller_job and _seller_job.get("status") == "RUNNING"),
             on_click=_queue_seller_top5_search,
         )
     _seller_pending_request = st.session_state.get("seller_top5_pending_request")
@@ -1718,222 +1752,49 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
     if _seller_pending_request:
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
-            st.session_state.pop("seller_top5_pending_request", None)
             st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
+            st.session_state.pop("seller_top5_pending_request", None)
+        elif _seller_job and _seller_job.get("status") == "RUNNING":
+            st.session_state.pop("seller_top5_pending_request", None)
         else:
-            seller_status = st.status(f"🔎 Söker {alias or 'säljaren'}", expanded=True)
-            seller_progress_line = seller_status.empty()
-            seller_progress_line.caption("Sökningen har startat · förbereder säljarens annonser…")
-            seller_progress_bar = st.progress(0, text="Startar…")
-            # Public seller profiles can be crawled by the persistent worker.
-            # Queue that I/O-heavy part first so leaving the browser does not
-            # cancel inventory discovery. Ranking remains on the existing path
-            # until the headless analyser is fully separated.
-            if seller_top5_profile_url_resolved and jobs_available():
-                _resume_page = int(((_seller_previous_result.get("public_checkpoint") or {}).get("next_page")) or 1)
-                _active = ensure_seller_inventory_job(
-                    profile_url=seller_top5_profile_url_resolved,
-                    seller=alias,
-                    start_page=_resume_page,
-                    max_pages=120,
-                )
-                if _active:
-                    st.session_state["seller_background_job_id"] = _active.get("job_id")
-                st.info("Säljarens annonser har lagts i bakgrundskön. Du kan lämna sidan utan att kön försvinner.")
-
-            creds = _resolve_tradera_api_credentials()
-            sport_key = "all"
-            local_market = get_data(get_data_version())
-
-            def _seller_search_progress(info):
-                phase = str((info or {}).get("phase") or "")
-                page = int((info or {}).get("page") or 0)
-                found = int((info or {}).get("found_count") or 0)
-                pages_read = int((info or {}).get("pages_read") or 0)
-                max_pages = int((info or {}).get("max_pages") or 0)
-                progress_percent = (info or {}).get("percent")
-                if progress_percent is None:
-                    if phase in {"starting", "fetching", "page_complete", "exhausted"}:
-                        progress_percent = min(20, 2 + int(18 * pages_read / max(1, max_pages)))
-                    elif phase.startswith("filter"):
-                        progress_percent = 24
-                    elif phase.startswith("quick"):
-                        progress_percent = 45
-                    elif phase.startswith("full"):
-                        progress_percent = 75
-                    elif phase == "ranking":
-                        progress_percent = 97
-                    elif phase == "complete":
-                        progress_percent = 100
-                    else:
-                        progress_percent = 1
-                progress_percent = max(0, min(100, int(progress_percent)))
-                done = int((info or {}).get("done") or 0)
-                total = int((info or {}).get("total") or 0)
-                if phase in {"starting", "fetching", "fetch_retry", "page_complete", "exhausted"}:
-                    progress_text = f"{progress_percent}% · {found} annonser hittade"
-                elif phase.startswith("filter"):
-                    progress_text = f"{progress_percent}% · Filtrerar kort" + (f" · {done}/{total}" if total else "")
-                elif phase.startswith("quick"):
-                    progress_text = f"{progress_percent}% · Prioriterar" + (f" · {done}/{total}" if total else "")
-                elif phase.startswith("full"):
-                    progress_text = f"{progress_percent}% · Analyserar toppkandidater" + (f" · {done}/{total}" if total else "")
-                elif phase == "ranking":
-                    progress_text = f"{progress_percent}% · Rankar Top 5"
-                elif phase == "complete":
-                    progress_text = "100% · Klart"
-                else:
-                    progress_text = f"{progress_percent}% · Bearbetar…"
-                seller_progress_bar.progress(progress_percent, text=progress_text)
-                if phase == "fetching":
-                    seller_progress_line.caption(f"Sida {page} · {found} annonser")
-                elif phase == "fetch_retry":
-                    attempt = int((info or {}).get("attempt") or 1)
-                    maximum = int((info or {}).get("max_attempts") or 3)
-                    seller_progress_line.caption(
-                        f"Tillfälligt hämtningsfel på sida {page} · försöker automatiskt igen {attempt}/{maximum}"
-                    )
-                elif phase == "page_complete":
-                    seller_progress_line.caption(f"Sida {page} klar · {found} annonser")
-                elif phase == "exhausted":
-                    seller_progress_line.caption(f"Alla sidor lästa · {found} annonser")
-                elif phase == "complete":
-                    seller_progress_line.caption(f"{found} annonser · rankar bästa korten")
-
-            try:
-                try:
-                    # Read continuation state at click-time. Streamlit reruns can
-                    # make the earlier module-scope snapshot stale/empty.
-                    _click_result = st.session_state.get("seller_top5_result") or {}
-                    if not isinstance(_click_result, dict) or not (_click_result.get("public_checkpoint") or {}):
-                        try:
-                            _click_saved = load_persistent_namespace(DATABASE_URL, "seller_last_result", {}) if DATABASE_URL else {}
-                            _click_persisted = (_click_saved or {}).get("result") if isinstance(_click_saved, dict) else {}
-                            if isinstance(_click_persisted, dict):
-                                _click_result = _click_persisted
-                        except Exception:
-                            pass
-                    _visible_cp = (_click_result.get("public_checkpoint") or {}) if isinstance(_click_result, dict) else {}
-                    # Streamlit can hot-reload app.py while retaining an older
-                    # imported controller module. Reload it on each explicit
-                    # seller-search click so continuation code matches GitHub.
-                    import importlib as _seller_importlib
-                    import src.seller_analysis_registry as _seller_registry_live
-                    import src.seller_top5 as _seller_top5_live
-                    _seller_importlib.reload(_seller_registry_live)
-                    _seller_importlib.reload(_seller_top5_live)
-                    import src.seller_top5_controller as _seller_controller_live
-                    _seller_controller_live = _seller_importlib.reload(_seller_controller_live)
-                    _controller_start_debug = {
-                        "source": "visible_result",
-                        "next_page": int(_visible_cp.get("next_page") or 1),
-                        "pages_read": int(_visible_cp.get("pages_read") or 0),
-                        "items": len(_visible_cp.get("items") or {}),
-                    }
-                    st.session_state["seller_controller_start_debug"] = _controller_start_debug
-                    top5 = _seller_controller_live.resolve_seller_top5(
-                        alias,
-                        local_market,
-                        analyze_fn=_cached_seller_analysis,
-                        sport=sport_key,
-                        credentials=creds,
-                        profile_url=seller_top5_profile_url_resolved,
-                        progress_callback=_seller_search_progress,
-                        quick_limit=60,
-                        full_limit=8,
-                        database_url=DATABASE_URL,
-                        # The visible result is the freshest checkpoint from
-                        # the immediately preceding block. Pass it explicitly so
-                        # continuation survives DB/session checkpoint lag.
-                        resume_checkpoint=_visible_cp,
-                        analysis_registry=(
-                            (_click_result.get("analysis_registry") if isinstance(_click_result, dict) else None)
-                            or (_visible_cp.get("analysis_registry") if isinstance(_visible_cp, dict) else None)
-                            or {}
-                        ),
-                    )
-                except TypeError as exc:
-                    # Streamlit may hot-reload app.py while keeping an older imported
-                    # controller module in memory. Refresh that module automatically and
-                    # continue the same user action instead of asking for another click.
-                    if not any(name in str(exc) for name in ("profile_url", "progress_callback", "database_url", "analysis_registry")):
-                        raise
-                    seller_progress_bar.progress(2, text="2% · Synkar analysmotorn automatiskt…")
-                    seller_progress_line.info("Ny kod upptäcktes · laddar om Seller Top 5-motorn utan att avbryta sökningen")
-                    import importlib
-                    import src.seller_top5_controller as _seller_top5_controller
-                    _seller_top5_controller = importlib.reload(_seller_top5_controller)
-                    top5 = _seller_top5_controller.resolve_seller_top5(
-                        alias,
-                        local_market,
-                        analyze_fn=_cached_seller_analysis,
-                        sport="all",
-                        credentials=creds,
-                        profile_url=seller_top5_profile_url_resolved,
-                        progress_callback=_seller_search_progress,
-                        quick_limit=60,
-                        full_limit=8,
-                        database_url=DATABASE_URL,
-                        resume_checkpoint=_seller_previous_result.get("public_checkpoint"),
-                        analysis_registry=_seller_previous_result.get("analysis_registry") or {},
-                    )
-                if seller_top5_profile_url_resolved and top5.get("inventory_source") == "LOCAL_MARKET":
-                    top5 = dict(top5)
-                    top5["status"] = "PROFILE_INCOMPLETE"
-                    top5["rows"] = []
-                st.session_state["seller_top5_result"] = top5
-                # Persist seller continuation/result independently of the
-                # browser websocket so leaving the app cannot reset the crawl.
-                if DATABASE_URL:
-                    try:
-                        save_persistent_namespace(
-                            DATABASE_URL,
-                            "seller_last_result",
-                            {
-                                "alias": alias,
-                                "profile_url": seller_top5_profile_url_resolved,
-                                "result": top5,
-                            },
-                        )
-                    except Exception:
-                        pass
-                st.session_state.pop("seller_top5_pending_request", None)
-                found_count = int(top5.get("inventory_count") or 0)
-                quick_count = int(top5.get("quick_analysed") or 0)
-                full_count = int(top5.get("full_unique_analysed") or top5.get("full_analysed") or 0)
-                source = top5.get("inventory_source") or "okänd källa"
-                result_status = str(top5.get("status") or "")
-                if result_status == "INVENTORY_PARTIAL":
-                    pages_read = int(top5.get("public_pages_read") or 0)
-                    next_page = int(top5.get("public_next_page") or 1)
-                    seller_progress_bar.progress(100, text=f"{found_count} annonser inlästa · block klart")
-                    seller_status.write(f"{pages_read} profilsidor lästa totalt · {found_count} annonser sparade · nästa block börjar på sida {next_page}.")
-                    seller_status.update(label=f"📥 Block sparat för {alias} · fortsätt till nästa sida", state="complete", expanded=False)
-                    st.rerun()  # refresh Seller Top 5 continuation UI
-                elif result_status == "PROFILE_INCOMPLETE":
-                    seller_progress_bar.progress(0, text="Profilinläsningen behöver fortsätta · tryck på Läs nästa sida")
-                    seller_status.update(label=f"⚠️ Hela profilen för {alias} är inte inläst", state="error", expanded=True)
-                    st.rerun()  # refresh continuation button after incomplete profile
-                else:
-                    seller_status.write(
-                        f"{found_count} annonser hittade · {quick_count} snabbanalyserade · "
-                        f"{full_count} fullanalyserade · källa: {source}."
-                    )
-                    seller_progress_bar.progress(100, text="100% · Klart")
-                    seller_status.update(label=f"✅ Sökning klar för {alias}", state="complete", expanded=False)
-            except Exception:
-                try:
-                    seller_progress_bar.progress(0, text="Sökningen avbröts")
-                except Exception:
-                    pass
-                st.session_state.pop("seller_top5_pending_request", None)
-                seller_status.update(label=f"❌ Sökningen av {alias} avbröts", state="error", expanded=True)
-                raise
+            from src.seller_round_job import start as _start_seller_round
+            import src.seller_top5_controller as _seller_controller_live
+            _seller_controller_live = importlib.reload(_seller_controller_live)
+            _visible_cp = _seller_previous_result.get("public_checkpoint") or {}
+            _controller_start_debug = {
+                "source": "visible_result", "next_page": int(_visible_cp.get("next_page") or 1),
+                "pages_read": int(_visible_cp.get("pages_read") or 0),
+                "items": len(_visible_cp.get("items") or {}),
+            }
+            st.session_state["seller_controller_start_debug"] = _controller_start_debug
+            _seller_job_token = resumable_search.new_token()
+            st.query_params["seller_run"] = _seller_job_token
+            _start_seller_round(
+                _seller_job_token, seller=alias, profile_url=seller_top5_profile_url_resolved,
+                market_items=list(get_data(get_data_version())), analyze_fn=_cached_seller_analysis,
+                credentials=_resolve_tradera_api_credentials(), checkpoint=_visible_cp,
+                registry=_seller_previous_result.get("analysis_registry") or {},
+                database_url=DATABASE_URL, resolve_fn=_seller_controller_live.resolve_seller_top5,
+            )
+            st.session_state.pop("seller_top5_pending_request", None)
+            _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+            st.rerun()
+    if _seller_job and _seller_job.get("status") == "RUNNING":
+        from src.search_progress import render_search_progress
+        st.info("Säljarens sökomgång fortsätter i bakgrunden. Du kan byta fönster.")
+        render_search_progress(_seller_job)
+        if st_autorefresh:
+            st_autorefresh(interval=3000, key="seller_round_poll")
+        else:
+            st.button("Visa säljsökningens status")
+    elif _seller_job and _seller_job.get("status") in {"FAILED", "INTERRUPTED"}:
+        st.warning("Sökomgången avbröts på servern. Sparade kort och framsteg finns kvar. Fortsätt med nästa omgång.")
 
     if seller_top5_alias or seller_top5_profile_url or _seller_previous_result:
         st.button(
             "Rensa säljsökningen",
             key="seller_top5_clear",
+            disabled=bool(_seller_job and _seller_job.get("status") == "RUNNING"),
             use_container_width=True,
             on_click=_clear_seller_top5_ui,
             help="Tar bort säljarens resultat och fortsättningsläge. Den vanliga fyndsökningen påverkas inte.",
@@ -2309,6 +2170,7 @@ if st.button(
     # window, then continue with the next not-yet-loaded market pages.
     st.session_state["continue_market_after_latest"] = True
     start_fetch(fetch_category, True, "latest")
+    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
     st.rerun()
 st.caption(
     "Hämtar nya annonser och fortsätter sedan med äldre annonser som ännu inte lästs in."
@@ -2327,6 +2189,7 @@ elif _fetch_status == "finished" and st.session_state.pop("continue_market_after
             "De senaste annonserna är kontrollerade. Fortsätter automatiskt "
             "med nästa ännu inte inlästa annonser…"
         )
+        _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
         st.rerun()
 elif _fetch_status == "failed":
     st.error(st.session_state.get("fetch_last_message") or "Hämtningen misslyckades. Försök igen.")
@@ -2479,17 +2342,20 @@ with st.form("analysis_form"):
                 1.0,
                 0.0,
                 0.05,
+                key="search_minimum_confidence",
             )
 
         with a2:
             show_count = st.number_input(
                 "Antal fynd att visa",
+                key="search_show_count",
                 min_value=1,
                 max_value=100,
                 value=20,
             )
             show_skip = st.checkbox(
                 "Visa även svaga kandidater",
+                key="search_show_skip",
                 value=False,
                 help="Slå på endast om du vill se kort som inte är tillräckligt starka för huvudlistan.",
             )
@@ -2560,6 +2426,7 @@ if clear_main_search:
         pass
     st.session_state["fetch_status"] = "idle"
     st.session_state["fetch_last_message"] = ""
+    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
     st.success("Huvudsökningen och inlästa annonser är rensade. Hämta nya annonser innan nästa Hitta fynd.")
     st.rerun()
 
@@ -2601,6 +2468,7 @@ if run:
         lambda kwargs=_job_kwargs, fn=_job_fn: fn(**kwargs), database_url=DATABASE_URL)
     st.session_state["results"] = None
     st.session_state["debug"] = {}
+    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
     st.rerun()
 
 if _saved_search and _saved_search.get("status") == "RUNNING":

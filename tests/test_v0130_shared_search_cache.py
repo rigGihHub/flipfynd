@@ -8,5 +8,6 @@ def test_seller_search_reuses_fast_and_full_analysis_caches():
     assert "def _cached_seller_analysis" in app
     assert "_cached_fast_analysis(" in app
     assert 'mode=f"seller_v8_material_identity_balanced_routes_{sport}_{strategy_mode}"' in app
-    assert app.count("analyze_fn=_cached_seller_analysis") >= 2
+    assert "analyze_fn=_cached_seller_analysis" in app
+    assert "analyze_fn=analyze_fn" in Path("src/seller_round_job.py").read_text()
     assert re.search(r'APP_VERSION = "v0\.14\.\d+"', app)

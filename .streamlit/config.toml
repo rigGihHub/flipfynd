@@ -5,3 +5,7 @@ backgroundColor = "#111317"
 secondaryBackgroundColor = "#202329"
 textColor = "#f4ead7"
 font = "sans serif"
+
+[server]
+# Allow mobile browsers to reconnect to the same session after suspension.
+disconnectedSessionTTL = 3600

@@ -25,11 +25,14 @@ def new_token():
 
 
 def _save(token, payload, database_url=None):
-    _ROOT.mkdir(exist_ok=True)
-    path = _ROOT / (token + '.json')
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding='utf-8')
-    tmp.replace(path)
+    try:
+        _ROOT.mkdir(exist_ok=True)
+        path = _ROOT / (token + '.json')
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding='utf-8')
+        tmp.replace(path)
+    except OSError:
+        pass  # A full/unavailable disk must not abort an otherwise healthy job.
     if database_url:
         try:
             save_namespace(database_url, 'search:' + token, payload)
