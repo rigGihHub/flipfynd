@@ -11,7 +11,7 @@ def test_plain_unverified_card_is_not_presented_as_a_find():
 
 def test_seller_ui_uses_truthful_headings():
     app = Path("app.py").read_text(encoding="utf-8")
-    assert "Inga verifierade fynd i analyserade delen ännu" in app
-    assert "okänd nettovinst" in app
-    assert "Kandidater värda fortsatt kontroll" in app
+    assert "Topp 5 hittills" in app
+    assert "osäkert underlag" in app
+    assert "verifierade fynd i listan" in app
     assert "seller_result_tier(row)" in app

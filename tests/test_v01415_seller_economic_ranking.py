@@ -47,5 +47,5 @@ def test_positive_economics_rank_before_scarcity_only_candidate():
 
 def test_ui_labels_research_positions_as_research_not_finds():
     app = Path("app.py").read_text(encoding="utf-8")
-    assert 'f"Research #{_research_rank}"' in app
-    assert "Researchkandidater – inte fynd" in app
+    assert 'f"#### #{_position} · {title}"' in app
+    assert "ej verifierat fynd" in app

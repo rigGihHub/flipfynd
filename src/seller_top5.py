@@ -221,6 +221,15 @@ def _seller_opportunity_rank_key(row: dict):
     )
 
 
+
+def _seller_alternative_rank_key(row: dict):
+    key = _seller_opportunity_rank_key(row)
+    # Verified finds lead; losses remain visible only below other alternatives.
+    # Fast candidates never become verified finds just by entering this list.
+    return (not known_negative_net_profit(row), key[0],
+            row.get("analysis_level") == "full", *key[1:],
+            -_num(row.get("price")))
+
 def _seller_opportunity_score(row: dict) -> float:
     collector = min(40.0, _num(row.get("collector_signal_score")))
     merit = assess_seller_card_merit(row)
@@ -647,6 +656,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["seller"] = alias
             row["sport"] = item_sport
             row["analysis_level"] = "full"
+            row["seller_listing_key"] = listing_key(source_item)
             row["seller_deep_route"] = qrow.get("seller_deep_route") or "MERIT"
             row["seller_card_merit"] = assess_seller_card_merit(row)
             row["deal_readiness"] = assess_deal_readiness(row)
@@ -715,7 +725,14 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         selected_keys.add(key)
         selected_opportunities.add(opportunity_key)
 
-    registry["displayed_keys"] = [listing_key(row.get("source_item") or row) for row in selected]
+    from src.seller_dynamic_top5 import update_dynamic_top5, alternative_listing_key
+    registry, alternatives = update_dynamic_top5(
+        registry, inventory=inventory, quick_rows=quick.get("rows") or [],
+        full_rows=full_rows, seed_rows=list(registry.get("best_rows", {}).values()),
+        rank_key=_seller_alternative_rank_key, refresh=_refresh_collector_research,
+        quick_fallback=lambda row: _fallback_row(row, alias), select_diverse=_select_diverse_rows,
+    )
+    registry["displayed_keys"] = [alternative_listing_key(row) for row in alternatives]
     top5_new_count = len(set(registry["displayed_keys"]) - previous_displayed)
     _emit(progress_callback, phase="ranking", done=len(selected), total=5, percent=97)
     coverage = analysis_coverage(registry, inventory)
@@ -772,7 +789,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "full_candidate_limit": candidate_limit,
         "hidden_find_exploration_count": len(exploration_candidates),
         "ranking_source": "ORDINARY_FLIPFYND_RANK",
-        "seller_analysis_contract": "v7-balanced-research-current-signals",
+        "seller_analysis_contract": "v8-cumulative-dynamic-alternatives",
         "seller_workflow_version": "v3-cross-sport-one-click-progress",
         "sport_counts": quick.get("sport_counts") or {},
         "duplicate_opportunities_removed": duplicate_opportunities_removed,
@@ -790,7 +807,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
         "full_remaining": coverage["full_remaining"],
     }
     result = {"status": "READY" if selected else "NO_CARD_CANDIDATES",
-              "rows": selected, "full_analysed": len(full_rows), "failed_full": failed,
+              "rows": selected, "alternatives": alternatives, "full_analysed": len(full_rows), "failed_full": failed,
               **common_meta}
     _emit(progress_callback, phase="complete", done=5 if selected else 0, total=5, percent=100)
     return result

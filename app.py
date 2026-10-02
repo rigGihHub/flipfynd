@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.98"
+APP_VERSION = "v0.14.99"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -357,7 +357,7 @@ import src.ebay_browse_context as _ebay_runtime
 if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
     importlib.reload(_ebay_runtime)
     _ebay_runtime._flipfynd_loaded_version = APP_VERSION
-SELLER_PRESENTATION_CONTRACT = "positive-price-positive-known-profit-v3"
+SELLER_PRESENTATION_CONTRACT = "dynamic-top5-alternatives-v4"
 
 # Saved searches must also render with the current deployed UI after hot reload.
 import src.asking_price_ui as _asking_ui_module
@@ -389,12 +389,17 @@ def _seller_ui_row_is_safe(row):
         if value in (None, "") or isinstance(value, bool):
             continue
         try:
-            positive_price = float(value) > 0
+            positive_price = 0 < float(value) < float("inf")
         except (TypeError, ValueError):
             continue
         break
     if not positive_price:
         return False
+
+    # A comparison alternative may have unknown or negative economics.
+    # It stays visibly labelled; this does not authorize a BUY recommendation.
+    if row.get("seller_top5_alternative") is True:
+        return True
 
     asking = row.get("asking_price_opportunity")
     if not isinstance(asking, dict):
@@ -1785,6 +1790,10 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     # imported controller module. Reload it on each explicit
                     # seller-search click so continuation code matches GitHub.
                     import importlib as _seller_importlib
+                    import src.seller_analysis_registry as _seller_registry_live
+                    import src.seller_top5 as _seller_top5_live
+                    _seller_importlib.reload(_seller_registry_live)
+                    _seller_importlib.reload(_seller_top5_live)
                     import src.seller_top5_controller as _seller_controller_live
                     _seller_controller_live = _seller_importlib.reload(_seller_controller_live)
                     _controller_start_debug = {
@@ -1977,29 +1986,13 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
     ):
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
-        _ranked_rows = seller_top5_result.get("rows") or []
-        _safe_ranked_rows = [
-            row for row in _ranked_rows
-            if (
-                _seller_ui_row_is_safe(row)
-                and not known_negative_net_profit(row)
-                and seller_has_positive_purchase_price(row)
-            )
-        ]
-        _find_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "FIND"]
-        _research_rows = [row for row in _safe_ranked_rows if seller_result_tier(row) == "RESEARCH"]
-        _seller_display_rows = (_find_rows + _research_rows)[:5]
-        if _find_rows and _seller_result_status == "INVENTORY_PARTIAL":
-            st.markdown(f"### 🏆 Verifierade fynd just nu · {seller_name}")
-            st.caption("Preliminär lista · uppdateras när fler annonser hittas.")
-        elif _find_rows:
-            st.markdown(f"### 🏆 Verifierade fynd · {seller_name}")
-        elif _seller_display_rows:
-            st.markdown(f"### 🔎 Kandidater värda fortsatt kontroll · {seller_name}")
-            st.caption("Inga verifierade fynd ännu. Dessa kort har kortspecifika signaler men är inte köpklara.")
-        else:
-            st.markdown(f"### Inga verifierade fynd i analyserade delen ännu · {seller_name}")
-            st.caption("FlipFynd visar inte minusaffärer, okänd nettovinst eller vanliga standardkort som utfyllnad.")
+        _ranked_rows = seller_top5_result.get("alternatives", seller_top5_result.get("rows") or [])
+        _seller_display_rows = [row for row in _ranked_rows if _seller_ui_row_is_safe(row)][:5]
+        _find_rows = [row for row in _seller_display_rows
+                      if row.get("analysis_level") == "full" and seller_result_tier(row) == "FIND"]
+        st.markdown(f"### 🏆 Topp 5 hittills · {seller_name}")
+        st.caption("De bästa alternativen bland hittills analyserade annonser. Listan sparas och bättre alternativ ersätter lägre rankade kort i nästa omgång.")
+        st.caption(f"{len(_find_rows)} verifierade fynd i listan. Övriga alternativ har osäkert underlag eller klarar inte köpkraven.")
         _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
         _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
         st.caption(
@@ -2060,44 +2053,27 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
             st.caption("Preliminär topplista bland hittills analyserade kort. Den använder samma analysmotor som ordinarie FlipFynd-sökningen.")
         if not rows:
-            if _full_remaining > 0:
-                st.info("Inget verifierat fynd i den analyserade delen ännu. Fortsatt sökning roterar vidare till tidigare oanalyserade annonser.")
-            else:
-                st.info("Hela det sparade kortlagret är analyserat och inget kort klarade den positiva nettovinst- och evidensgränsen.")
+            st.info("Inga läsbara kort med giltigt pris har analyserats ännu. Fortsätt med nästa omgång.")
         elif len(rows) < 5:
-            st.caption(
-                f"Topplistan innehåller {len(rows)} kort eftersom bara {len(rows)} "
-                "klarade pris-, kvalitets- och evidensgränsen hittills."
-            )
-        _find_rank = 0
-        _research_rank = 0
-        _research_heading_shown = False
-        for row in rows[:5]:
+            st.caption(f"{len(rows)} analyserade alternativ finns ännu. Listan fylls till fem när fler annonser har analyserats.")
+        for _position, row in enumerate(rows[:5], start=1):
             title = row.get("title") or "Kortannons"
             price = row.get("price")
             decision = str(row.get("decision") or "SKIP").upper()
             _row_tier = seller_result_tier(row)
-            # Reuse the final tier already computed above. A new named import
-            # can crash a hot deployment with an older loaded seller module.
-            if _row_tier == "FIND":
-                badge = "🟢 KÖP"
+            if known_negative_net_profit(row):
+                badge = "🔴 Avstå · negativ beräknad nettovinst"
+            elif row.get("analysis_level") != "full":
+                badge = "⚪ Preliminärt alternativ · djupanalys återstår"
+            elif _row_tier == "FIND":
+                badge = "🟢 KÖP · verifierat fynd"
             elif (row.get("asking_price_opportunity") or {}).get("possible_find"):
                 badge = "🟡 Möjligt fynd · begärda priser"
-            elif decision.startswith(("KÖP", "UNDERSÖK")):
-                badge = "🟡 Värt att undersöka"
+            elif _row_tier == "RESEARCH":
+                badge = "🟡 Värt att undersöka · ej verifierat fynd"
             else:
-                badge = "⚪ Kandidat · ej verifierad"
-            if _row_tier == "FIND":
-                _find_rank += 1
-                _position_label = f"Fynd #{_find_rank}"
-            else:
-                _research_rank += 1
-                _position_label = f"Research #{_research_rank}"
-                if _find_rows and not _research_heading_shown:
-                    st.markdown("### 🔎 Researchkandidater – inte fynd")
-                    st.caption("Kortspecifika signaler gör dem värda kontroll, men ekonomin är inte verifierad.")
-                    _research_heading_shown = True
-            st.markdown(f"#### {_position_label} · {title}")
+                badge = "⚪ Alternativ · köpkraven är inte uppfyllda"
+            st.markdown(f"#### #{_position} · {title}")
             _rank_score = float(row.get("rank_score") or 0)
             try:
                 if price is not None and float(price) > 0:
@@ -2192,8 +2168,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     unsafe_allow_html=True,
                 )
             st.divider()
-        for empty_rank in range(len(rows) + 1, 6):
-            st.caption(f"#{empty_rank} — Ingen kandidat klarade kvalitetsgränsen ännu")
 
 
 # FlipFynd har en huvuduppgift: visa de bästa fynden just nu.

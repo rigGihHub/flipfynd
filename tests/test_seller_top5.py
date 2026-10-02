@@ -86,7 +86,7 @@ def test_fast_preselection_prefers_ordinary_rank_over_cheap_mediocre_card():
     })
     out = build_seller_top5("seller1", items, analyze_fn=_fake_analyze, quick_limit=20, full_limit=10)
     assert out["rows"][0]["title"] == "Elite rookie patch /25"
-    assert out["seller_analysis_contract"] == "v7-balanced-research-current-signals"
+    assert out["seller_analysis_contract"] == "v8-cumulative-dynamic-alternatives"
 
 
 def test_verified_buy_ranks_before_equal_rank_skip_via_quick_preselection_stability():

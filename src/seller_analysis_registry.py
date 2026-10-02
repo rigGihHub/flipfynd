@@ -26,6 +26,7 @@ def normalize_registry(value: dict | None) -> dict:
     value = value if isinstance(value, dict) and value.get("schema") == SCHEMA else {}
     entries = value.get("entries") if isinstance(value.get("entries"), dict) else {}
     pending_rows = value.get("pending_rows") if isinstance(value.get("pending_rows"), dict) else {}
+    alternative_rows = value.get("alternative_rows") if isinstance(value.get("alternative_rows"), dict) else {}
     best_rows = value.get("best_rows") if isinstance(value.get("best_rows"), dict) else {}
     clean_entries = {}
     for key, raw in entries.items():
@@ -45,6 +46,8 @@ def normalize_registry(value: dict | None) -> dict:
                            if isinstance(key, (str, int))][:5],
         "pending_rows": {str(key): deepcopy(row) for key, row in pending_rows.items()
                          if str(key).strip() and isinstance(row, dict)},
+        "alternative_rows": {str(key): deepcopy(row) for key, row in alternative_rows.items()
+                             if str(key).strip() and isinstance(row, dict)},
         "best_rows": {
             str(key): deepcopy(row)
             for key, row in best_rows.items()
