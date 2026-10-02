@@ -31,7 +31,6 @@ def render_counter(credentials, *, searching=False):
     from src.ebay_quota_ui import render_quota_counter
     key = ebay._limit_key(*credentials)
 
-    @st.fragment(run_every='2s')
     def panel():
         current = quota.quota_status(key)
         pending = False
@@ -42,7 +41,7 @@ def render_counter(credentials, *, searching=False):
         st.session_state['ebay_live_quota'] = current
         render_quota_counter(current)
         if pending:
-            st.caption('Kontrollerar antal eBay-anrop i bakgrunden. Du kan använda appen under tiden.')
+            st.caption('Kontrollerar antal eBay-anrop i bakgrunden. Tryck Uppdatera antal anrop för senaste status.')
         st.button('↻ Uppdatera antal anrop', key='refresh_ebay_counter', disabled=searching,
                   help='Kvoten uppdateras i bakgrunden, högst en gång per minut.')
     panel()

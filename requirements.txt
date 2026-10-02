@@ -1,4 +1,4 @@
-streamlit==1.64.0  # Rebuild server configuration for deferred administration and idle metadata (v0.14.109)
+streamlit==1.64.0  # Rebuild server configuration for quiet idle page without periodic reruns (v0.14.110)
 streamlit-autorefresh>=1.0.1,<2
 requests>=2.32,<3
 playwright>=1.48,<2
