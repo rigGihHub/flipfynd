@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.107"
+APP_VERSION = "v0.14.108"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1663,7 +1663,7 @@ _seller_existing_result = st.session_state.get("seller_top5_result") or {}
 try:
     _persisted_seller = {}
     # Check the durable checkpoint once per browser session, not every rerun.
-    if DATABASE_URL and not st.session_state.get("_seller_durable_checked"):
+    if DATABASE_URL and _seller_existing_result and not st.session_state.get("_seller_durable_checked"):
         _persisted_seller = load_persistent_namespace(DATABASE_URL, "seller_last_result", {})
         st.session_state["_seller_durable_checked"] = True
     _persisted_result = (_persisted_seller or {}).get("result") if isinstance(_persisted_seller, dict) else {}
@@ -2244,20 +2244,10 @@ elif not _flow_fetching:
     st.caption("Välj sport och budget. Lämna sökrutan tom för en bred sökning.")
 
 
-# Show the shared Browse allowance before any search, also in a fresh session.
-# Analytics is single-flight and cached for one minute; it consumes no Browse
-# search calls. During a running job read its locally reserved allowance only.
-from src.ebay_quota_ui import render_quota_counter
-if _saved_search and _saved_search.get("status") == "RUNNING":
-    _quota_id, _quota_secret = _ebay_runtime.configured_credentials()
-    _counter_quota = _ebay_quota_runtime.quota_status(_ebay_runtime._limit_key(_quota_id, _quota_secret))
-else:
-    _counter_quota = _ebay_runtime.fetch_configured_quota()
-st.session_state["ebay_live_quota"] = _counter_quota
-render_quota_counter(_counter_quota)
-st.button("↻ Uppdatera antal anrop", key="refresh_ebay_counter",
-          disabled=bool(_saved_search and _saved_search.get("status") == "RUNNING"),
-          help="Hämtar aktuell kvot. Kvotkontrollen görs högst en gång per minut och använder inga sökanrop.")
+# Metadata must never hold the entire page waiting on eBay OAuth/Analytics.
+from src.idle_quota import render_counter as _render_idle_quota
+_render_idle_quota(_ebay_runtime.configured_credentials(),
+                   searching=bool(_saved_search and _saved_search.get("status") == "RUNNING"))
 
 with st.form("analysis_form"):
     p1, p2 = st.columns(2)

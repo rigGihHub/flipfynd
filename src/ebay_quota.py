@@ -11,6 +11,7 @@ import requests
 URL = "https://api.ebay.com/developer/analytics/v1_beta/rate_limit/"
 _ROOT = Path(__file__).resolve().parent.parent / "ebay_quota_state"
 _LOCK = RLock()
+_CHECK_LOCK = RLock()
 _STATE = {}
 
 
@@ -95,8 +96,9 @@ def blocked_until(key):
 def read_quota(key, token, *, session=requests, timeout=5):
     # Single-flight, at most one metadata request/minute across all sessions.
     # Do not hammer Analytics when its own quota or availability is impaired.
-    with _LOCK:
-        prior = _load(key)
+    with _CHECK_LOCK:
+        with _LOCK:
+            prior = deepcopy(_load(key))
         if time.time() - prior.get("last_check", 0) < 60:
             return deepcopy(prior)
         try:
@@ -108,14 +110,16 @@ def read_quota(key, token, *, session=requests, timeout=5):
         except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
             fresh = {"status": "QUOTA_CHECK_FAILED", "http_status": getattr(getattr(exc, "response", None), "status_code", None)}
         fresh["last_check"] = time.time()
-        # A successful Analytics refresh is authoritative for usage, but an
-        # existing Retry-After pause is still honoured even with remaining quota.
-        fresh["paused_until"] = prior.get("paused_until", 0)
-        fresh["pause_reason"] = prior.get("pause_reason")
-        if fresh["status"] != "OK":
-            fresh["rates"] = prior.get("rates", [])
-        _save(key, fresh)
-        return deepcopy(fresh)
+        with _LOCK:
+            # A search may have paused while Analytics was waiting on HTTP.
+            latest = _load(key)
+            fresh["paused_until"] = latest.get("paused_until", 0)
+            fresh["pause_reason"] = latest.get("pause_reason")
+            if fresh["status"] != "OK":
+                fresh["rates"] = latest.get("rates", [])
+            _save(key, fresh)
+            return deepcopy(fresh)
+
 
 
 def reserve_call(key):

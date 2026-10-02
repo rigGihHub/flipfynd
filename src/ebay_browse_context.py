@@ -147,9 +147,9 @@ def _get_token(client_id, client_secret, *, session=requests, timeout=5):
         return token
 
 
-def fetch_configured_quota():
+def fetch_configured_quota(*, credentials=None):
     from src.ebay_quota import read_quota
-    client_id, client_secret = configured_credentials()
+    client_id, client_secret = credentials or configured_credentials()
     if not (client_id and client_secret):
         return {"status": "CREDENTIALS_MISSING"}
     try:
