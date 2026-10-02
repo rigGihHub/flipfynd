@@ -1,4 +1,4 @@
-streamlit==1.64.0  # Rebuild server configuration for durable reconnect (v0.14.102)
+streamlit==1.64.0  # Rebuild server configuration for durable reconnect and fetch-status hotfix (v0.14.103)
 streamlit-autorefresh>=1.0.1,<2
 requests>=2.32,<3
 playwright>=1.48,<2
