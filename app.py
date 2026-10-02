@@ -1678,7 +1678,7 @@ _seller_existing_status = str(_seller_existing_result.get("status") or "")
 _seller_search_needs_attention = (_seller_existing_status in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
                                   or int(_seller_existing_result.get("full_remaining") or 0) > 0)
 
-with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention or bool(st.session_state.get("seller_top5_pending_request"))):
+with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention or bool(st.session_state.get("seller_top5_pending_request")) or bool(_seller_job and _seller_job.get("status") == "RUNNING")):
     st.caption("Varje tryck kör en kort omgång. Topplistan och framstegen sparas.")
     _seller_previous_result = _seller_existing_result
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}

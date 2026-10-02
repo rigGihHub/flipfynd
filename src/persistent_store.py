@@ -83,7 +83,7 @@ def namespace_status(database_url: str) -> list[dict[str, Any]]:
     """Return lightweight metadata for FlipFynd namespaces without exposing payloads."""
     ensure_schema(database_url)
     psycopg = _import_psycopg()
-    with psycopg.connect(database_url) as conn:
+    with psycopg.connect(database_url, connect_timeout=5, options="-c statement_timeout=10000 -c lock_timeout=5000") as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"SELECT namespace, jsonb_typeof(payload), updated_at FROM {TABLE_NAME} ORDER BY namespace"
@@ -96,7 +96,7 @@ def namespace_status(database_url: str) -> list[dict[str, Any]]:
 
 def ensure_schema(database_url: str) -> None:
     psycopg = _import_psycopg()
-    with psycopg.connect(database_url, autocommit=True) as conn:
+    with psycopg.connect(database_url, autocommit=True, connect_timeout=5, options="-c statement_timeout=10000 -c lock_timeout=5000") as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -112,7 +112,7 @@ def ensure_schema(database_url: str) -> None:
 def load_namespace(database_url: str, namespace: str, default: Any) -> Any:
     ensure_schema(database_url)
     psycopg = _import_psycopg()
-    with psycopg.connect(database_url) as conn:
+    with psycopg.connect(database_url, connect_timeout=5, options="-c statement_timeout=10000 -c lock_timeout=5000") as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"SELECT payload FROM {TABLE_NAME} WHERE namespace = %s",
@@ -134,7 +134,7 @@ def save_namespace(database_url: str, namespace: str, payload: Any) -> None:
     ensure_schema(database_url)
     psycopg = _import_psycopg()
     encoded = json.dumps(payload, ensure_ascii=False)
-    with psycopg.connect(database_url, autocommit=True) as conn:
+    with psycopg.connect(database_url, autocommit=True, connect_timeout=5, options="-c statement_timeout=10000 -c lock_timeout=5000") as conn:
         with conn.cursor() as cur:
             cur.execute(
                 f"""

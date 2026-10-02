@@ -11,7 +11,11 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
     params = {'kind': 'seller', 'seller': seller, 'profile_url': profile_url}
     def work():
         def progress(info):
-            report_phase(str(info.get('phase') or 'Söker säljaren'),
+            phase = str(info.get('phase') or 'Söker säljaren')
+            label = {'starting': 'Förbereder säljsökning', 'fetching': 'Läser säljarens annonser',
+                     'full_progress': 'Djupanalyserar kort', 'quick_progress': 'Granskar nya kort',
+                     'ranking': 'Uppdaterar topp 5'}.get(phase, 'Söker säljarens bästa kort')
+            report_phase(label,
                          checked=info.get('done'), total=info.get('total'))
         result = resolve_fn(seller, market_items, analyze_fn=analyze_fn, sport='all',
                             credentials=credentials, profile_url=profile_url,

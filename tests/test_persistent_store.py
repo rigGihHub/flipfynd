@@ -83,3 +83,27 @@ def test_probe_database_reports_configured_but_unreachable(monkeypatch):
     assert status.configured is True
     assert status.durable is False
     assert "offline" in status.detail
+
+
+def test_namespace_connections_bound_connection_and_statement_waits(monkeypatch):
+    calls = []
+    class Cursor:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def execute(self, *args): pass
+        def fetchone(self): return ({'saved': True},)
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def cursor(self): return Cursor()
+    class Psycopg:
+        @staticmethod
+        def connect(url, **kwargs):
+            calls.append(kwargs)
+            return Connection()
+    monkeypatch.setattr(persistent_store, '_import_psycopg', lambda: Psycopg)
+    persistent_store.save_namespace('postgresql://test', 'test', {'saved': True})
+    assert persistent_store.load_namespace('postgresql://test', 'test', {}) == {'saved': True}
+    assert len(calls) == 4
+    assert all(call['connect_timeout'] == 5 and 'statement_timeout=10000' in call['options']
+               and 'lock_timeout=5000' in call['options'] for call in calls)
