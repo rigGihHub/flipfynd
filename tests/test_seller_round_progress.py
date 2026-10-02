@@ -54,7 +54,9 @@ def test_seller_worker_reports_real_phase_time_and_shorter_round(monkeypatch, tm
     token = jobs.new_token()
     checked = Event()
     def resolve(seller, items, **kwargs):
-        assert kwargs['full_limit'] == 4 and kwargs['public_pages'] == 2
+        assert kwargs['full_limit'] == 4 and kwargs['public_pages'] == 1
+        assert kwargs['public_attempts'] == 1
+        assert kwargs['public_fetcher'].keywords['timeout'] == 30
         cb = kwargs['progress_callback']
         cb({'phase':'full_start','done':0,'total':4,'percent':66})
         cb({'phase':'full_progress','done':1,'total':4,'percent':73})
@@ -110,3 +112,23 @@ def test_app_does_not_wait_for_legacy_seller_status_before_start():
     tree = ast.parse(Path('app.py').read_text())
     assert not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                    and node.func.id == 'seller_inventory_job_status' for node in ast.walk(tree))
+
+
+def test_timed_out_interactive_page_is_not_retried_and_preserves_cursor(monkeypatch):
+    monkeypatch.setattr(controller, 'load_checkpoint', lambda *a, **k: None)
+    monkeypatch.setattr(controller, 'save_checkpoint', lambda *a, **k: None)
+    calls = []
+    def fetch(*args, **kwargs):
+        calls.append(kwargs['start_page'])
+        return {'ok':False, 'status':'PROXY_TIMEOUT', 'items':[], 'next_page':5, 'pages_read':0}
+    old_items = {str(i): dict(item(i), saljare='seller', seller_user_id='6160765',
+                            source_type='tradera_public_seller_profile') for i in range(80)}
+    cp = {'next_page':5, 'pages_read':4, 'items':old_items}
+    result = controller.resolve_seller_top5('seller', [], analyze_fn=analyze, credentials=None,
+        profile_url='https://www.tradera.com/profile/items/6160765/seller', public_fetcher=fetch,
+        public_pages=1, public_attempts=1, full_limit=4, resume_checkpoint=cp, progress_callback=lambda _: None)
+    assert calls == [5]
+    assert result['public_checkpoint']['next_page'] == 5
+    assert len(result['public_checkpoint']['items']) == 80
+    assert result['resume_required'] is True
+    assert result['new_full_analysed'] <= 4

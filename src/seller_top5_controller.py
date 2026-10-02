@@ -352,6 +352,7 @@ def resolve_seller_top5(
     quick_limit: int = 60,
     full_limit: int = 10,
     public_pages: int = 120,
+    public_attempts: int = PUBLIC_PAGE_ATTEMPTS,
     progress_callback=None,
     database_url=None,
     resume_checkpoint=None,
@@ -453,12 +454,13 @@ def resolve_seller_top5(
         public_retry_count = 0
         total_listing_estimate = checkpoint.get("total_listing_estimate")
 
+        page_attempts = max(1, min(PUBLIC_PAGE_ATTEMPTS, int(public_attempts or 1)))
         for _ in range(batch_pages):
             # For public seller continuation, the Render proxy is the
             # authoritative fetch path. Passing current_page through unchanged
             # guarantees page 10 stays page 10 instead of being rebuilt by the
             # legacy direct Tradera URL helper.
-            for attempt in range(1, PUBLIC_PAGE_ATTEMPTS + 1):
+            for attempt in range(1, page_attempts + 1):
                 try:
                     page_result = _fetch_public(
                         public_fetcher,
@@ -477,14 +479,14 @@ def resolve_seller_top5(
                         "items": [],
                         "next_page": current_page,
                     }
-                if page_result.get("ok") or not _transient_public_failure(page_result) or attempt >= PUBLIC_PAGE_ATTEMPTS:
+                if page_result.get("ok") or not _transient_public_failure(page_result) or attempt >= page_attempts:
                     break
                 public_retry_count += 1
                 combined_progress({
                     "phase": "fetch_retry",
                     "page": current_page,
                     "attempt": attempt + 1,
-                    "max_attempts": PUBLIC_PAGE_ATTEMPTS,
+                    "max_attempts": page_attempts,
                     "found_count": len(stored_items),
                     "status": page_result.get("status"),
                 })

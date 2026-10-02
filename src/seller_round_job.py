@@ -1,5 +1,7 @@
 """A bounded seller round that never touches a Streamlit widget/session."""
+from functools import partial
 from src import resumable_search
+from src.seller_proxy_inventory import fetch_proxy_seller_inventory_batch
 from src.search_progress import report_phase, begin_phase
 
 
@@ -22,12 +24,15 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
                 label, unit = 'Läser säljarens annonser', 'sidor'
             if phase in {'full_start', 'quick_start', 'filter_start'}:
                 begin_phase(label, info.get('total') or 0, unit=unit)
-            report_phase(label, checked=info.get('done'), total=info.get('total'),
+            finalizing = label == 'Uppdaterar och sparar topp 5'
+            report_phase(label, checked=0 if finalizing else info.get('done'),
+                         total=0 if finalizing else info.get('total'),
                          unit=unit, fraction=(info.get('percent') or 0) / 100,
                          page=info.get('page'))
         result = resolve_fn(seller, market_items, analyze_fn=analyze_fn, sport='all',
                             credentials=credentials, profile_url=profile_url,
-                            progress_callback=progress, quick_limit=60, full_limit=4, public_pages=2,
+                            progress_callback=progress, quick_limit=60, full_limit=4, public_pages=1, public_attempts=1,
+                            public_fetcher=partial(fetch_proxy_seller_inventory_batch, timeout=30),
                             database_url=database_url, resume_checkpoint=checkpoint,
                             analysis_registry=registry or {})
         if profile_url and result.get('inventory_source') == 'LOCAL_MARKET':
@@ -50,6 +55,6 @@ def render_status(token, database_url=None):
             st.rerun(scope='app')
         else:
             render_search_progress(job)
-            st.caption('Högst 2 profilsidor och 4 djupanalyser per omgång. Tid kvar gäller aktuellt steg.')
+            st.caption('Högst 1 profilsida och 4 djupanalyser per omgång. Tid kvar gäller aktuellt steg.')
             st.caption('Status uppdateras varje sekund. Du kan byta fönster medan omgången fortsätter.')
     panel()
