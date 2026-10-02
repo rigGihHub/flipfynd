@@ -97,7 +97,7 @@ def start(token, params, fn, *, database_url=None, fresh=False):
             _JOBS[token] = final
             # Completed runs remain recoverable on disk. Bound process memory.
             finished = [key for key, value in _JOBS.items() if value['status'] != 'RUNNING']
-            for key in finished[:-8]:
+            for key in finished[:-2]:
                 _JOBS.pop(key, None)
         _save(token, final, database_url)  # Never hold the UI job lock during I/O.
     _EXECUTOR.submit(execute)

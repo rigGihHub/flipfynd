@@ -38,3 +38,23 @@ def test_process_interruption_is_not_an_eternally_running_job(monkeypatch, tmp_p
     token = jobs.new_token()
     jobs._save(token, {'status': 'RUNNING', 'params': {'sport': 'hockey'}})
     assert jobs.load(token)['status'] == 'INTERRUPTED'
+
+
+def test_evicted_completed_jobs_remain_recoverable(monkeypatch, tmp_path):
+    from src import resumable_search as jobs
+    import time
+    monkeypatch.setattr(jobs, '_ROOT', tmp_path)
+    monkeypatch.setattr(jobs, '_JOBS', {})
+    tokens = []
+    for index in range(4):
+        token = jobs.new_token()
+        tokens.append(token)
+        assert jobs.start(token, {}, lambda i=index: ([{'id': str(i)}], {}), fresh=True)
+        for _ in range(100):
+            if jobs.load(token)['status'] == 'COMPLETED':
+                break
+            time.sleep(.01)
+        assert jobs.load(token)['status'] == 'COMPLETED'
+    assert len(jobs._JOBS) == 2
+    assert tokens[0] not in jobs._JOBS
+    assert jobs.load(tokens[0])['results'] == [{'id': '0'}]

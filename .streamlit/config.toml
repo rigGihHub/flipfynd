@@ -7,5 +7,6 @@ textColor = "#f4ead7"
 font = "sans serif"
 
 [server]
-# Allow mobile browsers to reconnect to the same session after suspension.
-disconnectedSessionTTL = 3600
+# Brief mobile suspension keeps the session; longer returns use the durable
+# workspace/job recovery instead of retaining abandoned large sessions for hours.
+disconnectedSessionTTL = 300
