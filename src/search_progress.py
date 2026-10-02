@@ -19,31 +19,41 @@ def track_progress(callback):
         _CURRENT.reset(token)
 
 
-def report_phase(phase, *, checked=None, total=None):
+def report_phase(phase, *, checked=None, total=None, unit=None, fraction=None, page=None):
     state = _CURRENT.get()
     if state is None:
         return
     with state["lock"]:
+        if state.get("phase") != phase:
+            state.pop("checked", None)
+            state.pop("total", None)
+            state["phase_started"] = time.monotonic()
         state["phase"] = phase
         if checked is not None:
             state["checked"] = checked
         if total is not None:
             state["total"] = total
-        payload = {key: state[key] for key in ("phase", "requests", "checked", "total") if key in state}
+        if unit is not None:
+            state["unit"] = unit
+        if fraction is not None:
+            state["fraction"] = max(0, min(.99, fraction))
+        payload = {key: state[key] for key in ("phase", "requests", "checked", "total", "unit", "fraction") if key in state}
         payload["elapsed_seconds"] = round(time.monotonic() - state["started"], 1)
-        if state.get("total") and state.get("checked", 0) >= 3:
+        if page is not None:
+            payload["page"] = page
+        if state.get("total") and state.get("checked", 0) >= 1:
             # Measured phase throughput includes network, rate pacing and CPU.
             elapsed = time.monotonic() - state.get("phase_started", state["started"])
             payload["eta_seconds"] = round(elapsed / state["checked"] * max(0, state["total"] - state["checked"]))
         state["callback"](payload)
 
 
-def begin_phase(phase, total):
+def begin_phase(phase, total, *, unit=None):
     state = _CURRENT.get()
     if state is not None:
         with state["lock"]:
             state["phase_started"] = time.monotonic()
-            report_phase(phase, checked=0, total=total)
+            report_phase(phase, checked=0, total=total, unit=unit)
 
 
 def record_request(seconds):
@@ -52,6 +62,12 @@ def record_request(seconds):
         with state["lock"]:
             state["requests"] += 1
             state["request_seconds"] += max(0, seconds)
+            report_phase(state["phase"])
+
+
+def _duration(seconds):
+    seconds = max(0, int(seconds))
+    return f"{seconds // 60} min {seconds % 60} s" if seconds >= 60 else f"{seconds} s"
 
 
 def progress_text(job):
@@ -60,14 +76,18 @@ def progress_text(job):
     label = progress.get("phase") or "Förbereder sökning"
     total = progress.get("total") or 0
     checked = progress.get("checked") or 0
-    detail = f"{checked} / {total} kort · " if total else ""
-    detail += f"{progress.get('requests', 0)} eBay-anrop gjorda · {elapsed // 60} min {elapsed % 60} s"
+    detail = f"{checked} / {total} {progress.get("unit") or "kort"} · " if total else ""
+    if progress.get("page"):
+        detail += f"sida {progress["page"]} · "
+    detail += f"{progress.get('requests', 0)} eBay-anrop gjorda · tid hittills: {_duration(elapsed)}"
     eta = progress.get("eta_seconds")
     if eta is not None:
-        detail += f" · cirka {max(1, round(eta / 60))} min kvar i detta steg"
+        detail += f" · cirka {_duration(eta)} kvar i detta steg"
     else:
         detail += " · beräknar återstående tid"
-    return label, detail, min(.99, checked / total) if total else 0.0
+    if job.get("params", {}).get("kind") == "seller" and elapsed >= 20:
+        detail += " · externa svar kan förlänga tiden"
+    return label, detail, progress.get("fraction", min(.99, checked / total) if total else 0.0)
 
 
 def render_search_progress(job):

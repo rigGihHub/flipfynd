@@ -1,6 +1,6 @@
 """A bounded seller round that never touches a Streamlit widget/session."""
 from src import resumable_search
-from src.search_progress import report_phase
+from src.search_progress import report_phase, begin_phase
 
 
 def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=None,
@@ -11,18 +11,45 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
     params = {'kind': 'seller', 'seller': seller, 'profile_url': profile_url}
     def work():
         def progress(info):
-            phase = str(info.get('phase') or 'Söker säljaren')
-            label = {'starting': 'Förbereder säljsökning', 'fetching': 'Läser säljarens annonser',
-                     'full_progress': 'Djupanalyserar kort', 'quick_progress': 'Granskar nya kort',
-                     'ranking': 'Uppdaterar topp 5'}.get(phase, 'Söker säljarens bästa kort')
-            report_phase(label,
-                         checked=info.get('done'), total=info.get('total'))
+            phase = str(info.get('phase') or '')
+            if phase.startswith('full_'):
+                label, unit = 'Djupanalyserar kort', 'kort'
+            elif phase.startswith('quick_') or phase.startswith('filter_'):
+                label, unit = 'Granskar nya kort', 'kort'
+            elif phase in {'ranking', 'complete'} and 'done' in info:
+                label, unit = 'Uppdaterar och sparar topp 5', 'kort'
+            else:
+                label, unit = 'Läser säljarens annonser', 'sidor'
+            if phase in {'full_start', 'quick_start', 'filter_start'}:
+                begin_phase(label, info.get('total') or 0, unit=unit)
+            report_phase(label, checked=info.get('done'), total=info.get('total'),
+                         unit=unit, fraction=(info.get('percent') or 0) / 100,
+                         page=info.get('page'))
         result = resolve_fn(seller, market_items, analyze_fn=analyze_fn, sport='all',
                             credentials=credentials, profile_url=profile_url,
-                            progress_callback=progress, quick_limit=60, full_limit=8,
+                            progress_callback=progress, quick_limit=60, full_limit=4, public_pages=2,
                             database_url=database_url, resume_checkpoint=checkpoint,
                             analysis_registry=registry or {})
         if profile_url and result.get('inventory_source') == 'LOCAL_MARKET':
             result = dict(result, status='PROFILE_INCOMPLETE', rows=[])
         return [result], {}
     return resumable_search.start(token, params, work, database_url=database_url)
+
+
+def render_status(token, database_url=None):
+    """Refresh only the small status panel, rather than all results/storage."""
+    import streamlit as st
+    from src.search_progress import render_search_progress
+
+    @st.fragment(run_every='1s')
+    def panel():
+        job = resumable_search.load(token, database_url)
+        if not job:
+            st.warning('Kan inte läsa sökstatus. Sparade framsteg finns kvar.')
+        elif job.get('status') != 'RUNNING':
+            st.rerun(scope='app')
+        else:
+            render_search_progress(job)
+            st.caption('Högst 2 profilsidor och 4 djupanalyser per omgång. Tid kvar gäller aktuellt steg.')
+            st.caption('Status uppdateras varje sekund. Du kan byta fönster medan omgången fortsätter.')
+    panel()

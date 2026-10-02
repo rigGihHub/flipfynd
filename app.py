@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.103"
+APP_VERSION = "v0.14.104"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1778,13 +1778,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
             st.rerun()
     if _seller_job and _seller_job.get("status") == "RUNNING":
-        from src.search_progress import render_search_progress
-        st.info("Säljarens sökomgång fortsätter i bakgrunden. Du kan byta fönster.")
-        render_search_progress(_seller_job)
-        if st_autorefresh:
-            st_autorefresh(interval=3000, key="seller_round_poll")
-        else:
-            st.button("Visa säljsökningens status")
+        from src.seller_round_job import render_status as _render_seller_status
+        st.info("Säljarens sökomgång fortsätter i bakgrunden.")
+        _render_seller_status(_seller_job_token, DATABASE_URL)
     elif _seller_job and _seller_job.get("status") in {"FAILED", "INTERRUPTED"}:
         st.warning("Sökomgången avbröts på servern. Sparade kort och framsteg finns kvar. Fortsätt med nästa omgång.")
 

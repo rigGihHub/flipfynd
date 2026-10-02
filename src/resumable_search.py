@@ -28,7 +28,7 @@ def _save(token, payload, database_url=None):
     try:
         _ROOT.mkdir(exist_ok=True)
         path = _ROOT / (token + '.json')
-        tmp = path.with_suffix('.tmp')
+        tmp = path.with_name(token + '.' + uuid.uuid4().hex + '.tmp')
         tmp.write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding='utf-8')
         tmp.replace(path)
     except OSError:
@@ -68,9 +68,10 @@ def start(token, params, fn, *, database_url=None):
         existing = load(token, database_url)
         if existing and existing.get('status') in {'RUNNING', 'COMPLETED'}:
             return False
-        job = {'status': 'RUNNING', 'params': params, 'started_at': time.time()}
+        job = {'status': 'RUNNING', 'params': params, 'started_at': time.time(),
+               'progress': {'phase': 'Väntar på att sökningen ska starta', 'requests': 0}}
         _JOBS[token] = job
-        _save(token, job, database_url)
+    _save(token, job)
 
     def execute():
         from src.search_progress import track_progress
@@ -78,9 +79,12 @@ def start(token, params, fn, *, database_url=None):
         def progress(payload):
             with _LOCK:
                 job['progress'] = payload
-                if time.monotonic() - last_saved[0] >= 2:
-                    _save(token, job, database_url)
+                persist = time.monotonic() - last_saved[0] >= 2
+                copy = dict(job)
+                if persist:
                     last_saved[0] = time.monotonic()
+            if persist:
+                _save(token, copy)  # Progress must not wait for PostgreSQL.
         try:
             with track_progress(progress):
                 results, debug = fn()
@@ -88,13 +92,14 @@ def start(token, params, fn, *, database_url=None):
                      'debug': debug, 'completed_at': time.time()}
         except Exception as exc:
             final = {**job, 'status': 'FAILED', 'error_type': type(exc).__name__}
+        _save(token, final)  # Local recovery is ready before publishing completion.
         with _LOCK:
             _JOBS[token] = final
-            _save(token, final, database_url)
             # Completed runs remain recoverable on disk. Bound process memory.
             finished = [key for key, value in _JOBS.items() if value['status'] != 'RUNNING']
             for key in finished[:-8]:
                 _JOBS.pop(key, None)
+        _save(token, final, database_url)  # Never hold the UI job lock during I/O.
     _EXECUTOR.submit(execute)
     return True
 

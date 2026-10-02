@@ -112,7 +112,7 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source,
         quick_limit=quick_limit,
         full_limit=full_limit,
         quick_round_limit=SELLER_ROUND_QUICK_LIMIT,
-        full_round_limit=SELLER_ROUND_FULL_LIMIT,
+        full_round_limit=min(SELLER_ROUND_FULL_LIMIT, max(1, int(full_limit or 8))),
         analysis_registry=analysis_registry,
         progress_callback=combined_progress,
     )
@@ -120,7 +120,7 @@ def _rank(alias, items, *, analyze_fn, quick_limit, full_limit, source,
     result["inventory_source"] = source
     result["analysis_round"] = int((result.get("analysis_registry") or {}).get("run") or 0)
     result["round_quick_limit"] = SELLER_ROUND_QUICK_LIMIT
-    result["round_full_limit"] = SELLER_ROUND_FULL_LIMIT
+    result["round_full_limit"] = min(SELLER_ROUND_FULL_LIMIT, max(1, int(full_limit or 8)))
     return result
 
 
