@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.100"
+APP_VERSION = "v0.14.101"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1477,15 +1477,14 @@ st.markdown(
 st.markdown(
     """
     <div class="ff-hero">
-      <div class="ff-kicker">COLLECTOR MARKET SCANNER // EST. 2026</div>
       <h1>🃏 FLIPFYND</h1>
-      <div class="ff-muted">Hitta samlarkort med potential för vidareförsäljning – rankade efter pris, efterfrågan, säljsannolikhet och möjlig vinst.</div>
+      <div class="ff-muted">Hitta samlarkort att köpa och sälja vidare.</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 st.markdown(
-    f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; BUILD {RUNTIME_BUILD} &nbsp;•&nbsp; HOCKEY / FOTBOLL &nbsp;•&nbsp; TRADERA SCANNER</div>',
+    f'<div class="ff-status-strip">{APP_VERSION} &nbsp;•&nbsp; Hockey &amp; fotboll på Tradera</div>',
     unsafe_allow_html=True,
 )
 
@@ -1647,7 +1646,7 @@ _seller_search_needs_attention = (_seller_existing_status in {"INVENTORY_PARTIAL
                                   or int(_seller_existing_result.get("full_remaining") or 0) > 0)
 
 with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attention or bool(st.session_state.get("seller_top5_pending_request"))):
-    st.caption("Sök i korta omgångar: högst 3 profilsidor, 80 snabbanalyser och 12 djupanalyser per tryck. Framstegen och topplistan sparas.")
+    st.caption("Varje tryck kör en kort omgång. Topplistan och framstegen sparas.")
     _seller_previous_result = _seller_existing_result
     _seller_continue_inventory = str(_seller_previous_result.get("status") or "") in {"INVENTORY_PARTIAL", "PROFILE_INCOMPLETE"}
     _seller_has_saved_inventory = int(_seller_previous_result.get("inventory_count") or 0) > 0
@@ -1694,7 +1693,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
     if _seller_has_saved_inventory:
         st.caption(
             f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
-            "Nästa sökning behåller dem och fortsätter/uppdaterar samma säljare."
+            "Nästa omgång fortsätter härifrån."
         )
     if seller_top5_profile_url_resolved and jobs_available():
         try:
@@ -1958,7 +1957,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         if seller_top5_result.get("resume_required"):
             st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt – nästa omgång** för att försöka samma sida igen.")
         else:
-            st.info(f"Omgång klar · {_inventory_line}. Tryck på **Fortsätt – nästa omgång** ovan; sökningen fortsätter från sida {_next} utan att börja om.")
+            st.caption(f"Omgång klar. Nästa omgång fortsätter från sida {_next} utan att börja om.")
         _start_dbg = st.session_state.get("seller_controller_start_debug") or {}
         _diag_lines = [
             f"{_diag_code} | status={seller_top5_result.get('public_status')} | "
@@ -1994,8 +1993,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         _public_error = seller_top5_result.get("public_error")
         if _public_error:
             _diag_lines.append(f"FF-PUBLIC-ERROR | {_public_error}")
-        st.code("\n".join(_diag_lines), language=None)
-        st.caption("Felsökning – allt ligger i samma kopierbara ruta.")
+        with st.expander("Sökdetaljer och felsökning", expanded=False):
+            st.caption(_inventory_line)
+            st.code("\n".join(_diag_lines), language=None)
     elif seller_top5_result and _seller_result_status == "PROFILE_INCOMPLETE":
         st.caption("Profilen är inte färdigläst ännu. Fortsätt med knappen ovan.")
     if seller_top5_result and not (seller_top5_result.get("alternatives") or seller_top5_result.get("rows") or []):
@@ -2005,9 +2005,10 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             st.error(f"Kunde inte läsa annonser från Tradera-profilen ({_public_status}).")
             if _public_error:
                 st.caption(_public_error)
-            st.caption("Ingen Top 5 visas förrän minst en riktig annons har lästs in.")
-        elif _seller_result_status not in {"PROFILE_INCOMPLETE", "INVENTORY_PARTIAL"}:
-            st.warning("Sökningen gav ännu inga läsbara kortannonser. Försök igen; FlipFynd visar inte en tom körning som ett lyckat resultat.")
+            st.caption("Läs in säljarens annonser för att få en topplista.")
+        elif (_seller_result_status not in {"PROFILE_INCOMPLETE", "INVENTORY_PARTIAL"}
+              and not (seller_top5_result.get("analysis_registry") or {}).get("dismissed_keys")):
+            st.warning("Inga läsbara kortannonser hittades. Kontrollera profillänken och försök igen.")
     if (
         seller_top5_result
         and _seller_result_status != "PROFILE_INCOMPLETE"
@@ -2020,24 +2021,22 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         _find_rows = [row for row in _seller_display_rows
                       if row.get("analysis_level") == "full" and seller_result_tier(row) == "FIND"]
         st.markdown(f"### 🏆 Topp 5 hittills · {seller_name}")
-        st.caption("De bästa alternativen bland hittills analyserade annonser. Listan sparas och bättre alternativ ersätter lägre rankade kort i nästa omgång.")
-        st.caption("Ta bort ett alternativ för att direkt släppa in nästa rankade kort. Borttagna alternativ hålls undan tills du rensar säljsökningen.")
-        st.caption(f"{len(_find_rows)} verifierade fynd i listan. Övriga alternativ har osäkert underlag eller klarar inte köpkraven.")
+        st.caption("Bättre alternativ ersätter lägre rankade kort efter varje omgång.")
+        st.caption(f"{len(_find_rows)} verifierade fynd i listan. Övriga alternativ har osäkert underlag och behöver kontrolleras före köp.")
         _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
         _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
         st.caption(
-            f"{inv_count} annonser hittade · "
-            f"{_full_unique} unika djupanalyserade · {_full_remaining} återstår"
+            f"{inv_count} annonser · "
+            f"{_full_unique} djupanalyserade · {_full_remaining} kvar att djupanalysera"
         )
         if "new_full_analysed" in seller_top5_result:
             st.caption(
                 f"Omgång {int(seller_top5_result.get('analysis_round') or 1)} klar: "
                 f"{seller_top5_result['new_quick_analysed']} nya snabbanalyser · "
-                f"{seller_top5_result['new_full_analysed']} nya djupanalyser. "
-                "Topplistan uppdateras när bättre kandidater hittas."
+                f"{seller_top5_result['new_full_analysed']} nya djupanalyser."
             )
-        if "top5_new_count" in seller_top5_result:
-            st.caption(f"{int(seller_top5_result['top5_new_count'])} nya kort i topplistan denna omgång.")
+        if int(seller_top5_result.get("top5_new_count") or 0):
+            st.caption(f"{int(seller_top5_result['top5_new_count'])} nya alternativ på topp 5.")
         _result_funnel = seller_top5_result.get("analysis_funnel") or {}
         if _result_funnel and _seller_result_status != "INVENTORY_PARTIAL":
             with st.expander("Analystäckning och diagnostik", expanded=False):
@@ -2069,21 +2068,23 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         elif inventory_source == "LOCAL_MARKET":
             reason = seller_top5_result.get("fallback_reason")
             if reason == "NO_API_CREDENTIALS":
-                st.caption("Källa: redan inläst FlipFynd-data · Tradera API är inte konfigurerat.")
+                st.caption("Visar tidigare inlästa annonser. Säljarens hela utbud har inte hämtats.")
             elif reason == "API_FAILED":
                 api_status = seller_top5_result.get("api_status") or "okänt fel"
-                st.caption(f"Källa: redan inläst FlipFynd-data · API-fallback efter {api_status}.")
+                st.caption("Tradera svarade inte. Visar tidigare inlästa annonser.")
             else:
                 st.caption("Källa: redan inläst FlipFynd-data.")
         rows = _seller_display_rows
         rejected_count = int(seller_top5_result.get("domain_rejected_count") or 0)
         card_count = int(seller_top5_result.get("card_inventory_count") or 0)
         if rejected_count:
-            st.caption(f"{rejected_count} tydliga icke-kortannonser filtrerades bort. {card_count} kortkandidater återstod.")
-        if seller_top5_result.get("ranking_source") == "ORDINARY_FLIPFYND_RANK":
-            st.caption("Preliminär topplista bland hittills analyserade kort. Den använder samma analysmotor som ordinarie FlipFynd-sökningen.")
+            with st.expander("Urval av annonser", expanded=False):
+                st.caption(f"{rejected_count} annonser utan samlarkort bortsorterade · {card_count} kortannonser kvar.")
         if not rows:
-            st.info("Inga läsbara kort med giltigt pris har analyserats ännu. Fortsätt med nästa omgång.")
+            if (seller_top5_result.get("analysis_registry") or {}).get("dismissed_keys"):
+                st.info("Inga sparade alternativ återstår. Fortsätt söka, eller rensa säljsökningen för att visa borttagna kort igen.")
+            else:
+                st.info("Inga läsbara kort med giltigt pris har analyserats ännu. Fortsätt med nästa omgång.")
         elif len(rows) < 5:
             st.caption(f"{len(rows)} sparade alternativ återstår. Fortsätt söka för att få fler alternativ till listan.")
         for _position, row in enumerate(rows[:5], start=1):
@@ -2105,8 +2106,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 badge = "⚪ Alternativ · köpkraven är inte uppfyllda"
             st.markdown(f"#### #{_position} · {title}")
             _remove_key = _seller_dynamic_runtime.alternative_listing_key(row)
-            st.button("Ta bort från topp 5", key=f"seller_remove_{_remove_key}",
-                      on_click=_dismiss_seller_top5_alternative, args=(_remove_key,))
             _rank_score = float(row.get("rank_score") or 0)
             try:
                 if price is not None and float(price) > 0:
@@ -2123,10 +2122,8 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 )
             else:
                 st.markdown("**Nettovinst: ej beräkningsbar**")
-                st.caption(_profit["basis"].capitalize() + ".")
             render_asking_price_opportunity(row.get("asking_price_opportunity"))
             _opportunity_score = float(row.get("seller_opportunity_score") or _rank_score)
-            st.caption(f"Granskningsprioritet {_opportunity_score:.0f}/100")
             _signal_labels = {
                 "one_of_one": "1/1",
                 "serial_numbered": "Numrerat",
@@ -2155,13 +2152,14 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 if signal
             ]
             if _signals:
-                st.caption("Varför den prioriteras: " + " · ".join(_signals))
-            if _row_tier != "FIND":
-                st.caption("Prioriterad för kontroll – inte en köpsignal.")
+                st.caption("Signaler i annonsen: " + " · ".join(_signals))
             reason = str(row.get("reason") or "").strip()
-            if reason:
-                st.caption(reason)
             with st.expander("Analysdetaljer", expanded=False):
+                if reason:
+                    st.caption(reason)
+                if not _profit["available"]:
+                    st.caption(_profit["basis"].capitalize() + ".")
+                st.caption(f"Granskningsprioritet {_opportunity_score:.0f}/100")
                 st.caption(
                     f"Spelare {float(row.get('player_market_score') or 0):.0f}/100 · "
                     f"Market edge {float(row.get('market_edge') or 0):.0f}/100 · "
@@ -2187,10 +2185,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 _readiness = row.get("deal_readiness") or {}
                 if _readiness.get("blockers"):
                     st.caption("Inte köpklar: " + " · ".join(_readiness["blockers"][:3]))
-            if row.get("analysis_level") == "quick_fallback":
-                st.caption("Preliminär analys – djupanalys återstår.")
-            elif row.get("seller_deep_route") == "HIDDEN_FIND_EXPLORATION":
-                st.caption("Dolt fynd-urval: annonsen djupanalyserades trots svag rubrik. Detta är inte i sig en köpsignal.")
             if row.get("url"):
                 _ad_url = str(row.get("url") or "").replace('"', "%22")
                 st.markdown(
@@ -2200,6 +2194,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     f'text-decoration:none;font-weight:600;">Öppna annonsen ↗</a>',
                     unsafe_allow_html=True,
                 )
+            st.button("Ta bort från topp 5", key=f"seller_remove_{_remove_key}",
+                      on_click=_dismiss_seller_top5_alternative, args=(_remove_key,),
+                      help="Nästa sparade alternativ fyller platsen. Kortet hålls undan tills du rensar säljsökningen.")
             st.divider()
 
 
@@ -2213,8 +2210,6 @@ _advanced_terminal = st.checkbox(
     help="Öppnar hela analysterminalen med interna mått, jämförelser, kapitalverktyg och administration.",
     key="show_advanced_terminal",
 )
-if not _advanced_terminal:
-    st.caption("Enkel vy · avancerade poäng och metoddetaljer är dolda tills du ber om dem.")
 
 st.subheader("Vad ska jag köpa?")
 if repaired_categories:
@@ -2269,9 +2264,9 @@ _latest_window_count = len(_latest_window)
 
 st.caption(
     (
-        f"Totalt inlästa: {_total_loaded:,} annonser • "
+        f"{_total_loaded:,} annonser • "
         + " • ".join(_count_parts)
-        + f" • aktuell senaste-scan: {_latest_window_count:,} • {_latest_label} {_latest_fetch}"
+        + f" • {_latest_label} {_latest_fetch}"
     ).replace(",", " ")
 )
 
@@ -2291,11 +2286,6 @@ _detail_enriched_count = sum(
     1 for _item in data
     if _item.get("detail_enrichment_status") == "ok"
 )
-if _detail_enriched_count:
-    st.caption(
-        f"🔍 {_detail_enriched_count} annonser har berikats från själva Tradera-annonsen "
-        "med extra beskrivning, bilder och metadata när det varit möjligt."
-    )
 
 _fetch_status = st.session_state.get("fetch_status", "idle")
 _has_data = len(data) > 0
@@ -2321,8 +2311,7 @@ if st.button(
     start_fetch(fetch_category, True, "latest")
     st.rerun()
 st.caption(
-    "En knapp gör båda delarna: först hämtas nya annonser som kommit sedan sist, "
-    "därefter fortsätter FlipFynd automatiskt med äldre annonser som ännu inte lästs in."
+    "Hämtar nya annonser och fortsätter sedan med äldre annonser som ännu inte lästs in."
 )
 if _fetch_status == "running":
     st.info(fetch_progress_message() or "Hämtningen pågår… Annonser sparas sida för sida.")
@@ -2406,40 +2395,12 @@ def render_search_pipeline(debug, sport_label, max_price, search):
         st.warning("Ett specialfilter – numrerat, patch/relic eller autograf – sorterar bort alla annonser.")
 
 
-# Pedagogiskt huvudflöde. Hitta fynd låses under aktiv hämtning så användaren
-# aldrig behöver fundera på om analysen körs mot ett halvfärdigt dataset.
+# Keep the next action visible without repeating the whole onboarding flow.
 _flow_fetching = st.session_state.get("fetch_status") == "running"
 if not _has_data:
-    _flow_step = "1"
-    _flow_title = "HÄMTA ANNONSER"
-    _flow_text = "Det finns ännu inga annonser att analysera. Välj Hockey, Fotboll eller Båda ovan och hämta data först."
-elif _flow_fetching:
-    _flow_step = "2"
-    _flow_title = "VÄNTA TILLS HÄMTNINGEN ÄR KLAR"
-    _flow_text = "FlipFynd sparar annonser löpande, men Hitta fynd är låst tills pågående hämtning är färdig. Då analyseras ett stabilt dataset."
-else:
-    _flow_step = "3"
-    _flow_title = "HITTA FYND"
-    _flow_text = "Data är redo. Välj sport och budget. Börja med tom sökruta och utan avancerade filter, tryck sedan Hitta fynd."
-
-st.markdown(
-    f"""
-    <div class="ff-data-card">
-      <h3>🧭 SÅ FUNKAR FLÖDET</h3>
-      <p><b>1. Hämta</b> → FlipFynd läser in annonser.</p>
-      <p><b>2. Välj budget</b> → du behöver normalt inte röra avancerade filter.</p>
-      <p><b>3. Köp eller avstå</b> → börja med Bästa köpet just nu. Öppna detaljer bara när du vill förstå varför.</p>
-      <p><b>Just nu – steg {_flow_step}: {_flow_title}</b><br>{_flow_text}</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-if _flow_fetching:
-    st.info("⏳ Hämtning pågår. Hitta fynd låses automatiskt upp när hämtningen är klar.")
-elif _has_data:
-    st.success("✅ Annonsdata är redo. Du kan trycka Hitta fynd nu.")
-else:
-    st.warning("📥 Börja med att hämta annonser ovan. Hitta fynd blir aktiv när data finns och ingen hämtning pågår.")
+    st.info("Välj sport och läs in annonser ovan. Välj sedan budget och tryck Hitta fynd.")
+elif not _flow_fetching:
+    st.caption("Välj sport och budget. Lämna sökrutan tom för en bred sökning.")
 
 
 # Show the shared Browse allowance before any search, also in a fresh session.
@@ -2491,10 +2452,6 @@ with st.form("analysis_form"):
         help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",
     )
     effective_search = normalize_sport_category_search(search, sport)
-    st.caption(
-        "Sökningen prioriterar senaste annonserna och reserverar automatiskt en del av analysen för äldre sparade annonser. "
-        "Under Avancerade filter kan du låta hela arkivet konkurrera på samma villkor."
-    )
     if str(search or "").strip() and not str(effective_search or "").strip():
         st.caption(
             f"{sport_label} är redan valt ovan. FlipFynd söker därför i alla {sport_label.lower()}kort "
@@ -2502,6 +2459,7 @@ with st.form("analysis_form"):
         )
 
     with st.expander("Avancerade filter"):
+        st.caption("Sökningen prioriterar senaste annonserna. Ett urval av äldre sparade annonser ingår också.")
         include_older = st.checkbox(
             "Ta med äldre sparade annonser",
             key="search_archive",
@@ -2935,7 +2893,6 @@ if st.session_state.get("results") is not None:
             _unchecked_prices = int((st.session_state.get("debug") or {}).get("inventory_price_remaining") or 0)
             if _unchecked_prices:
                 st.warning(f"Ofullständig prisjämförelse: {_unchecked_prices} sökbara kort återstår. Resultaten gäller bara kontrollerade kort.")
-            st.caption("Ett tydligt förstaval – eller ett tydligt besked att avstå.")
             if simple_buy.get("status") == "READY" and simple_buy.get("card"):
                 card = simple_buy["card"]
                 st.success(f"### KÖP · {card['title']}")
@@ -3011,7 +2968,7 @@ if st.session_state.get("results") is not None:
             if not price_funnel:
                 st.error("Prisfunneln saknas i analysresultatet. Debug-fält: " + (", ".join(sorted(current_debug.keys())) or "inga"))
             if price_funnel:
-                with st.expander("💰 Prisresearch – felsökning", expanded=True):
+                with st.expander("💰 Prisresearch – felsökning", expanded=False):
                     ebay_ready = bool(current_debug.get("ebay_credentials_configured"))
                     st.write("eBay API: " + ("✅ konfigurerad" if ebay_ready else "❌ saknar EBAY_CLIENT_ID / EBAY_CLIENT_SECRET"))
                     from src.ebay_quota_ui import render_quota_status
@@ -5807,7 +5764,8 @@ fetch_state = load_fetch_state()
 
 st.divider()
 with st.expander("⚙️ Administration & data"):
-    st.caption("Uppdatera annonser med knappen högst upp. Här finns lagring och felsökning.")
+    st.caption(f"Version {APP_VERSION} · Build {RUNTIME_BUILD}")
+    st.caption(f"Senaste hämtningen: {_latest_window_count} annonser · {_detail_enriched_count} med extra annonsuppgifter")
 
     with st.expander("💾 Persistent lagring", expanded=False):
         persistence = storage_status(DATABASE_URL)
