@@ -33,7 +33,7 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
         if profile_url and result.get('inventory_source') == 'LOCAL_MARKET':
             result = dict(result, status='PROFILE_INCOMPLETE', rows=[])
         return [result], {}
-    return resumable_search.start(token, params, work, database_url=database_url)
+    return resumable_search.start(token, params, work, database_url=database_url, fresh=True)
 
 
 def render_status(token, database_url=None):

@@ -61,11 +61,11 @@ def load(token, database_url=None):
     return snapshot if isinstance(snapshot, dict) else None
 
 
-def start(token, params, fn, *, database_url=None):
+def start(token, params, fn, *, database_url=None, fresh=False):
     if not valid_token(token):
         raise ValueError('Invalid search token')
     with _LOCK:
-        existing = load(token, database_url)
+        existing = load(token, None if fresh else database_url)
         if existing and existing.get('status') in {'RUNNING', 'COMPLETED'}:
             return False
         job = {'status': 'RUNNING', 'params': params, 'started_at': time.time(),

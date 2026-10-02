@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.104"
+APP_VERSION = "v0.14.105"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1727,26 +1727,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             f"{int(_seller_previous_result.get('inventory_count') or 0)} annonser sparade hittills. "
             "Nästa omgång fortsätter härifrån."
         )
-    if seller_top5_profile_url_resolved and jobs_available():
-        try:
-            _bg_job = seller_inventory_job_status(
-                profile_url=seller_top5_profile_url_resolved,
-                seller=str(seller_top5_alias or "").strip(),
-            )
-            if _bg_job:
-                _bg_status = str(_bg_job.get("status") or "")
-                _bg_result = _bg_job.get("result") or {}
-                _bg_checkpoint = _bg_result.get("checkpoint") or {}
-                _bg_saved = int(_bg_result.get("inventory_count") or len(_bg_checkpoint.get("items") or {}))
-                _bg_next = int(_bg_checkpoint.get("next_page") or 1)
-                if _bg_status in {"QUEUED", "RUNNING"}:
-                    st.info(f"Bakgrundssökning pågår · {_bg_saved} unika annonser sparade · fortsätter från sida {_bg_next}")
-                elif _bg_status == "COMPLETED":
-                    st.success(f"Bakgrundsinläsning klar · {_bg_saved} unika annonser sparade")
-                elif _bg_status == "FAILED":
-                    st.warning("Bakgrundsinläsningen avbröts. Sparat checkpoint finns kvar och nästa körning kan fortsätta.")
-        except Exception:
-            pass
     if _seller_pending_request:
         alias = str(seller_top5_alias or "").strip()
         if not alias and not seller_top5_profile_url_resolved:
@@ -1775,7 +1755,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 database_url=DATABASE_URL, resolve_fn=_seller_controller_live.resolve_seller_top5,
             )
             st.session_state.pop("seller_top5_pending_request", None)
-            _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+            _workspace_recovery.persist_current(st.session_state, st.query_params)
             st.rerun()
     if _seller_job and _seller_job.get("status") == "RUNNING":
         from src.seller_round_job import render_status as _render_seller_status

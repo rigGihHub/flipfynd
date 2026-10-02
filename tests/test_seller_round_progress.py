@@ -83,3 +83,30 @@ def test_four_card_round_keeps_registry_and_rotates_to_unseen_cards():
     second = controller._rank('seller', inventory, analysis_registry=first['analysis_registry'], **args)
     assert 0 < len(calls) <= 4 and not initial & set(calls)
     assert second['full_unique_analysed'] > first['full_unique_analysed']
+
+
+def test_fresh_seller_job_does_not_lookup_database_before_start(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs, '_ROOT', tmp_path)
+    lookups = []
+    def unexpected(*args):
+        lookups.append(args)
+        raise AssertionError('New random seller token must not query database before starting')
+    monkeypatch.setattr(jobs, 'load_namespace', unexpected)
+    monkeypatch.setattr(jobs, 'save_namespace', lambda *args: None)
+    entered = Event()
+    def resolve(*args, **kwargs):
+        entered.set()
+        return {'rows': [], 'inventory_source': 'PROFILE'}
+    token = jobs.new_token()
+    assert seller_round_job.start(token, seller='seller', profile_url='', market_items=[],
+                                  analyze_fn=analyze, resolve_fn=resolve, database_url='postgresql://test')
+    assert entered.wait(1)
+    assert not lookups
+
+
+def test_app_does_not_wait_for_legacy_seller_status_before_start():
+    import ast
+    from pathlib import Path
+    tree = ast.parse(Path('app.py').read_text())
+    assert not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                   and node.func.id == 'seller_inventory_job_status' for node in ast.walk(tree))
