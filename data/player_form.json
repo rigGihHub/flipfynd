@@ -1,25 +1,21 @@
 {
-  "checked_at": "2026-10-03T05:54:10.155763+00:00",
+  "checked_at": "2026-10-03T05:59:23.629674+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-03",
-      "ok": false,
-      "error": "ReadTimeout"
+      "ok": true
     },
     {
       "name": "ESPN eng.1 2026-10-02",
-      "ok": false,
-      "error": "ReadTimeout"
+      "ok": true
     },
     {
       "name": "ESPN eng.1 2026-10-01",
-      "ok": false,
-      "error": "ReadTimeout"
+      "ok": true
     },
     {
       "name": "ESPN eng.1 2026-09-30",
-      "ok": false,
-      "error": "ReadTimeout"
+      "ok": true
     },
     {
       "name": "ESPN esp.1 2026-10-03",
@@ -135,8 +131,7 @@
     },
     {
       "name": "NHL 2026-10-03",
-      "ok": false,
-      "error": "ReadTimeout"
+      "ok": true
     },
     {
       "name": "NHL 2026-10-02",
