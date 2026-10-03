@@ -268,3 +268,23 @@ def test_url_snapshot_still_restores_without_browser_storage(monkeypatch, tmp_pa
     recovery.recover_ui(state, query, 'test-db')
     assert state['search_text'] == 'Gretzky'
     assert len(calls) == 1
+
+
+def test_snapshot_detaches_nested_results_without_deepcopy():
+    class JsonOnly(dict):
+        def __deepcopy__(self, memo):
+            raise AssertionError('An extra full result copy would increase peak memory')
+    original = {'results': [JsonOnly(title='card', nested={'price': 10})]}
+    saved = recovery.snapshot(original, {})
+    original['results'][0]['nested']['price'] = 20
+    assert saved['state']['results'][0]['nested']['price'] == 10
+
+
+def test_queued_backup_is_detached_from_live_state(monkeypatch, tmp_path):
+    monkeypatch.setattr(recovery, '_ROOT', tmp_path)
+    queued = []
+    monkeypatch.setattr(recovery, '_queue_backup', lambda token, value, db: queued.append(value))
+    state = {'results': [{'nested': {'price': 10}}]}
+    assert recovery.persist_current(state, {'view_run': jobs.new_token()}, 'test-db')
+    state['results'][0]['nested']['price'] = 99
+    assert queued[0]['state']['results'][0]['nested']['price'] == 10

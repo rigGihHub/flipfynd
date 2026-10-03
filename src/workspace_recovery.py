@@ -1,5 +1,4 @@
 """Per-browser recovery of UI state. Never serializes processes or credentials."""
-from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import math
 import hashlib
@@ -23,7 +22,9 @@ _BACKUP_ACTIVE = globals().get('_BACKUP_ACTIVE', set())
 def _queue_backup(token, value, database_url):
     # Coalesce changes and keep database latency off the Streamlit thread.
     with _LOCK:
-        _PENDING[token] = (database_url, deepcopy(value))
+        # save() already owns a detached JSON copy. Keep that copy rather than
+        # duplicating the entire workspace again while a search is finishing.
+        _PENDING[token] = (database_url, value)
         if token in _BACKUP_ACTIVE:
             return
         _BACKUP_ACTIVE.add(token)
@@ -55,8 +56,10 @@ ENUMS = {'search_sport': {'Hockey', 'Fotboll'},
 
 
 def snapshot(state, query):
-    values = {k: deepcopy(v) for k, v in dict(state).items()
+    values = {k: v for k, v in dict(state).items()
               if k in FIELDS or k.startswith(PREFIXES)}
+    # The JSON round trip below already detaches every nested value. A deepcopy
+    # before it retained another complete result set during serialization.
     # JSON only: no pickle, connection objects, action buttons or pending clicks.
     values = json.loads(json.dumps(values, ensure_ascii=False, default=lambda _: None))
     return {'schema': 1, 'state': values,

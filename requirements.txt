@@ -1,3 +1,4 @@
+# Cloud rebuild v0.14.120: bounded inventory cache and lower snapshot memory.
 streamlit==1.64.0
 # Match Community Cloud's Arrow workaround before Streamlit is imported.
 pyarrow==24.0.0

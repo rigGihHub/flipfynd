@@ -338,7 +338,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.119"
+APP_VERSION = "v0.14.120"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -721,7 +721,7 @@ def get_dataset_timestamp():
     except OSError:
         return None
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=2)
 def get_data(data_version=None):
     # data_version is intentionally part of the cache key. The Tradera fetcher
     # writes page-by-page, so a no-argument cache could otherwise keep showing
@@ -754,7 +754,7 @@ def get_data(data_version=None):
     return merged
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=1)
 def get_sold_comp_data():
     return _load_sold_comp_records()
 
@@ -2497,7 +2497,7 @@ if run:
         _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
     _job_fn = _ordinary_pipeline.analyze_data
     resumable_search.start(_search_token, _params,
-        lambda kwargs=_job_kwargs, fn=_job_fn: fn(**kwargs), database_url=DATABASE_URL)
+        lambda kwargs=_job_kwargs, fn=_job_fn: fn(**kwargs), database_url=DATABASE_URL, fresh=True)
     st.session_state["results"] = None
     st.session_state["debug"] = {}
     _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
