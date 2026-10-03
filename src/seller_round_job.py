@@ -4,6 +4,29 @@ from src.seller_proxy_inventory import fetch_proxy_seller_inventory_batch
 from src.search_progress import report_phase, begin_phase
 
 
+def clear_durable_search(seller, profile_url, database_url):
+    """Queue remote cleanup before the next round on the same search worker."""
+    if not database_url:
+        return
+    from src.seller_top5_controller import reset_seller_top5_search
+    from src.persistent_store import save_namespace
+
+    def clear():
+        # No Streamlit state in the worker. Serial execution prevents a slow
+        # old deletion from erasing checkpoints written by the next round.
+        reset_seller_top5_search(seller, profile_url, database_url=database_url, session={})
+        try:
+            save_namespace(database_url, 'seller_last_result', None)
+        except Exception:
+            pass
+        return [], {}
+
+    token = resumable_search.new_token()
+    resumable_search.start(token, {'kind': 'seller_reset'}, clear,
+                           fresh=True)
+    return token
+
+
 def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=None,
           checkpoint=None, registry=None, database_url=None, resolve_fn=None):
     if resolve_fn is None:

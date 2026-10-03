@@ -80,3 +80,34 @@ def test_submit_survives_browser_backup_restoration_rerun():
         assert app.session_state["seller_top5_result"] == result
         app.run()
         search.assert_called_once()
+
+
+def test_clear_then_submit_starts_fresh_and_keeps_page_visible():
+    result = {'seller': 'CarolinaHKY', 'status': 'OK', 'inventory_count': 0, 'rows': []}
+    with patch('src.seller_top5_controller.resolve_seller_top5', return_value=result) as search, \
+            patch('importlib.reload', side_effect=lambda module: module):
+        app = AppTest.from_file(Path(__file__).resolve().parents[1] / 'app.py', default_timeout=30).run()
+        app.text_input(key='seller_top5_alias').set_value('CarolinaHKY')
+        app.text_input(key='seller_top5_profile_url').set_value('https://www.tradera.com/profile/items/216047/')
+        app.button(key='seller_top5_run').click().run()
+        finish_round(app)
+        old_token = app.query_params['seller_run']
+        app.session_state['seller_top5_result'] = dict(result, inventory_count=80,
+            public_checkpoint={'next_page': 2, 'items': {'old': {'title': 'old'}}})
+        app.run()
+        app.button(key='seller_top5_clear').click().run()
+        assert not app.exception
+        assert 'seller_run' not in app.query_params
+        assert not app.text_input(key='seller_top5_alias').value
+        assert not app.text_input(key='seller_top5_profile_url').value
+        app.text_input(key='seller_top5_alias').set_value('CarolinaHKY')
+        app.text_input(key='seller_top5_profile_url').set_value('https://www.tradera.com/profile/items/216047/')
+        app.button(key='seller_top5_run').click().run()
+        assert not app.exception
+        assert any('FLIPFYND' in h.value for h in app.markdown)
+        finish_round(app)
+        assert search.call_count == 2
+        assert search.call_args.kwargs['resume_checkpoint'] == {}
+        assert search.call_args.kwargs['analysis_registry'] == {}
+        assert app.query_params['seller_run'] != old_token
+        assert app.session_state['seller_top5_result'] == result

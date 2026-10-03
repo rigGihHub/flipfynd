@@ -141,3 +141,36 @@ def test_completed_substep_does_not_claim_whole_round_has_zero_seconds_left():
                      'unit':'kort', 'eta_seconds':0}})
     assert 'delsteget klart; omgången fortsätter' in text
     assert '0 s kvar' not in text
+
+
+def test_slow_reset_does_not_block_ui_and_finishes_before_new_round(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs, '_ROOT', tmp_path)
+    entered, release, searched = Event(), Event(), Event()
+    order = []
+    def slow_reset(*args, **kwargs):
+        assert kwargs['session'] == {}
+        entered.set()
+        release.wait(3)
+        order.append('reset')
+    monkeypatch.setattr(controller, 'reset_seller_top5_search', slow_reset)
+    monkeypatch.setattr('src.persistent_store.save_namespace', lambda *args: order.append('delete'))
+    monkeypatch.setattr(jobs, 'save_namespace', lambda *args: None)
+    started = time.monotonic()
+    reset_token = seller_round_job.clear_durable_search('Test', 'https://example.com/profile', 'postgresql://test')
+    assert time.monotonic() - started < .5
+    assert entered.wait(1)
+    def resolve(*args, **kwargs):
+        order.append('search')
+        searched.set()
+        return {'status': 'OK'}
+    token = jobs.new_token()
+    try:
+        seller_round_job.start(token, seller='Test', profile_url='https://example.com/profile',
+                               market_items=[], analyze_fn=lambda *a, **k: {}, resolve_fn=resolve)
+        assert jobs.load(token)['status'] == 'RUNNING'
+        assert not searched.is_set()
+    finally:
+        release.set()
+    assert searched.wait(2)
+    assert jobs.load(reset_token)['status'] == 'COMPLETED'
+    assert order == ['reset', 'delete', 'search']

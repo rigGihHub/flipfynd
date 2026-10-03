@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.117"
+APP_VERSION = "v0.14.118"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -1590,16 +1590,15 @@ def _clear_seller_top5_ui():
     reset_seller_top5_search(
         old_alias,
         old_profile,
-        database_url=DATABASE_URL,
+        database_url=None,
         session=st.session_state,
     )
+    from src.seller_round_job import clear_durable_search
+    clear_durable_search(old_alias, old_profile, DATABASE_URL)
     for key in ("seller_top5_result", "seller_top5_alias", "seller_top5_profile_url", "seller_top5_pending_request"):
         st.session_state.pop(key, None)
-    if DATABASE_URL:
-        try:
-            save_persistent_namespace(DATABASE_URL, "seller_last_result", None)
-        except Exception:
-            pass
+    st.session_state.pop("_seller_durable_checked", None)
+    st.session_state.pop("seller_controller_start_debug", None)
     try:
         for key in ("seller", "seller_profile"):
             if key in st.query_params:
@@ -1766,14 +1765,16 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             st.query_params["seller_run"] = _seller_job_token
             _start_seller_round(
                 _seller_job_token, seller=alias, profile_url=seller_top5_profile_url_resolved,
-                market_items=list(get_data(get_data_version())), analyze_fn=_cached_seller_analysis,
+                market_items=list(data), analyze_fn=_cached_seller_analysis,
                 credentials=_resolve_tradera_api_credentials(), checkpoint=_visible_cp,
                 registry=_seller_previous_result.get("analysis_registry") or {},
                 database_url=DATABASE_URL, resolve_fn=_seller_controller_live.resolve_seller_top5,
             )
             st.session_state.pop("seller_top5_pending_request", None)
             _workspace_recovery.persist_current(st.session_state, st.query_params)
-            st.rerun()
+            # Show the status in this run. An immediate full rerun would clear
+            # the just-painted form and repeat startup/recovery work.
+            _seller_job = resumable_search.load(_seller_job_token)
     if _seller_job and _seller_job.get("status") == "RUNNING":
         from src.seller_round_job import render_status as _render_seller_status
         st.info("Säljarens sökomgång fortsätter i bakgrunden.")
