@@ -183,18 +183,22 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             delay = min(.15, .15 - (time.monotonic() - _LAST_BROWSE_AT))
             if delay > 0:
                 time.sleep(delay)
-            from src.search_progress import record_request
-            record_request(0)
-            response = session.get(
-                SEARCH_URL,
-                params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
-                headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
-                timeout=timeout,
-            )
+            # Pace dispatches, not entire HTTP round trips. Holding this lock
+            # over network I/O serialized all six inventory workers and kept
+            # later listings outside the bounded research window.
+            _check_rate_limit(rate_key)
             _LAST_BROWSE_AT = time.monotonic()
-            # Set the breaker before releasing the lock to other workers.
-            if getattr(response, "status_code", None) == 429:
-                _record_rate_limit(rate_key, response)
+        from src.search_progress import record_request
+        record_request(0)
+        response = session.get(
+            SEARCH_URL,
+            params={"q": query, "limit": max(1, min(int(limit), 50)), "filter": "buyingOptions:{FIXED_PRICE}"},
+            headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
+            timeout=timeout,
+        )
+        # Already dispatched calls may finish; subsequent dispatches must stop.
+        if getattr(response, "status_code", None) == 429:
+            _record_rate_limit(rate_key, response)
     else:
         from src.search_progress import record_request
         record_request(0)
