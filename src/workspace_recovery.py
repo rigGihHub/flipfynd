@@ -159,26 +159,31 @@ def recover_ui(state, query, database_url=None):
     from streamlit.components.v1 import declare_component
     import streamlit as st
     token = str(query.get('view_run') or '')
-    current = load(token, database_url)
+    requested_token = token
     first = state.get('_workspace_loaded') != token
+    # Once hydrated, the live state is authoritative. Re-reading a large
+    # snapshot (or retrying its database miss) on every widget change is wasteful.
+    current = load(token) if first else snapshot(state, query)
     if current and first:
         restore(state, query, current)
         state['_workspace_loaded'] = token
     if current and state.get('_workspace_browser_loaded') == token:
         persist_current(state, query, database_url)
-        current = load(token, database_url)
+        current = snapshot(state, query)
     wrapper = {'status': 'COMPLETED', 'params': {}, 'results': [], 'debug': {'workspace': current}}
     blob = encode_snapshot(token, wrapper) if current else ''
     component = declare_component('flipfynd_workspace_recovery', path=str(Path(__file__).with_name('workspace_browser_storage')))
     copy = component(token=token if valid_token(token) else '', blob=blob,
-                     widgets=(current or {}).get('state', {}), key='workspace_recovery', default=None)
+                     hydrated=state.get('_workspace_browser_loaded') == token,
+                     key='workspace_recovery', default=None)
     if not isinstance(copy, dict):
         return
     saved_token = copy.get('token')
     if not valid_token(token):
         token = saved_token if valid_token(saved_token) else uuid.uuid4().hex
         query['view_run'] = token
-        current = load(token, database_url)
+        # A newly generated token cannot have a remote backup.
+        current = load(token) if valid_token(saved_token) else None
         first = True
     if not current and saved_token == token and copy.get('blob'):
         decoded = decode_snapshot(token, copy['blob'])
@@ -186,11 +191,16 @@ def recover_ui(state, query, database_url=None):
         if recovered:
             save(token, recovered, database_url)
             current = recovered
+    # Browser/disk recovery usually already has the snapshot. Consult the
+    # database only after the handshake, while the loading clock is visible,
+    # and never query a token that we just generated.
+    if not current and database_url and (saved_token == token or valid_token(requested_token)):
+        current = load(token, database_url)
     if state.get('_workspace_browser_loaded') != token:
         restore(state, query, current or snapshot({}, {}), copy.get('drafts'),
                 replace=state.get('_workspace_loaded') != token)
         state['_workspace_loaded'] = token
         state['_workspace_browser_loaded'] = token
         persist_current(state, query, database_url)
-        if current or copy.get('drafts'):
-            st.rerun()
+        # The component response already triggered this run, and all restored
+        # values are applied before widgets. A second full rerun adds no value.

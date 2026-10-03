@@ -202,3 +202,69 @@ render({token:'b'.repeat(32),blob:'next run'});
 assert.equal(replies().length,2,'new identity needs recovery handshake');
 '''
     subprocess.run(['node', '-e', script, str(path)], check=True, capture_output=True, text=True)
+
+
+def test_browser_restore_does_not_restart_app_or_read_again(monkeypatch, tmp_path):
+    import streamlit as st
+    import streamlit.components.v1 as components
+    monkeypatch.setattr(recovery, '_ROOT', tmp_path)
+    token = jobs.new_token()
+    value = recovery.snapshot({'search_text': 'Messi'}, {})
+    recovery.save(token, value)
+    monkeypatch.setattr(components, 'declare_component', lambda *a, **k:
+        lambda **kwargs: {'token': token, 'drafts': {'at': time.time(), 'widgets': {'search_text': 'McDavid'}}})
+    monkeypatch.setattr(st, 'rerun', lambda: pytest.fail('Recovery is already before widgets'))
+    state, query = {}, {'view_run': token}
+    recovery.recover_ui(state, query)
+    assert state['search_text'] == 'McDavid'
+    monkeypatch.setattr(recovery, 'load', lambda *a, **k: pytest.fail('Hydrated sessions must use live state'))
+    recovery.recover_ui(state, query)
+    assert state['search_text'] == 'McDavid'
+
+
+def test_new_browser_token_never_queries_nonexistent_remote_backup(monkeypatch, tmp_path):
+    import streamlit.components.v1 as components
+    monkeypatch.setattr(recovery, '_ROOT', tmp_path)
+    monkeypatch.setattr(components, 'declare_component', lambda *a, **k: lambda **kwargs: {'token': ''})
+    monkeypatch.setattr(recovery, 'load_namespace', lambda *a, **k: pytest.fail('A new token has no backup'))
+    monkeypatch.setattr(recovery, '_queue_backup', lambda *a, **k: None)
+    state, query = {}, {}
+    recovery.recover_ui(state, query, 'test-db')
+    assert jobs.valid_token(query['view_run'])
+    assert state['_workspace_browser_loaded'] == query['view_run']
+
+
+def test_browser_snapshot_wins_before_slow_database(monkeypatch, tmp_path):
+    import streamlit.components.v1 as components
+    from src.browser_search_backup import encode_snapshot
+    monkeypatch.setattr(recovery, '_ROOT', tmp_path)
+    token = jobs.new_token()
+    value = recovery.snapshot({'search_text': 'Messi'}, {})
+    blob = encode_snapshot(token, {'status': 'COMPLETED', 'params': {}, 'results': [], 'debug': {'workspace': value}})
+    monkeypatch.setattr(components, 'declare_component', lambda *a, **k:
+        lambda **kwargs: {'token': token, 'blob': blob})
+    monkeypatch.setattr(recovery, 'load_namespace', lambda *a, **k: pytest.fail('Browser backup is already available'))
+    monkeypatch.setattr(recovery, '_queue_backup', lambda *a, **k: None)
+    state = {}
+    recovery.recover_ui(state, {'view_run': token}, 'test-db')
+    assert state['search_text'] == 'Messi'
+
+
+def test_url_snapshot_still_restores_without_browser_storage(monkeypatch, tmp_path):
+    import streamlit.components.v1 as components
+    monkeypatch.setattr(recovery, '_ROOT', tmp_path)
+    token = jobs.new_token()
+    calls = []
+    value = recovery.snapshot({'search_text': 'Gretzky'}, {})
+    def remote(*args):
+        calls.append(args)
+        return value
+    monkeypatch.setattr(recovery, 'load_namespace', remote)
+    monkeypatch.setattr(recovery, '_queue_backup', lambda *a, **k: None)
+    monkeypatch.setattr(components, 'declare_component', lambda *a, **k:
+        lambda **kwargs: {'token': token, 'error': 'STORAGE_UNAVAILABLE'})
+    state, query = {}, {'view_run': token}
+    recovery.recover_ui(state, query, 'test-db')
+    recovery.recover_ui(state, query, 'test-db')
+    assert state['search_text'] == 'Gretzky'
+    assert len(calls) == 1

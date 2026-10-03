@@ -54,6 +54,7 @@
     // Recovery is a handshake, not a notification for each saved snapshot.
     // Echoing a new blob/draft makes Streamlit rerun the entire app.
     const requestToken=args.token||'';
+    if(args.hydrated) repliedFor=requestToken;
     if(requestToken!==repliedFor) {repliedFor=requestToken;send('streamlit:setComponentValue',{value:reply,dataType:'json'});}
     send('streamlit:setFrameHeight',{height:0});
   });

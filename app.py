@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.114"
+APP_VERSION = "v0.14.115"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1256,6 +1256,8 @@ def analyze_data(*args, **kwargs):
     return _ordinary_pipeline.analyze_data(*args, **kwargs)
 
 
+from src.loading_status import render_loading_status
+render_loading_status()
 import src.workspace_recovery as _workspace_recovery
 _workspace_recovery.recover_ui(st.session_state, st.query_params, DATABASE_URL)
 ensure_state()

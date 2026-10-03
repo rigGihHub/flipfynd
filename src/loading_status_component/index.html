@@ -1,0 +1,59 @@
+<!doctype html><html><body><script>
+(() => {
+  const send=(type,fields)=>parent.postMessage({isStreamlitMessage:true,type,...fields},'*');
+  send('streamlit:componentReady',{apiVersion:1});
+  addEventListener('message',event=>{
+    if(event.source===parent && event.data.type==='streamlit:render')
+      send('streamlit:setFrameHeight',{height:0});
+  });
+  try {
+    const doc=parent.document;
+    const box=doc.createElement('div');
+    box.id='flipfynd-loading-status';
+    box.setAttribute('role','status');
+    // The seconds change without repeated screen-reader announcements.
+    box.setAttribute('aria-live','off');
+    Object.assign(box.style,{position:'fixed',top:'64px',left:'16px',right:'16px',
+      zIndex:'100000',padding:'10px 14px',background:'#21252c',color:'#f4ead7',
+      border:'1px solid #ed7634',borderRadius:'8px',font:'14px system-ui',
+      pointerEvents:'none',display:'none',boxShadow:'0 3px 12px #0006'});
+    doc.getElementById(box.id)?.remove();
+    doc.body.appendChild(box);
+    const key='flipfynd.open-times.v1';
+    let samples=[];
+    try {samples=JSON.parse(parent.sessionStorage.getItem(key)||'[]')
+      .filter(n=>Number.isFinite(n)&&n>0&&n<300).slice(-5);} catch(_){}
+    const estimate=samples.length>=3 ? [...samples].sort((a,b)=>a-b)[Math.floor(samples.length/2)] : null;
+    let first=true, started=null, finished=null;
+    function tick() {
+      const running=!!doc.querySelector('[data-testid="stStatusWidgetRunningIcon"]');
+      const now=Date.now();
+      if(running) {
+        if(started===null) {
+          started=first ? (parent.performance?.timeOrigin||now) : now;
+          finished=null;
+        }
+        const seconds=Math.max(0,(now-started)/1000);
+        box.style.display=seconds>=1?'block':'none';
+        let detail='Återstående tid är ännu okänd.';
+        if(first && estimate!==null) detail=seconds<estimate
+          ? `Tidigare öppningar tog cirka ${Math.round(estimate)} s totalt.`
+          : 'Tar längre tid än tidigare. Återstående tid är okänd.';
+        box.textContent=`${first?'Laddar Flipfynd':'Uppdaterar vyn'} · ${Math.floor(seconds)} s. ${detail}`;
+      } else if(started!==null) {
+        const seconds=(now-started)/1000;
+        if(first) {
+          samples.push(seconds);
+          try {parent.sessionStorage.setItem(key,JSON.stringify(samples.slice(-5)));} catch(_){}
+        }
+        first=false; started=null; finished=now;
+        box.textContent=`Vyn är klar · ${Math.round(seconds)} s`;
+        box.style.display=seconds>=1?'block':'none';
+      } else if(finished!==null && now-finished>5000) box.style.display='none';
+    }
+    tick();
+    const timer=setInterval(tick,250);
+    addEventListener('pagehide',()=>{clearInterval(timer);box.remove();},{once:true});
+  } catch(_) {} // A restricted iframe must never block the app.
+})();
+</script></body></html>
