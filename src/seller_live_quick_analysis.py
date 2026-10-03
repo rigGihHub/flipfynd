@@ -8,6 +8,7 @@ from typing import Callable, Iterable
 from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, seller_url
 from src.seller_collector_signals import collector_signals
 from src.seller_card_domain import seller_item_domain_check
+from src.seller_profit_display import seller_profit_evidence
 
 
 def _text(item): return str(item.get("titel") or item.get("title") or "").strip()
@@ -71,5 +72,7 @@ def quick_analyze_seller_inventory(anchor:dict,items:Iterable[dict]|None,*,analy
         if isinstance(result,dict):merged.update(result)
         merged=apply_seller_metadata(merged,prepared); collector=collector_signals(merged); score=_quick_score(merged); label,reason=_label(merged,score)
         rows.append({"title":_text(merged) or "Kortannons","price":_price(merged),"url":merged.get("lank") or merged.get("url") or merged.get("link"),"decision":merged.get("beslut") or merged.get("decision") or "SKIP","quick_score":score,"label":label,"reason":reason,"identity_ok":bool(merged.get("exact_identity_gate_supports_exact_comp_search")),"identity_score":_num(merged.get("exact_identity_gate_score")),"sold_comps":int(_num(merged.get("sold_comparable_count") or merged.get("sold_comps"))),"valuation_confidence":_num(merged.get("valuation_confidence_score")),"market_edge":_num(merged.get("market_edge_score")),"deal_score":_num(merged.get("deal_score")),"rank_score":_num(merged.get("rank_score")),"player_market_score":_num(merged.get("player_market_score")),"risk_adjusted_profit":_num(merged.get("risk_adjusted_profit")),"collector_signal_score":int(collector.get("score") or 0),"collector_signals":list(collector.get("signals") or []),"seller_alias":seller_alias(merged),"seller_id":seller_id(merged),"seller_url":seller_url(merged),"source_item":merged})
+    for row in rows:
+        row.update(seller_profit_evidence(row))
     rows.sort(key=_economic_rank_key); shortlist_rows=rows[:max(1,min(int(shortlist),5))]
     return {"status":"READY" if rows else "NO_RESULTS","analysed_count":len(rows),"failed_count":failed,"domain_rejected_count":domain_rejected,"rows":rows,"shortlist":shortlist_rows,"note":"Snabbanalysen prioriterar verifierad identitet, SOLD och positiv ekonomi före generell spelar-/samlarstatus."}

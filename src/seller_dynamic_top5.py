@@ -71,10 +71,19 @@ def preserve_dismissals(result, *previous):
     for field in ('rows', 'alternatives'):
         if field in result:
             result[field] = [row for row in result[field] or [] if allowed(row)]
+    if 'alternatives' in result and registry['alternative_rows']:
+        from src.seller_top5 import _seller_alternative_rank_key, _select_diverse_rows
+        # Current compact rows supersede older copies in the saved pool.
+        for row in result['alternatives']:
+            registry['alternative_rows'][alternative_listing_key(row)] = deepcopy(row)
+        result['alternatives'] = select_saved_top5(
+            registry, rank_key=_seller_alternative_rank_key, select_diverse=_select_diverse_rows)
+        registry['displayed_keys'] = [alternative_listing_key(row) for row in result['alternatives']]
     result['analysis_registry'] = registry
     if result.get('public_checkpoint'):
         result['public_checkpoint']['analysis_registry'] = merge_dismissed(
             result['public_checkpoint'].get('analysis_registry'), registry)
+        result['public_checkpoint']['analysis_registry']['displayed_keys'] = list(registry['displayed_keys'])
     result['dismissed_count'] = len(hidden)
     result['dismissed_player_count'] = len(registry['dismissed_players'])
     return result

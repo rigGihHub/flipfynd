@@ -13,6 +13,7 @@ from src.seller_identity import apply_seller_metadata, seller_alias, seller_id, 
 from src.comp_source_intelligence import exact_identity_query
 from src.ebay_browse_context import configured_credentials, fetch_configured_ebay_active_context
 from src.deal_readiness import assess_deal_readiness
+from src.seller_profit_display import seller_profit_evidence
 
 
 def _num(value, default=0.0):
@@ -168,4 +169,5 @@ def full_analyze_live_seller_item(
         "seller_id": seller_id(merged),
         "seller_url": seller_url(merged),
         "source_item": merged,
+        **seller_profit_evidence(merged),
     }

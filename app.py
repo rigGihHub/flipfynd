@@ -340,7 +340,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.126"
+APP_VERSION = "v0.14.127"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -367,10 +367,22 @@ if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
 import src.seller_analysis_registry as _seller_registry_runtime
 import src.seller_dynamic_top5 as _seller_dynamic_runtime
 import src.seller_checkpoint_store as _seller_checkpoint_runtime
-for _seller_module in (_seller_registry_runtime, _seller_dynamic_runtime, _seller_checkpoint_runtime):
+import src.seller_profit_display as _seller_profit_runtime
+import src.seller_live_quick_analysis as _seller_quick_runtime
+import src.seller_live_full_analysis as _seller_full_runtime
+import src.seller_top5 as _seller_top5_runtime
+for _seller_module in (_seller_profit_runtime, _seller_quick_runtime, _seller_full_runtime,
+                       _seller_registry_runtime, _seller_dynamic_runtime, _seller_checkpoint_runtime,
+                       _seller_top5_runtime):
     if getattr(_seller_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_seller_module)
         _seller_module._flipfynd_loaded_version = APP_VERSION
+build_seller_net_profit_summary = _seller_profit_runtime.build_seller_net_profit_summary
+known_negative_net_profit = _seller_profit_runtime.known_negative_net_profit
+full_analyze_live_seller_item = _seller_full_runtime.full_analyze_live_seller_item
+build_seller_top5 = _seller_top5_runtime.build_seller_top5
+seller_result_tier = _seller_top5_runtime.seller_result_tier
+seller_has_positive_purchase_price = _seller_top5_runtime.seller_has_positive_purchase_price
 SELLER_PRESENTATION_CONTRACT = "dynamic-top5-alternatives-v4"
 
 # Saved searches must also render with the current deployed UI after hot reload.
@@ -1895,7 +1907,8 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                       if row.get("analysis_level") == "full" and seller_result_tier(row) == "FIND"]
         st.markdown(f"### 🏆 Topp 5 hittills · {seller_name}")
         st.caption("Bättre alternativ ersätter lägre rankade kort efter varje omgång.")
-        st.caption(f"{len(_find_rows)} verifierade fynd i listan. Övriga alternativ har osäkert underlag och behöver kontrolleras före köp.")
+        st.caption(f"{len(_find_rows)} verifierade fynd i listan. Övriga visas också, även med negativ marginal eller osäkert underlag.")
+        st.caption("Verifierade fynd först. Inom samma bedömningsnivå väger beräknad nettomarginal tyngre än spelarsignaler; negativa marginaler kommer sist.")
         _full_unique = int(seller_top5_result.get("full_unique_analysed") or seller_top5_result.get("full_analysed") or 0)
         _full_remaining = int(seller_top5_result.get("full_remaining") or 0)
         st.caption(
@@ -1979,8 +1992,11 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             price = row.get("price")
             decision = str(row.get("decision") or "SKIP").upper()
             _row_tier = seller_result_tier(row)
+            _profit = build_seller_net_profit_summary(row)
             if known_negative_net_profit(row):
-                badge = "🔴 Avstå · negativ beräknad nettovinst"
+                badge = ("🔴 Negativ marginal mot begärda priser · osäkert scenario"
+                         if _profit['evidence_kind'] == 'ACTIVE_ASKING'
+                         else "🔴 Avstå · negativ beräknad nettovinst")
             elif row.get("analysis_level") != "full":
                 badge = "⚪ Preliminärt alternativ · djupanalys återstår"
             elif _row_tier == "FIND":
@@ -2022,7 +2038,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     st.markdown(badge)
             except (TypeError, ValueError):
                 st.markdown(badge)
-            _profit = build_seller_net_profit_summary(row)
             if _profit["available"]:
                 st.markdown(
                     f"**{_profit['label']}: {_profit['value']:+.0f} kr** · "

@@ -27,6 +27,7 @@ from src.seller_profit_display import (
     known_negative_net_profit,
     known_positive_net_profit,
     positive_active_price_indication,
+    seller_profit_evidence,
 )
 from src.seller_recall_diagnostics import build_seller_coverage_funnel
 from src.seller_analysis_registry import (
@@ -225,10 +226,12 @@ def _seller_opportunity_rank_key(row: dict):
 
 def _seller_alternative_rank_key(row: dict):
     key = _seller_opportunity_rank_key(row)
+    summary = build_seller_net_profit_summary(row)
+    margin = summary["value"] if summary["available"] else 0.0
     # Verified finds lead; losses remain visible only below other alternatives.
     # Fast candidates never become verified finds just by entering this list.
     return (not known_negative_net_profit(row), key[0],
-            row.get("analysis_level") == "full", *key[1:],
+            margin, row.get("analysis_level") == "full", *key[1:],
             -_num(row.get("price")))
 
 def _rank_without_player_bonus(row):
@@ -441,6 +444,7 @@ def _fallback_row(qrow: dict, alias: str) -> dict:
         "sport": qrow.get("sport"),
         "seller": alias, "source_item": qrow.get("source_item") or {},
         "analysis_level": "quick_fallback",
+        **seller_profit_evidence(qrow),
     }
 
 

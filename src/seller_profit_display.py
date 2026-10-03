@@ -4,6 +4,24 @@ from __future__ import annotations
 from math import isfinite
 
 
+PROFIT_EVIDENCE_FIELDS = (
+    "net_profit_estimate", "estimated_net_profit", "valuation_display_safe",
+    "practical_price_source", "asking_price_opportunity", "asking_net_margin",
+)
+
+
+def seller_profit_evidence(row: dict | None) -> dict:
+    """Carry economics through compact results and older saved snapshots.
+
+    Explicit compact values (including zero, False and None) win over the
+    original source. Only absent fields are recovered from the source.
+    """
+    row = row or {}
+    source = row.get("source_item") or {}
+    return {key: row[key] if key in row else source[key]
+            for key in PROFIT_EVIDENCE_FIELDS if key in row or key in source}
+
+
 def _number(value):
     if isinstance(value, bool):
         return None
@@ -22,7 +40,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
     Risk-adjusted profit is deliberately not used: it is a ranking input, not
     the user's actual money outcome.
     """
-    row = row or {}
+    row = seller_profit_evidence(row)
     net_profit = _number(row.get("net_profit_estimate"))
     if net_profit is None:
         net_profit = _number(row.get("estimated_net_profit"))
