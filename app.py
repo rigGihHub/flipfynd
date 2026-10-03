@@ -231,6 +231,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+from src.loading_status import render_loading_status
+render_loading_status()
+_startup_notice = st.empty()
+_startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
@@ -334,7 +338,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.118"
+APP_VERSION = "v0.14.119"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -1257,8 +1261,6 @@ def analyze_data(*args, **kwargs):
     return _ordinary_pipeline.analyze_data(*args, **kwargs)
 
 
-from src.loading_status import render_loading_status
-render_loading_status()
 import src.workspace_recovery as _workspace_recovery
 _workspace_recovery.recover_ui(st.session_state, st.query_params, DATABASE_URL)
 ensure_state()
@@ -1510,6 +1512,7 @@ if st.session_state.get("fetch_last_message"):
         live_message = fetch_progress_message()
         st.info(live_message or message)
 
+_startup_notice.empty()
 data = get_data(get_data_version())
 if not isinstance(data, list):
     data = []
