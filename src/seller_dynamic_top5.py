@@ -64,6 +64,8 @@ def preserve_dismissals(result, *previous):
                            (value.get('public_checkpoint') or {}).get('analysis_registry')])
     registry = merge_dismissed(result.get('analysis_registry'), *registries)
     hidden = set(registry['dismissed_keys'])
+    if not hidden and not registry['dismissed_players']:
+        return result
     def allowed(row):
         return alternative_listing_key(row) not in hidden and not player_is_dismissed(row, registry)
     for field in ('rows', 'alternatives'):

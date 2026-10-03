@@ -233,3 +233,9 @@ def test_continue_button_checks_live_job_instead_of_staying_disabled(monkeypatch
     app.button(key='seller_top5_run').click().run()
     assert not app.exception
     assert any('ingen extra omgång' in info.value for info in app.info)
+
+
+def test_no_removals_leaves_original_result_contract_unchanged():
+    from src.seller_dynamic_top5 import preserve_dismissals
+    original = {'status':'OK', 'inventory_count':0, 'rows':[]}
+    assert preserve_dismissals(original) == original
