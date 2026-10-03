@@ -1028,7 +1028,8 @@ def _install_playwright_chromium():
     egen browser-bundle i den skrivbara användarcachen och försöker igen.
     """
     env = os.environ.copy()
-    env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(Path.home() / ".cache" / "ms-playwright"))
+    # Inherit the same environment as the running Playwright driver. Forcing
+    # ~/.cache here alone installs elsewhere when XDG_CACHE_HOME is configured.
 
     completed = subprocess.run(
         [sys.executable, "-m", "playwright", "install", "chromium"],
@@ -1060,31 +1061,26 @@ def _launch_chromium(playwright, headless=True):
         ],
     }
 
+    errors = []
     if system_chromium:
-        launch_kwargs["executable_path"] = system_chromium
+        try:
+            return playwright.chromium.launch(**launch_kwargs, executable_path=system_chromium)
+        except Exception as exc:
+            errors.append(("System-Chromium", exc))
 
+    bundled = playwright.chromium.executable_path
     try:
-        return playwright.chromium.launch(**launch_kwargs)
-    except Exception as exc:
-        message = str(exc)
-
-        if "Executable doesn't exist" in message or "playwright install" in message:
+        if not Path(bundled).is_file():
             _install_playwright_chromium()
-            try:
-                return playwright.chromium.launch(
-                    headless=headless,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                    ],
-                )
-            except Exception as retry_exc:
-                raise RuntimeError(
-                    "Chromium saknas eller kunde inte startas efter automatisk installation. "
-                    "Se hämtloggen för detaljer."
-                ) from retry_exc
-
-        raise
+        # Explicitly launch the installed full Chromium binary. A default
+        # headless launch may instead select a separate headless-shell bundle.
+        return playwright.chromium.launch(**launch_kwargs, executable_path=bundled)
+    except Exception as exc:
+        errors.append(("Playwright-Chromium", exc))
+        details = "\n".join(f"{name}: {error}" for name, error in errors)
+        raise RuntimeError(
+            "Chromium kunde inte startas. Detaljer från installation/start:\n" + details
+        ) from exc
 
 
 def fetch_tradera_category(
