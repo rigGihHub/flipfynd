@@ -1,5 +1,4 @@
 """A bounded seller round that never touches a Streamlit widget/session."""
-from functools import partial
 from src import resumable_search
 from src.seller_proxy_inventory import fetch_proxy_seller_inventory_batch
 from src.search_progress import report_phase, begin_phase
@@ -32,7 +31,7 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
         result = resolve_fn(seller, market_items, analyze_fn=analyze_fn, sport='all',
                             credentials=credentials, profile_url=profile_url,
                             progress_callback=progress, quick_limit=60, full_limit=4, public_pages=1, public_attempts=1,
-                            public_fetcher=partial(fetch_proxy_seller_inventory_batch, timeout=30),
+                            public_fetcher=fetch_proxy_seller_inventory_batch,
                             database_url=database_url, resume_checkpoint=checkpoint,
                             analysis_registry=registry or {})
         if profile_url and result.get('inventory_source') == 'LOCAL_MARKET':

@@ -56,7 +56,7 @@ def test_seller_worker_reports_real_phase_time_and_shorter_round(monkeypatch, tm
     def resolve(seller, items, **kwargs):
         assert kwargs['full_limit'] == 4 and kwargs['public_pages'] == 1
         assert kwargs['public_attempts'] == 1
-        assert kwargs['public_fetcher'].keywords['timeout'] == 30
+        assert kwargs['public_fetcher'] is seller_round_job.fetch_proxy_seller_inventory_batch
         cb = kwargs['progress_callback']
         cb({'phase':'full_start','done':0,'total':4,'percent':66})
         cb({'phase':'full_progress','done':1,'total':4,'percent':73})
