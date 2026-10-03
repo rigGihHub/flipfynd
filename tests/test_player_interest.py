@@ -111,3 +111,13 @@ def test_negative_legend_does_not_outrank_verified_positive_economics():
     legend = dict(positive,title='2023 Upper Deck Wayne Gretzky #1',net_profit_estimate=-10,
                   risk_adjusted_profit=-10,rank_score=100,deal_score=100)
     assert _seller_alternative_rank_key(positive) > _seller_alternative_rank_key(legend)
+
+
+def test_dismissal_identity_uses_explicit_name_not_product_words():
+    assert row_player({'title':'2022 Panini Prizm #357 Kyle Philips RC (10-X1-NFLTITANS)',
+                       'source_item':{'player_name':'Renditions Autographs'}}) == 'Kyle Philips'
+    assert row_player({'title':'2023 Upper Deck #RR35 William Dufour',
+                       'source_item':{'player_name':'Renditions Autographs'}}) == 'William Dufour'
+    assert row_player({'title':'2012 Certified #FOGBS2 Bren',
+                       'source_item':{'player_name':'Die Cut'}}) is None
+    assert row_player({'title':'2023 Upper Deck #201 Rookie Renditions'}) is None

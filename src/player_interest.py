@@ -5,6 +5,7 @@ Signals never alter a price estimate, profit, BUY evidence gate or max bid.
 from datetime import datetime, timezone
 from functools import lru_cache
 import json
+import re
 from pathlib import Path
 
 from src.player_market import normalize_player_name, get_player_context, match_player, _fold
@@ -35,15 +36,33 @@ def _identify_title(title):
         match = match_player(title, sport)
         if match['confidence'] == 'high':
             return match['name']
+    # Unknown players can still be dismissed when the full name is explicitly
+    # placed after a card number. Never use product words as a player identity.
+    suffix = re.search(r"#[A-Za-z0-9-]+\s+(.+)$", title)
+    if suffix:
+        name = re.split(r"\s+RC\b|\s*\(", suffix.group(1))[0].strip()
+        if _safe_name(name):
+            return name
     return None
+
+
+def _safe_name(name):
+    words = str(name or '').split()
+    product = {'rookie', 'renditions', 'autographs', 'autograph', 'patch', 'jersey',
+               'fabric', 'game', 'mirror', 'red', 'team', 'die', 'cut', 'guns',
+               'young', 'deck', 'upper', 'certified', 'signature', 'silver', 'script'}
+    return (2 <= len(words) <= 4 and not product.intersection(w.casefold() for w in words)
+            and all(re.fullmatch(r"[^\W\d_][^\W\d_’'\-]*(?:[’'\-][^\W\d_]+)*", w) for w in words))
 
 
 def row_player(row):
     source = row.get('source_item') or {}
-    name = row.get('player_name') or source.get('player_name')
+    title = row.get('title') or source.get('titel') or source.get('title') or row.get('titel') or ''
+    name = _identify_title(str(title))
     if not name:
-        title = row.get('title') or source.get('titel') or source.get('title') or row.get('titel') or ''
-        name = _identify_title(str(title))
+        explicit = row.get('player_name') or source.get('player_name')
+        if _safe_name(explicit):
+            name = explicit
     return normalize_player_name(name) if name else None
 
 

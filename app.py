@@ -1980,7 +1980,8 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 st.button("Ta bort spelaren", key=f"seller_remove_player_{_remove_key}",
                           on_click=_dismiss_seller_top5_alternative, args=(_remove_key, True),
                           disabled=not bool(_remove_player),
-                          help=f"Göm alla kort med {_remove_player or 'spelaren'} tills säljsökningen rensas.")
+                          help=(f"Göm alla kort med {_remove_player} tills säljsökningen rensas."
+                                if _remove_player else "Spelaren är inte säkert identifierad. Använd Ta bort kortet."))
             _interest = row_interest(row)
             if _interest["legend"]:
                 st.caption(f"🏆 Legend · +{_interest['legend_bonus']:.0f} i granskningsprioritet")
