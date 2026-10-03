@@ -200,6 +200,8 @@ def test_late_worker_completion_cannot_restore_removed_card_or_player():
     worker = deepcopy(original)
     removed = dismiss_seller_alternative(original, '0')
     merged = preserve_dismissals(worker, removed)
+    from_checkpoint = preserve_dismissals(dict(worker, public_checkpoint=removed['public_checkpoint']))
+    assert '0' not in ids(from_checkpoint['rows'])
     assert '0' not in ids(merged['rows'])
     assert '0' not in ids(merged['alternatives'])
     assert '0' in merged['public_checkpoint']['analysis_registry']['dismissed_keys']
@@ -222,9 +224,12 @@ def test_continue_button_checks_live_job_instead_of_staying_disabled(monkeypatch
     monkeypatch.setattr(seller_round_job, 'start', must_not_start)
     app = AppTest.from_file(str(Path('app.py').resolve()), default_timeout=30)
     app.query_params['seller_run'] = token
+    app.session_state['seller_top5_result'] = {'seller':'Cardland', 'status':'INVENTORY_PARTIAL', 'inventory_count':5, 'public_next_page':2}
     app.run()
     assert not app.exception
     assert not app.button(key='seller_top5_run').disabled
+    assert not any('Omgång klar.' in caption.value for caption in app.caption)
+    assert any('föregående omgång' in caption.value for caption in app.caption)
     app.button(key='seller_top5_run').click().run()
     assert not app.exception
     assert any('ingen extra omgång' in info.value for info in app.info)

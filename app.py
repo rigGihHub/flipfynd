@@ -334,14 +334,15 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.116"
+APP_VERSION = "v0.14.117"
+import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
 import src.search_progress as _progress_runtime
 import src.description_price_identity as _description_identity_runtime
 import src.tradera_purchase_cost as _purchase_cost_runtime
-for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, _progress_runtime, _description_identity_runtime, _purchase_cost_runtime, resumable_search):
+for _literal_module in (_literal_parser_runtime, _literal_research_runtime, _literal_ui_runtime, _progress_runtime, _description_identity_runtime, _purchase_cost_runtime, resumable_search, _player_interest_runtime):
     if getattr(_literal_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_literal_module)
         _literal_module._flipfynd_loaded_version = APP_VERSION
@@ -1628,6 +1629,8 @@ if not st.session_state.get("seller_top5_result") and DATABASE_URL and not st.qu
                     _durable_cp = _seller_top5_controller.load_checkpoint(
                         _restore_key, session=st.session_state, database_url=DATABASE_URL
                     )
+                    _saved_result = _seller_dynamic_runtime.preserve_dismissals(
+                        _saved_result, {"analysis_registry": (_durable_cp or {}).get("analysis_registry")})
                     _saved_cp = _saved_result.get("public_checkpoint") or {}
                     if isinstance(_durable_cp, dict) and int(_durable_cp.get("next_page") or 0) > int(_saved_cp.get("next_page") or 0):
                         _saved_result["public_checkpoint"] = _durable_cp
@@ -1660,6 +1663,9 @@ if _seller_job and (_seller_job.get("params") or {}).get("kind") == "seller":
             _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
 
 _seller_existing_result = st.session_state.get("seller_top5_result") or {}
+if _seller_existing_result:
+    _seller_existing_result = _seller_dynamic_runtime.preserve_dismissals(_seller_existing_result)
+    st.session_state["seller_top5_result"] = _seller_existing_result
 # The durable namespace can lag one click behind the in-session crawl result.
 # Prefer whichever checkpoint has progressed furthest so "Sök vidare" cannot
 # regress from page 10 back to the older page-1/9 block.
@@ -1677,6 +1683,9 @@ try:
             and _seller_existing_result):
         _seller_existing_result = _seller_dynamic_runtime.preserve_dismissals(
             _persisted_result, _seller_existing_result)
+        st.session_state["seller_top5_result"] = _seller_existing_result
+    if _seller_existing_result and isinstance(_persisted_result, dict) and _persisted_result:
+        _seller_existing_result = _seller_dynamic_runtime.preserve_dismissals(_seller_existing_result, _persisted_result)
         st.session_state["seller_top5_result"] = _seller_existing_result
 except Exception:
     pass
@@ -1797,7 +1806,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         else:
             _inventory_line = f"{_saved} inlästa · {_pages} sidor lästa · fortsätter från sida {_next}"
         _diag_code = str(seller_top5_result.get("diagnostic_code") or "FF-SELLER-PARTIAL")
-        if seller_top5_result.get("resume_required"):
+        if _seller_job and _seller_job.get("status") == "RUNNING":
+            st.caption("Resultaten nedan är från föregående omgång. Den nya omgången pågår fortfarande.")
+        elif seller_top5_result.get("resume_required"):
             st.warning(f"Sökningen pausades av ett hämtningsfel · {_inventory_line}. Tryck på **Fortsätt – nästa omgång** för att försöka samma sida igen.")
         else:
             st.caption(f"Omgång klar. Nästa omgång fortsätter från sida {_next} utan att börja om.")

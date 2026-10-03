@@ -121,3 +121,14 @@ def test_dismissal_identity_uses_explicit_name_not_product_words():
     assert row_player({'title':'2012 Certified #FOGBS2 Bren',
                        'source_item':{'player_name':'Die Cut'}}) is None
     assert row_player({'title':'2023 Upper Deck #201 Rookie Renditions'}) is None
+
+
+def test_interest_identity_does_not_run_discarded_fuzzy_matching(monkeypatch):
+    from src import player_interest as interest, player_market
+    interest._identify_title.cache_clear()
+    def fuzzy_must_not_run(*args, **kwargs):
+        raise AssertionError('Form ranking accepts exact matches only')
+    monkeypatch.setattr(player_market, 'SequenceMatcher', fuzzy_must_not_run)
+    assert interest.row_player({'title': '2023 Upper Deck #123 Connor McDavid'}) == 'Connor McDavid'
+    assert interest.row_player({'title': '2023 Upper Deck #123 Unknown Player'}) == 'Unknown Player'
+    assert interest.row_player({'title': '2023 Upper Deck Mystery insert'}) is None

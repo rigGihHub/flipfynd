@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-from src.player_market import normalize_player_name, get_player_context, match_player, _fold
+from src.player_market import normalize_player_name, get_player_context, load_player_market, _fold
 from src.player_momentum import normalize_momentum_event, _parse_dt
 
 DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
@@ -30,12 +30,26 @@ def _load(filename):
     return _read_data(filename, modified_ns)
 
 
+@lru_cache(maxsize=1)
+def _exact_player_variants():
+    market = load_player_market()
+    variants = []
+    for sport in ('hockey', 'football'):
+        for name in market.get(sport, {}):
+            names = [name, *[alias for alias, canonical in market.get('aliases', {}).items()
+                            if canonical == name]]
+            variants.extend((f' {_fold(alias)} ', name) for alias in names if _fold(alias))
+    return tuple(variants)
+
+
 @lru_cache(maxsize=4096)
 def _identify_title(title):
-    for sport in ('hockey', 'football'):
-        match = match_player(title, sport)
-        if match['confidence'] == 'high':
-            return match['name']
+    # match_player's fuzzy route only returns medium confidence, which this
+    # feature never accepts. Avoid paying that cost for every unknown listing.
+    folded = f' {_fold(title)} '
+    for variant, name in _exact_player_variants():
+        if variant in folded:
+            return name
     # Unknown players can still be dismissed when the full name is explicitly
     # placed after a card number. Never use product words as a player identity.
     suffix = re.search(r"#[A-Za-z0-9-]+\s+(.+)$", title)
