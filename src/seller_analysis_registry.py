@@ -43,6 +43,8 @@ def normalize_registry(value: dict | None) -> dict:
         "run": max(0, int(value.get("run") or 0)),
         "dismissed_keys": sorted({str(key) for key in value.get("dismissed_keys", [])
                                   if isinstance(key, (str, int)) and str(key).strip()}),
+        "dismissed_players": sorted({str(name) for name in value.get("dismissed_players", [])
+                                     if isinstance(name, str) and name.strip()}),
         "entries": clean_entries,
         "displayed_keys": [str(key) for key in value.get("displayed_keys", [])
                            if isinstance(key, (str, int))][:5],

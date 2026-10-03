@@ -4,6 +4,7 @@ from math import isfinite
 
 from src.seller_analysis_registry import BEST_ROW_LIMIT, listing_key, normalize_registry
 from src.seller_card_domain import seller_item_domain_check
+from src.player_interest import row_player, player_key
 
 
 def alternative_listing_key(row):
@@ -36,17 +37,25 @@ def displayable_alternative(row):
 def merge_dismissed(registry, *others):
     registry = normalize_registry(registry)
     hidden = set(registry['dismissed_keys'])
+    players = set(registry['dismissed_players'])
     for other in others:
         hidden.update(normalize_registry(other)['dismissed_keys'])
+        players.update(normalize_registry(other)['dismissed_players'])
     registry['dismissed_keys'] = sorted(hidden)
+    registry['dismissed_players'] = sorted(players)
     return registry
+
+
+def player_is_dismissed(row, registry):
+    name = row_player(row)
+    return bool(name and player_key(name) in set(registry.get('dismissed_players') or []))
 
 
 def select_saved_top5(registry, *, rank_key, select_diverse):
     registry = normalize_registry(registry)
     hidden = set(registry['dismissed_keys'])
     ordered = sorted((row for row in registry['alternative_rows'].values()
-                      if alternative_listing_key(row) not in hidden and displayable_alternative(row)),
+                      if alternative_listing_key(row) not in hidden and not player_is_dismissed(row, registry) and displayable_alternative(row)),
                      key=rank_key, reverse=True)
     selected, _, _ = select_diverse(ordered, 5)
     if len(selected) < 5:
@@ -55,7 +64,7 @@ def select_saved_top5(registry, *, rank_key, select_diverse):
     return [dict(row, seller_top5_alternative=True) for row in selected]
 
 
-def dismiss_seller_alternative(result, key):
+def dismiss_seller_alternative(result, key, *, whole_player=False):
     """Remove one listing and promote the next saved candidate, without fetching."""
     # Late imports avoid a cycle with the builder's dynamic-list integration.
     from src.seller_top5 import _seller_alternative_rank_key, _select_diverse_rows
@@ -67,7 +76,13 @@ def dismiss_seller_alternative(result, key):
     available = set(registry['alternative_rows'])
     if str(key) not in available:
         return result
-    registry['dismissed_keys'] = sorted(set(registry['dismissed_keys']) | {str(key)})
+    if whole_player:
+        name = row_player(registry['alternative_rows'][str(key)])
+        if not name:
+            return result
+        registry['dismissed_players'] = sorted(set(registry['dismissed_players']) | {player_key(name)})
+    else:
+        registry['dismissed_keys'] = sorted(set(registry['dismissed_keys']) | {str(key)})
     alternatives = select_saved_top5(registry, rank_key=_seller_alternative_rank_key,
                                      select_diverse=_select_diverse_rows)
     previous = set(registry['displayed_keys'])
@@ -76,6 +91,10 @@ def dismiss_seller_alternative(result, key):
     result['analysis_registry'] = registry
     result['top5_new_count'] = len(set(registry['displayed_keys']) - previous)
     result['dismissed_count'] = len(registry['dismissed_keys'])
+    result['dismissed_player_count'] = len(registry['dismissed_players'])
+    result['rows'] = [row for row in result.get('rows') or []
+                      if alternative_listing_key(row) not in registry['dismissed_keys']
+                      and not player_is_dismissed(row, registry)]
     if checkpoint:
         result['public_checkpoint']['analysis_registry'] = deepcopy(registry)
     return result
@@ -90,7 +109,7 @@ def update_dynamic_top5(registry, *, inventory, quick_rows, full_rows, seed_rows
     for row in seed_rows:
         retained.setdefault(alternative_listing_key(row), row)
     retained = {key: refresh(row) for key, row in retained.items()
-                if key in keys and displayable_alternative(row)}
+                if key in keys and not player_is_dismissed(row, registry) and displayable_alternative(row)}
     for quick in quick_rows:
         source = quick.get('source_item') or quick
         key = listing_key(source)
@@ -101,13 +120,13 @@ def update_dynamic_top5(registry, *, inventory, quick_rows, full_rows, seed_rows
         if (retained.get(key) or {}).get('analysis_level') == 'full':
             continue
         row = refresh(quick_fallback(quick))
-        if displayable_alternative(row):
+        if not player_is_dismissed(row, registry) and displayable_alternative(row):
             retained[key] = row
     for row in full_rows:
         key = alternative_listing_key(row)
         if key in hidden:
             continue
-        if displayable_alternative(row):
+        if not player_is_dismissed(row, registry) and displayable_alternative(row):
             retained[key] = refresh(row)
         else:
             retained.pop(key, None)

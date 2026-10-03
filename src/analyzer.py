@@ -3429,7 +3429,12 @@ def analyze_core(
         card_identity_confidence=features.get("card_identity_confidence", "low"),
         deal_confidence_score=(deal_confidence["score"] if full else None),
     )
+    from src.player_interest import player_interest
+    player_interest_context = player_interest(profile["name"], sport)
+    rank_before_player_interest = adjust_rank_for_confidence(base_rank, ranking_confidence)
+    base_rank = min(100, base_rank + player_interest_context["ranking_bonus"])
     rank = adjust_rank_for_confidence(base_rank, ranking_confidence)
+    player_interest_context["applied_rank_bonus"] = round(rank - rank_before_player_interest, 2)
 
     decision_diagnostics = build_decision_diagnostics(
         decision,
@@ -4097,6 +4102,8 @@ def analyze_core(
 
         "rank_score":
             rank,
+
+        "player_interest": player_interest_context,
 
         "base_rank_score":
             base_rank,

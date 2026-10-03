@@ -1,0 +1,39 @@
+name: Player performance monitor
+on:
+  schedule:
+    - cron: '17 7,19 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - src/player_form_monitor.py
+      - scripts/update_player_form.py
+      - .github/workflows/player-form.yml
+permissions:
+  contents: write
+concurrency:
+  group: player-performance-feed
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: python scripts/update_player_form.py
+      - name: Save current performance evidence
+        run: |
+          git config user.name 'FlipFynd performance monitor'
+          git config user.email 'actions@users.noreply.github.com'
+          git add data/player_form.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Refresh sourced player performances'
+            git pull --rebase origin main
+            git push origin main
+          fi

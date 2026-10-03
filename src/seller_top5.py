@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Callable, Iterable
 
 from src.seller_card_domain import seller_item_domain_check
+from src.player_interest import row_interest
 from src.seller_live_quick_analysis import quick_analyze_seller_inventory
 from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.card_parser import parse_card_features
@@ -230,6 +231,14 @@ def _seller_alternative_rank_key(row: dict):
             row.get("analysis_level") == "full", *key[1:],
             -_num(row.get("price")))
 
+def _rank_without_player_bonus(row):
+    # The normal analyser already adds player context to rank_score. Weight it
+    # once here and recompute from current evidence so form can expire.
+    source = row.get("source_item") or {}
+    prior = source.get("player_interest") or {}
+    return max(0, _num(row.get("rank_score")) - _num(prior.get("applied_rank_bonus", prior.get("ranking_bonus"))))
+
+
 def _seller_opportunity_score(row: dict) -> float:
     collector = min(40.0, _num(row.get("collector_signal_score")))
     merit = assess_seller_card_merit(row)
@@ -237,7 +246,8 @@ def _seller_opportunity_score(row: dict) -> float:
     profit_summary = build_seller_net_profit_summary(row)
     profit = _num(profit_summary.get("value")) if profit_summary.get("available") else 0.0
     sold = int(_num(row.get("sold_comps")))
-    score = deal * 0.55 + _num(row.get("rank_score")) * 0.25 + merit["score"] * 0.15 + collector * 0.05
+    score = deal * 0.55 + _rank_without_player_bonus(row) * 0.25 + merit["score"] * 0.15 + collector * 0.05
+    score += row_interest(row)["ranking_bonus"]
     # Scarcity can route a card into research, but cannot manufacture economic
     # promise when full analysis found no SOLD evidence and negative margin.
     if deal <= 10 and profit <= 0 and sold == 0:
@@ -252,7 +262,7 @@ def _quick_rank_key(row: dict):
     decision_tier = 0 if decision.startswith("KÖP") else 1 if decision.startswith("UNDERSÖK") else 2
     evidence_tier = 0 if identity_ok and sold > 0 else 1
     collector = min(40.0, _num(row.get("collector_signal_score")))
-    opportunity_score = _num(row.get("rank_score")) + collector * 1.5
+    opportunity_score = _rank_without_player_bonus(row) + collector * 1.5 + row_interest(row)["ranking_bonus"]
     return (
         decision_tier,
         evidence_tier,
@@ -492,6 +502,7 @@ def _refresh_collector_research(row: dict) -> dict:
     signals = collector_signals(row.get("source_item") or row)
     row["collector_signal_score"] = signals["score"]
     row["collector_signals"] = signals["signals"]
+    row["player_interest"] = row_interest(row)
     row["seller_card_merit"] = assess_seller_card_merit(row)
     row["seller_opportunity_score"] = _seller_opportunity_score(row)
     return row
@@ -658,6 +669,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
             row["analysis_level"] = "full"
             row["seller_listing_key"] = listing_key(source_item)
             row["seller_deep_route"] = qrow.get("seller_deep_route") or "MERIT"
+            row["player_interest"] = row_interest(row)
             row["seller_card_merit"] = assess_seller_card_merit(row)
             row["deal_readiness"] = assess_deal_readiness(row)
             full_rows.append(_seller_presentation_label(_refresh_collector_research(row)))

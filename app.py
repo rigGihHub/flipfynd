@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.113"
+APP_VERSION = "v0.14.114"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1531,9 +1531,9 @@ if (
 
 # Seller search stays above the main search, including its early stop paths.
 # SELLER_TOP5_UI_V1
-def _dismiss_seller_top5_alternative(key):
+def _dismiss_seller_top5_alternative(key, whole_player=False):
     current = st.session_state.get("seller_top5_result") or {}
-    updated = _seller_dynamic_runtime.dismiss_seller_alternative(current, key)
+    updated = _seller_dynamic_runtime.dismiss_seller_alternative(current, key, whole_player=whole_player)
     st.session_state["seller_top5_result"] = updated
     _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
     alias = str(updated.get("seller") or st.session_state.get("seller_top5_alias") or "").strip()
@@ -1856,6 +1856,16 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         seller_name = seller_top5_result.get("seller") or str(seller_top5_alias or "").strip()
         inv_count = int(seller_top5_result.get("inventory_count") or 0)
         _ranked_rows = seller_top5_result.get("alternatives", seller_top5_result.get("rows") or [])
+        if (seller_top5_result.get("analysis_registry") or {}).get("alternative_rows"):
+            from src.seller_top5 import _seller_alternative_rank_key, _select_diverse_rows
+            _display_registry = dict(seller_top5_result["analysis_registry"])
+            _display_registry["alternative_rows"] = dict(_display_registry.get("alternative_rows") or {})
+            for _current_row in _ranked_rows:
+                _display_registry["alternative_rows"][_seller_dynamic_runtime.alternative_listing_key(_current_row)] = _current_row
+            _ranked_rows = _seller_dynamic_runtime.select_saved_top5(
+                _display_registry,
+                rank_key=_seller_alternative_rank_key, select_diverse=_select_diverse_rows,
+            )
         _seller_display_rows = [row for row in _ranked_rows if _seller_ui_row_is_safe(row)][:5]
         _find_rows = [row for row in _seller_display_rows
                       if row.get("analysis_level") == "full" and seller_result_tier(row) == "FIND"]
@@ -1920,12 +1930,26 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             with st.expander("Urval av annonser", expanded=False):
                 st.caption(f"{rejected_count} annonser utan samlarkort bortsorterade · {card_count} kortannonser kvar.")
         if not rows:
-            if (seller_top5_result.get("analysis_registry") or {}).get("dismissed_keys"):
-                st.info("Inga sparade alternativ återstår. Fortsätt söka, eller rensa säljsökningen för att visa borttagna kort igen.")
+            if ((seller_top5_result.get("analysis_registry") or {}).get("dismissed_keys")
+                    or (seller_top5_result.get("analysis_registry") or {}).get("dismissed_players")):
+                st.info("Inga sparade alternativ återstår. Fortsätt söka, eller rensa säljsökningen för att visa borttagna kort och spelare igen.")
             else:
                 st.info("Inga läsbara kort med giltigt pris har analyserats ännu. Fortsätt med nästa omgång.")
         elif len(rows) < 5:
             st.caption(f"{len(rows)} sparade alternativ återstår. Fortsätt söka för att få fler alternativ till listan.")
+        from src.player_interest import _load as _load_player_feed
+        _form_feed = _load_player_feed("player_form.json")
+        with st.expander("Formbevakning och legendarer", expanded=False):
+            st.caption("Formbevakar NHL samt Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Champions League, MLS och Saudi Pro League två gånger per dygn.")
+            st.caption("Stark match: minst 2 mål i fotboll; minst 2 mål eller 3 poäng i hockey; eller seger med minst 30 räddningar och 95% räddningsprocent. Formbonusen avtar till noll efter 14 dagar. Legendarer får en bestående bonus på 20. Samlad bonus är högst 30.")
+            st.caption("Signalerna påverkar urval och ranking. Nettovinst, kortvärdering och maxbud kräver fortsatt prisunderlag.")
+            if _form_feed.get("checked_at"):
+                st.caption(f"Senast kontrollerat: {_form_feed['checked_at'][:16].replace('T', ' ')} UTC")
+            else:
+                st.caption("Första automatiska formkontrollen återstår.")
+            _failed_sources = [source['name'] for source in _form_feed.get("sources", []) if not source.get("ok")]
+            if _failed_sources:
+                st.caption("Källor som inte svarade vid senaste kontrollen: " + ", ".join(_failed_sources))
         for _position, row in enumerate(rows[:5], start=1):
             title = row.get("title") or "Kortannons"
             price = row.get("price")
@@ -1945,6 +1969,26 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 badge = "⚪ Alternativ · köpkraven är inte uppfyllda"
             st.markdown(f"#### #{_position} · {title}")
             _remove_key = _seller_dynamic_runtime.alternative_listing_key(row)
+            from src.player_interest import row_player, row_interest
+            _remove_player = row_player(row)
+            _remove_columns = st.columns(2)
+            with _remove_columns[0]:
+                st.button("Ta bort kortet", key=f"seller_remove_{_remove_key}",
+                          on_click=_dismiss_seller_top5_alternative, args=(_remove_key,),
+                          help="Nästa sparade alternativ fyller platsen.")
+            with _remove_columns[1]:
+                st.button("Ta bort spelaren", key=f"seller_remove_player_{_remove_key}",
+                          on_click=_dismiss_seller_top5_alternative, args=(_remove_key, True),
+                          disabled=not bool(_remove_player),
+                          help=f"Göm alla kort med {_remove_player or 'spelaren'} tills säljsökningen rensas.")
+            _interest = row_interest(row)
+            if _interest["legend"]:
+                st.caption(f"🏆 Legend · +{_interest['legend_bonus']:.0f} i granskningsprioritet")
+            if _interest["form_bonus"]:
+                st.caption(f"🔥 Aktuell form · +{_interest['form_bonus']:.1f} i granskningsprioritet")
+                for _event in _interest["recent_events"][:2]:
+                    st.caption(f"{_event['detail']} · {_event['occurred_at'][:10]}")
+                    st.link_button(_event['source_name'], _event['source_url'])
             _rank_score = float(row.get("rank_score") or 0)
             try:
                 if price is not None and float(price) > 0:
@@ -1994,6 +2038,9 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 st.caption("Signaler i annonsen: " + " · ".join(_signals))
             reason = str(row.get("reason") or "").strip()
             with st.expander("Analysdetaljer", expanded=False):
+                _legacy_source = _interest.get("legacy_source") or {}
+                if _legacy_source.get("source_url"):
+                    st.link_button("Legendkälla: " + str(_legacy_source.get("source_name") or "Källa"), _legacy_source["source_url"])
                 if reason:
                     st.caption(reason)
                 if not _profit["available"]:
@@ -2033,9 +2080,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                     f'text-decoration:none;font-weight:600;">Öppna annonsen ↗</a>',
                     unsafe_allow_html=True,
                 )
-            st.button("Ta bort från topp 5", key=f"seller_remove_{_remove_key}",
-                      on_click=_dismiss_seller_top5_alternative, args=(_remove_key,),
-                      help="Nästa sparade alternativ fyller platsen. Kortet hålls undan tills du rensar säljsökningen.")
             st.divider()
 
 

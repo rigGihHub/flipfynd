@@ -1,0 +1,58 @@
+{
+  "hockey": {
+    "Wayne Gretzky": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Sidney Crosby": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Alex Ovechkin": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Mario Lemieux": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Peter Forsberg": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Mats Sundin": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Jaromir Jagr": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Teemu Selanne": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Joe Sakic": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    },
+    "Martin Brodeur": {
+      "source_name": "NHL 100 Greatest Players",
+      "source_url": "https://www.nhl.com/news/100-greatest-nhl-players-complete-list-286199184"
+    }
+  },
+  "football": {
+    "Ronaldinho": {
+      "source_name": "FIFA",
+      "source_url": "https://inside.fifa.com/en/news/ronaldinho-calls-time-on-mesmerising-career-2926508"
+    },
+    "Zinedine Zidane": {
+      "source_name": "FIFA",
+      "source_url": "https://inside.fifa.com/news/ranieri-santos-and-zidane-in-the-running-to-be-the-best-2857295"
+    },
+    "Thierry Henry": {
+      "source_name": "FIFA",
+      "source_url": "https://inside.fifa.com/organisation/media-releases/reshmin-chowdhury-and-thierry-henry-to-lead-the-best-fifa-football-awards-tm"
+    }
+  }
+}

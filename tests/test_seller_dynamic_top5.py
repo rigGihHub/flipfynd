@@ -147,3 +147,45 @@ def test_streamlit_remove_button_promotes_sixth_without_a_search():
     rendered = '\n'.join(element.value for element in app.markdown)
     assert '#5 · ' + row(5)['title'] in rendered
     assert row(4)['title'] not in rendered
+
+
+def test_remove_player_hides_all_cards_and_future_listings_after_restore():
+    from src.seller_dynamic_top5 import dismiss_seller_alternative, merge_dismissed
+    candidates = [row(i, score=60-i) for i in range(9)]
+    for i in (0, 1, 6):
+        candidates[i]['title'] = candidates[i]['source_item']['titel'] = f'2023 Upper Deck Connor McDavid #{i}'
+    registry, selected = update(rows=candidates)
+    result = {'alternatives': selected, 'analysis_registry': registry,
+              'public_checkpoint': {'next_page': 4, 'analysis_registry': registry}}
+    removed = dismiss_seller_alternative(result, '0', whole_player=True)
+    assert len(removed['alternatives']) == 5
+    assert all('McDavid' not in r['title'] for r in removed['alternatives'])
+    saved = normalize_registry(removed['public_checkpoint']['analysis_registry'])
+    assert saved['dismissed_players'] == ['connor mcdavid']
+    assert merge_dismissed(registry, saved)['dismissed_players'] == ['connor mcdavid']
+    fresh = row(10, score=100)
+    fresh['title'] = fresh['source_item']['titel'] = '2023 Upper Deck Connor Mcdavid #10'
+    _, later = update(saved, rows=[fresh], inventory=[r['source_item'] for r in candidates + [fresh]])
+    assert all('mcdavid' not in r['title'].lower() for r in later)
+    assert len(later) == 5
+    assert result['analysis_registry'].get('dismissed_players') == []
+
+
+def test_streamlit_player_remove_button_promotes_other_players_immediately():
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    candidates = [row(i, score=60-i) for i in range(8)]
+    for i in (0, 1):
+        candidates[i]['title'] = candidates[i]['source_item']['titel'] = f'2023 Upper Deck Connor McDavid #{i}'
+    registry, selected = update(rows=candidates)
+    app = AppTest.from_file(str(Path('app.py').resolve()), default_timeout=30)
+    app.session_state['seller_top5_result'] = {'status':'INVENTORY_PARTIAL','seller':'test',
+        'inventory_count':8,'alternatives':selected,'rows':[],'analysis_registry':registry}
+    app.run()
+    app.button(key='seller_remove_player_0').click().run()
+    assert not app.exception
+    result = app.session_state['seller_top5_result']
+    assert len(result['alternatives']) == 5
+    assert result['analysis_registry']['dismissed_players'] == ['connor mcdavid']
+    rendered='\n'.join(el.value for el in app.markdown)
+    assert 'McDavid' not in rendered
