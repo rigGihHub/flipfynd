@@ -334,7 +334,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.115"
+APP_VERSION = "v0.14.116"
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
 import src.asking_price_ui as _literal_ui_runtime
@@ -1654,7 +1654,8 @@ if _seller_job and (_seller_job.get("params") or {}).get("kind") == "seller":
     if _seller_job.get("status") == "COMPLETED" and st.session_state.get("_applied_seller_run") != _seller_job_token:
         _seller_rows = _seller_job.get("results") or []
         if _seller_rows:
-            st.session_state["seller_top5_result"] = _seller_rows[0]
+            st.session_state["seller_top5_result"] = _seller_dynamic_runtime.preserve_dismissals(
+                _seller_rows[0], st.session_state.get("seller_top5_result") or {})
             st.session_state["_applied_seller_run"] = _seller_job_token
             _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
 
@@ -1674,8 +1675,9 @@ try:
     if (isinstance(_persisted_result, dict) and _persisted_next > _session_next
             and str(_persisted_result.get("seller") or "").casefold() == str(_seller_existing_result.get("seller") or "").casefold()
             and _seller_existing_result):
-        _seller_existing_result = _persisted_result
-        st.session_state["seller_top5_result"] = _persisted_result
+        _seller_existing_result = _seller_dynamic_runtime.preserve_dismissals(
+            _persisted_result, _seller_existing_result)
+        st.session_state["seller_top5_result"] = _seller_existing_result
 except Exception:
     pass
 _seller_existing_status = str(_seller_existing_result.get("status") or "")
@@ -1705,7 +1707,6 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
         )
         seller_top5_run = st.form_submit_button(
             _seller_button_label, key="seller_top5_run", type="primary", use_container_width=True,
-            disabled=bool(_seller_job and _seller_job.get("status") == "RUNNING"),
             on_click=_queue_seller_top5_search,
         )
     _seller_pending_request = st.session_state.get("seller_top5_pending_request")
@@ -1739,6 +1740,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             st.warning("Klistra in en Tradera-profillänk eller ange ett säljarnamn.")
             st.session_state.pop("seller_top5_pending_request", None)
         elif _seller_job and _seller_job.get("status") == "RUNNING":
+            st.info("Omgången pågår fortfarande. Status har uppdaterats; ingen extra omgång har startats.")
             st.session_state.pop("seller_top5_pending_request", None)
         else:
             from src.seller_round_job import start as _start_seller_round

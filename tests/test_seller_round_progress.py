@@ -132,3 +132,12 @@ def test_timed_out_interactive_page_is_not_retried_and_preserves_cursor(monkeypa
     assert len(result['public_checkpoint']['items']) == 80
     assert result['resume_required'] is True
     assert result['new_full_analysed'] <= 4
+
+
+def test_completed_substep_does_not_claim_whole_round_has_zero_seconds_left():
+    label, text, _ = progress.progress_text({'status': 'RUNNING',
+        'started_at': time.time()-124, 'params': {'kind':'seller'},
+        'progress': {'phase':'Granskar nya kort', 'checked':1840, 'total':1840,
+                     'unit':'kort', 'eta_seconds':0}})
+    assert 'delsteget klart; omgången fortsätter' in text
+    assert '0 s kvar' not in text

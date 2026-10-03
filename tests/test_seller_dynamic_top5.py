@@ -189,3 +189,42 @@ def test_streamlit_player_remove_button_promotes_other_players_immediately():
     assert result['analysis_registry']['dismissed_players'] == ['connor mcdavid']
     rendered='\n'.join(el.value for el in app.markdown)
     assert 'McDavid' not in rendered
+
+
+def test_late_worker_completion_cannot_restore_removed_card_or_player():
+    from copy import deepcopy
+    from src.seller_dynamic_top5 import dismiss_seller_alternative, preserve_dismissals
+    registry, alternatives = update(rows=[row(i) for i in range(8)])
+    original = {'seller': 'Cardland', 'rows': alternatives[:2], 'alternatives': alternatives,
+                'analysis_registry': registry, 'public_checkpoint': {'analysis_registry': registry}}
+    worker = deepcopy(original)
+    removed = dismiss_seller_alternative(original, '0')
+    merged = preserve_dismissals(worker, removed)
+    assert '0' not in ids(merged['rows'])
+    assert '0' not in ids(merged['alternatives'])
+    assert '0' in merged['public_checkpoint']['analysis_registry']['dismissed_keys']
+    _, next_rows = update(merged['analysis_registry'], rows=[row(0, score=999), row(9)])
+    assert '0' not in ids(next_rows)
+    other_seller = preserve_dismissals(dict(worker, seller='Other seller'), removed)
+    assert '0' in ids(other_seller['rows'])
+
+
+def test_continue_button_checks_live_job_instead_of_staying_disabled(monkeypatch):
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    from src import resumable_search as jobs, seller_round_job
+    token = jobs.new_token()
+    job = {'status': 'RUNNING', 'started_at': 1, 'params': {'kind':'seller', 'seller':'Cardland',
+           'profile_url':'https://www.tradera.com/profile/items/6160765/'}, 'progress': {}}
+    monkeypatch.setattr(jobs, 'load', lambda key, *a: job if key == token else None)
+    def must_not_start(*a, **k):
+        raise AssertionError('Must not start a second concurrent seller round')
+    monkeypatch.setattr(seller_round_job, 'start', must_not_start)
+    app = AppTest.from_file(str(Path('app.py').resolve()), default_timeout=30)
+    app.query_params['seller_run'] = token
+    app.run()
+    assert not app.exception
+    assert not app.button(key='seller_top5_run').disabled
+    app.button(key='seller_top5_run').click().run()
+    assert not app.exception
+    assert any('ingen extra omgång' in info.value for info in app.info)

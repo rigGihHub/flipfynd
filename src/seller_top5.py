@@ -570,6 +570,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
                 "inventory_count": len(raw_inventory), "card_inventory_count": 0,
                 "domain_rejected_count": len(rejected)}
 
+    _emit(progress_callback, phase="pool_start", done=0, total=0, percent=28)
     registry = begin_analysis_run(analysis_registry)
     previous_coverage = analysis_coverage(registry, inventory)
     previous_displayed = set(registry.get("displayed_keys") or [])

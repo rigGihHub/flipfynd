@@ -17,13 +17,15 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
                 label, unit = 'Djupanalyserar kort', 'kort'
             elif phase.startswith('quick_') or phase.startswith('filter_'):
                 label, unit = 'Granskar nya kort', 'kort'
+            elif phase == 'pool_start':
+                label, unit = 'Väljer kort för nästa analyssteg', 'kort'
             elif phase in {'ranking', 'complete'} and 'done' in info:
                 label, unit = 'Uppdaterar och sparar topp 5', 'kort'
             else:
                 label, unit = 'Läser säljarens annonser', 'sidor'
             if phase in {'full_start', 'quick_start', 'filter_start'}:
                 begin_phase(label, info.get('total') or 0, unit=unit)
-            finalizing = label == 'Uppdaterar och sparar topp 5'
+            finalizing = label in {'Uppdaterar och sparar topp 5', 'Väljer kort för nästa analyssteg'}
             report_phase(label, checked=0 if finalizing else info.get('done'),
                          total=0 if finalizing else info.get('total'),
                          unit=unit, fraction=(info.get('percent') or 0) / 100,
@@ -36,6 +38,7 @@ def start(token, *, seller, profile_url, market_items, analyze_fn, credentials=N
                             analysis_registry=registry or {})
         if profile_url and result.get('inventory_source') == 'LOCAL_MARKET':
             result = dict(result, status='PROFILE_INCOMPLETE', rows=[])
+        report_phase('Slutför och sparar omgången', checked=0, total=0, fraction=.99)
         return [result], {}
     return resumable_search.start(token, params, work, database_url=database_url, fresh=True)
 

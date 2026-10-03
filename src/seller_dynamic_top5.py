@@ -51,6 +51,33 @@ def player_is_dismissed(row, registry):
     return bool(name and player_key(name) in set(registry.get('dismissed_players') or []))
 
 
+def preserve_dismissals(result, *previous):
+    """A completed worker/remote snapshot must not undo newer UI removals."""
+    result = deepcopy(result or {})
+    seller = str(result.get('seller') or '').strip().casefold()
+    sources = [result, *[value for value in previous if isinstance(value, dict)
+        and (not seller or not value.get('seller')
+             or str(value['seller']).strip().casefold() == seller)]]
+    registries = []
+    for value in sources:
+        registries.extend([value.get('analysis_registry'),
+                           (value.get('public_checkpoint') or {}).get('analysis_registry')])
+    registry = merge_dismissed(result.get('analysis_registry'), *registries)
+    hidden = set(registry['dismissed_keys'])
+    def allowed(row):
+        return alternative_listing_key(row) not in hidden and not player_is_dismissed(row, registry)
+    for field in ('rows', 'alternatives'):
+        if field in result:
+            result[field] = [row for row in result[field] or [] if allowed(row)]
+    result['analysis_registry'] = registry
+    if result.get('public_checkpoint'):
+        result['public_checkpoint']['analysis_registry'] = merge_dismissed(
+            result['public_checkpoint'].get('analysis_registry'), registry)
+    result['dismissed_count'] = len(hidden)
+    result['dismissed_player_count'] = len(registry['dismissed_players'])
+    return result
+
+
 def select_saved_top5(registry, *, rank_key, select_diverse):
     registry = normalize_registry(registry)
     hidden = set(registry['dismissed_keys'])

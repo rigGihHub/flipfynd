@@ -81,7 +81,9 @@ def progress_text(job):
         detail += f"sida {progress["page"]} · "
     detail += f"{progress.get('requests', 0)} eBay-anrop gjorda · tid hittills: {_duration(elapsed)}"
     eta = progress.get("eta_seconds")
-    if eta is not None:
+    if total and checked >= total and job.get('status') == 'RUNNING':
+        detail += ' · delsteget klart; omgången fortsätter'
+    elif eta is not None:
         detail += f" · cirka {_duration(eta)} kvar i detta steg"
     else:
         detail += " · beräknar återstående tid"
