@@ -340,7 +340,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.125"
+APP_VERSION = "v0.14.126"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -376,7 +376,8 @@ SELLER_PRESENTATION_CONTRACT = "dynamic-top5-alternatives-v4"
 # Saved searches must also render with the current deployed UI after hot reload.
 import src.asking_price_ui as _asking_ui_module
 import src.opportunity_top5 as _opportunity_ui_module
-for _ui_module in (_asking_ui_module, _opportunity_ui_module):
+import src.best_alternatives as _best_alternatives_ui_module
+for _ui_module in (_asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module):
     if getattr(_ui_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_ui_module)
         _ui_module._flipfynd_loaded_version = APP_VERSION
@@ -2876,14 +2877,11 @@ if st.session_state.get("results") is not None:
                 total_limit=5,
                 require_verified_economic_edge=True,
             )
-            from src.asking_price_ui import meaningful_opportunity_candidates
-            opportunity_top5 = build_opportunity_top5(
-                meaningful_opportunity_candidates(st.session_state.get("results") or []), limit=5)
-            top_rows = [
-                row for row in (opportunity_top5.get("rows") or [])
-                if not known_negative_net_profit(row)
-            ]
-            rescued_count = sum(1 for row in top_rows if row.get("candidate_rescue"))
+            from src.best_alternatives import build_best_alternatives, render_best_alternatives
+            opportunity_top5 = build_best_alternatives(
+                st.session_state.get('results') or [],
+                research_leads=(st.session_state.get('debug') or {}).get('single_price_research_leads') or [],
+                extra_rows=(st.session_state.get('debug') or {}).get('tradera_price_find_rows') or [])
 
             current_debug = st.session_state.get("debug") or {}
             price_funnel = current_debug.get("price_research_funnel") or {}
@@ -2963,102 +2961,8 @@ if st.session_state.get("results") is not None:
                             f"{len(current_debug.get('single_price_research_leads') or [])} osäkra positiva prisspår."
                         )
 
-            actual_find_count = sum(
-                1 for row in top_rows
-                if (
-                    (row.get("decision") == "KÖP")
-                    or (row.get("practical_price_source") == "VERIFIED"
-                        and row.get("estimated_net_profit") is not None
-                        and float(row["estimated_net_profit"]) >= 1
-                        and int(row.get("sold_comps") or 0) >= 2)
-                    or (row.get("asking_positive") is True)
-                    or (
-                        row.get("practical_margin") is not None
-                        and float(row.get("practical_margin") or 0) >= 1
-                        and row.get("practical_price_source") in {"VERIFIED", "ACTIVE_PRICE"}
-                        and int(row.get("asking_comparison_count") or 0) >= 2
-                    )
-                )
-            )
-            if actual_find_count:
-                st.markdown("### 🏆 Fynd att undersöka")
-                st.caption(f"{actual_find_count} kandidat(er) har verklig positiv prisindikation i den här körningen. Övriga rader är bäst av resten.")
-            elif _price_problem:
-                st.markdown("### 🔎 Prisundersökningen kunde inte slutföras")
-                st.caption("Fynd med tillgängligt underlag visas ovan. Kort utan fungerande priskontroll är inte bedömda.")
-            else:
-                st.markdown("### 🔎 Närmast fyndgränsen – inga fynd hittades")
-                st.caption("FlipFynd hittade inget kort med tillräckligt stark positiv prisindikation. Endast kandidater utan känd minusmarginal kan visas för vidare kontroll.")
-            if rescued_count:
-                st.caption(f"{rescued_count} kandidat(er) visas för vidare kontroll trots att positiv marginal inte är bevisad.")
-            if not top_rows and _price_problem:
-                st.info("Inga bedömbara kandidater att visa från denna ofullständiga prisundersökning.")
-            elif not top_rows:
-                st.warning(
-                    "Inga kandidater med positiv eller ännu okänd fyndmarginal hittades i den analyserade gruppen. "
-                    "FlipFynd visar inte längre kända minusaffärer bara för att fylla Top 5."
-                )
-            else:
-                tier_labels = {
-                    "VERIFIED": "Verifierat fynd",
-                    "PROMISING": "Lovande · undersök",
-                    "REMAINDER": "Inte fynd · bäst av resten",
-                }
-                table_rows = []
-                for rank, row in enumerate(top_rows, start=1):
-                    total = row.get("total_cost")
-                    market = row.get("market_value")
-                    net = row.get("estimated_net_profit")
-                    asking = row.get("asking_reference")
-                    heuristic = row.get("heuristic_indication")
-                    price_indication = market if market is not None else (asking if asking is not None else heuristic)
-                    indication_source = (
-                        "SOLD/verifierat" if market is not None
-                        else ("Aktuella priser" if asking is not None
-                              else ("Modell/guide" if heuristic is not None else "Saknas"))
-                    )
-                    table_rows.append({
-                        "#": rank,
-                        "Kort": row.get("title") or "Okänt kort",
-                        "Status": "KÖP" if row.get("decision") == "KÖP" else "UNDERSÖK",
-                        "Kostnad": f"{float(total):.0f} kr" if total is not None else "–",
-                        "Prisindikation": f"{float(price_indication):.0f} kr" if price_indication is not None else "–",
-                        "Underlag": indication_source,
-                        "Nettovinst": (
-                            f"{build_seller_net_profit_summary(row)['value']:+.0f} kr"
-                            if build_seller_net_profit_summary(row)["available"]
-                            else "Ej beräkningsbar"
-                        ),
-                        "Fyndpotential": f"{float(row.get('potential') or 0):.0f}/100",
-                        "Säkerhet": f"{float(row.get('certainty') or 0):.0f}/100",
-                    })
-                st.dataframe(table_rows, use_container_width=True, hide_index=True)
-                st.caption("Prisindikation används för fyndjakt. SOLD ger starkare bekräftelse när det finns, men krävs inte för UNDERSÖK.")
-                for rank, row in enumerate(top_rows, start=1):
-                    with st.expander(f"#{rank} · {row.get('title') or 'Okänt kort'}", expanded=False):
-                        st.write(f"**{row.get('decision') or 'UNDERSÖK'}** · {tier_labels.get(row.get('tier'), 'Bäst av resten')}")
-                        facts = []
-                        if row.get("total_cost") is not None:
-                            facts.append(f"total kostnad {float(row['total_cost']):.0f} kr")
-                        if row.get("market_value") is not None:
-                            facts.append(f"prisindikation {float(row['market_value']):.0f} kr (verifierat underlag)")
-                        elif row.get("asking_reference") is not None:
-                            facts.append(f"prisindikation {float(row['asking_reference']):.0f} kr (aktuella begärda priser)")
-                        elif row.get("heuristic_indication") is not None:
-                            facts.append(f"prisindikation {float(row['heuristic_indication']):.0f} kr (modell/guide – kontrollera själv)")
-                        else:
-                            facts.append("prisindikation saknas")
-                        facts.append(f"{int(row.get('sold_comps') or 0)} verifierade SOLD")
-                        st.caption(" · ".join(facts))
-                        if row.get("reasons"):
-                            st.caption("Varför: " + " · ".join(row.get("reasons") or []))
-                        if row.get("primary_blocker"):
-                            st.caption("Kontrollera först: " + str(row["primary_blocker"]))
-                        render_card_explanation_button(row.get("_source_item") or row, f"top5_{rank}")
-                        render_same_seller_button(row.get("_source_item") or row, f"top5_{rank}")
-                        if row.get("url"):
-                            st.link_button("Öppna annonsen ↗", row["url"], use_container_width=True)
-                st.caption(opportunity_top5.get("note") or "")
+            render_best_alternatives(opportunity_top5,
+                explain=render_card_explanation_button, seller=render_same_seller_button)
 
             with st.expander("🔬 Avancerad fyndjakt / så tänker FlipFynd", expanded=False):
                 coverage = evidence_coverage(st.session_state.get("results") or [])
@@ -3863,18 +3767,12 @@ if st.session_state.get("results") is not None:
     else:
         st.info("**KÖP INGET JUST NU.** FlipFynd hittar inget kort med tillräckligt starkt underlag för ett säkert förstaval.")
         st.caption(best_buy["note"])
-        fallback = build_best_available_view(st.session_state.get("results") or [], limit=3)
-        if fallback.get("status") == "READY":
-            with st.expander("Visa de 3 bästa alternativen trots att inget är KÖP", expanded=False):
-                st.caption(fallback.get("note") or "")
-                for rank, row in enumerate(fallback.get("rows") or [], start=1):
-                    st.markdown(f"**#{rank} · {row['title']} · {row.get('decision') or 'EJ BESLUT'}**")
-                    market_value_text = f"{float(row['market_value']):.0f} kr" if row.get("market_value") is not None else "Otillräckligt underlag"
-                    st.caption(f"Uppskattat marknadsvärde: {market_value_text}")
-                    if row.get("primary_blocker"):
-                        st.caption("Stoppar KÖP: " + str(row["primary_blocker"]))
-                    if row.get("url"):
-                        st.markdown(f"[Öppna annonsen ↗]({row['url']})")
+    from src.best_alternatives import build_best_alternatives, render_best_alternatives
+    render_best_alternatives(build_best_alternatives(
+        st.session_state.get('results') or [],
+        research_leads=(st.session_state.get('debug') or {}).get('single_price_research_leads') or [],
+        extra_rows=(st.session_state.get('debug') or {}).get('tradera_price_find_rows') or []),
+        explain=render_card_explanation_button, seller=render_same_seller_button)
 
     buy_queue = build_top_buy_queue(filtered)
     if buy_queue["status"] == "READY" and len(buy_queue.get("picks", [])) > 1:

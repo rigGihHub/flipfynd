@@ -31,7 +31,7 @@ def test_main_search_renders_dynamic_top_five():
     assert "build_decision_tiers_compat(" in app
     assert "total_limit=5" in app
     assert "require_verified_economic_edge=True" in app
-    assert "Fynd att undersöka" in app
+    assert "render_best_alternatives(opportunity_top5" in app
     assert "verifierade fynd · " in app
     assert 'd3.metric("EJ KÖPKLARA"' in app
     assert 'with st.expander("🔎 Varför blir inget ett verifierat KÖP?", expanded=False)' in app

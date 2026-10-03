@@ -88,7 +88,7 @@ def _expand_special_engine_candidates(items):
     return expanded
 
 
-def build_opportunity_top5(items, limit=5):
+def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
     items = _expand_special_engine_candidates(items)
     rows = []
     for item in items or []:
@@ -476,8 +476,27 @@ def build_opportunity_top5(items, limit=5):
             break
     # A shorter list is preferable to filling it with candidates whose only
     # available price indication is already at/below acquisition cost.
+    all_gated_rows = gate_and_sort(rows, limit=max(limit * 20, len(rows)))
+    if fill_alternatives:
+        def alternative_rank(row):
+            margin = row.get('practical_margin')
+            losing = known_negative_net_profit(row) or (margin is not None and margin < 0)
+            return (row.get('decision') == 'KÖP', not losing,
+                    margin is not None and margin > 0,
+                    margin if margin is not None else -10**9,
+                    row.get('certainty') or 0, row.get('potential') or 0)
+        alternatives = []
+        for row in sorted(all_gated_rows, key=alternative_rank, reverse=True)[:max(0, int(limit))]:
+            selected = dict(row)
+            if selected.get('decision') != 'KÖP':
+                margin = selected.get('practical_margin')
+                if known_negative_net_profit(selected) or (margin is not None and margin <= 0):
+                    selected.update(decision='AVSTÅ', tier='REMAINDER')
+            alternatives.append(selected)
+        return {'rows': alternatives,
+                'note': 'De bästa tillgängliga alternativen visas även utan positiv marginal. KÖP kräver fortfarande verifierad ekonomi.'}
     gated_rows = [
-        row for row in gate_and_sort(rows, limit=max(limit * 20, len(rows)))
+        row for row in all_gated_rows
         if not known_negative_net_profit(row)
         and (row.get("practical_margin") is None or row["practical_margin"] >= 1)
     ]
