@@ -180,17 +180,19 @@ def test_browser_backup_updates_do_not_trigger_unsolicited_reruns(component):
     from pathlib import Path
     if not shutil.which('node'):
         pytest.skip('Node required to execute component event regression')
-    path = Path(__file__).resolve().parents[1] / 'src' / component / 'index.html'
+    path = Path(__file__).resolve().parents[1] / 'src' / component / 'component.js'
     script = r'''
 const fs=require('fs'), vm=require('vm'), assert=require('assert');
-const handlers={}, messages=[], storage=new Map();
-const parent={postMessage:m=>messages.push(m)};
-const context={parent, window:{parent,addEventListener:(k,f)=>handlers[k]=f},
-addEventListener:(k,f)=>handlers[k]=f, setTimeout,clearTimeout,
+const messages=[], storage=new Map(), parentElement={dataset:{}};
+const context={window:{document:null,removeEventListener:()=>{}},setTimeout,clearTimeout,
 localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
-vm.runInNewContext(fs.readFileSync(process.argv[1],'utf8').split('<script>')[1].split('</script>')[0],context);
-const render=args=>handlers.message({source:parent,data:{type:'streamlit:render',args}});
-const replies=()=>messages.filter(m=>m.type==='streamlit:setComponentValue');
+vm.runInNewContext(fs.readFileSync(process.argv[1],'utf8').replace('export default function','function mount'),context);
+let cleanup;
+const render=data=>{
+  if(cleanup) cleanup();
+  cleanup=context.mount({data,parentElement,setStateValue:(key,value)=>messages.push({key,value})});
+};
+const replies=()=>messages;
 const token='a'.repeat(32);
 render({token,blob:'first'});
 assert.equal(replies().length,1);
@@ -200,19 +202,24 @@ assert.equal(replies().length,1,'saving must not rerun app');
 assert([...storage.values()].includes('another snapshot'),'new snapshot must still be saved');
 render({token:'b'.repeat(32),blob:'next run'});
 assert.equal(replies().length,2,'new identity needs recovery handshake');
+if(cleanup) cleanup();
+context.localStorage={getItem:()=>{throw Error('denied')},setItem:()=>{throw Error('denied')}};
+const unavailable={dataset:{}};
+const stop=context.mount({data:{token},parentElement:unavailable,setStateValue:(key,value)=>messages.push({key,value})});
+assert.equal(messages.at(-1).value.error,'STORAGE_UNAVAILABLE');
+if(stop) stop();
 '''
     subprocess.run(['node', '-e', script, str(path)], check=True, capture_output=True, text=True)
 
 
 def test_browser_restore_does_not_restart_app_or_read_again(monkeypatch, tmp_path):
     import streamlit as st
-    import streamlit.components.v1 as components
+    import src.inline_components as components
     monkeypatch.setattr(recovery, '_ROOT', tmp_path)
     token = jobs.new_token()
     value = recovery.snapshot({'search_text': 'Messi'}, {})
     recovery.save(token, value)
-    monkeypatch.setattr(components, 'declare_component', lambda *a, **k:
-        lambda **kwargs: {'token': token, 'drafts': {'at': time.time(), 'widgets': {'search_text': 'McDavid'}}})
+    monkeypatch.setattr(components, 'mount_inline', lambda *a, **kwargs: {'token': token, 'drafts': {'at': time.time(), 'widgets': {'search_text': 'McDavid'}}})
     monkeypatch.setattr(st, 'rerun', lambda: pytest.fail('Recovery is already before widgets'))
     state, query = {}, {'view_run': token}
     recovery.recover_ui(state, query)
@@ -223,9 +230,9 @@ def test_browser_restore_does_not_restart_app_or_read_again(monkeypatch, tmp_pat
 
 
 def test_new_browser_token_never_queries_nonexistent_remote_backup(monkeypatch, tmp_path):
-    import streamlit.components.v1 as components
+    import src.inline_components as components
     monkeypatch.setattr(recovery, '_ROOT', tmp_path)
-    monkeypatch.setattr(components, 'declare_component', lambda *a, **k: lambda **kwargs: {'token': ''})
+    monkeypatch.setattr(components, 'mount_inline', lambda *a, **kwargs: {'token': ''})
     monkeypatch.setattr(recovery, 'load_namespace', lambda *a, **k: pytest.fail('A new token has no backup'))
     monkeypatch.setattr(recovery, '_queue_backup', lambda *a, **k: None)
     state, query = {}, {}
@@ -235,14 +242,13 @@ def test_new_browser_token_never_queries_nonexistent_remote_backup(monkeypatch, 
 
 
 def test_browser_snapshot_wins_before_slow_database(monkeypatch, tmp_path):
-    import streamlit.components.v1 as components
+    import src.inline_components as components
     from src.browser_search_backup import encode_snapshot
     monkeypatch.setattr(recovery, '_ROOT', tmp_path)
     token = jobs.new_token()
     value = recovery.snapshot({'search_text': 'Messi'}, {})
     blob = encode_snapshot(token, {'status': 'COMPLETED', 'params': {}, 'results': [], 'debug': {'workspace': value}})
-    monkeypatch.setattr(components, 'declare_component', lambda *a, **k:
-        lambda **kwargs: {'token': token, 'blob': blob})
+    monkeypatch.setattr(components, 'mount_inline', lambda *a, **kwargs: {'token': token, 'blob': blob})
     monkeypatch.setattr(recovery, 'load_namespace', lambda *a, **k: pytest.fail('Browser backup is already available'))
     monkeypatch.setattr(recovery, '_queue_backup', lambda *a, **k: None)
     state = {}
@@ -251,7 +257,7 @@ def test_browser_snapshot_wins_before_slow_database(monkeypatch, tmp_path):
 
 
 def test_url_snapshot_still_restores_without_browser_storage(monkeypatch, tmp_path):
-    import streamlit.components.v1 as components
+    import src.inline_components as components
     monkeypatch.setattr(recovery, '_ROOT', tmp_path)
     token = jobs.new_token()
     calls = []
@@ -261,8 +267,7 @@ def test_url_snapshot_still_restores_without_browser_storage(monkeypatch, tmp_pa
         return value
     monkeypatch.setattr(recovery, 'load_namespace', remote)
     monkeypatch.setattr(recovery, '_queue_backup', lambda *a, **k: None)
-    monkeypatch.setattr(components, 'declare_component', lambda *a, **k:
-        lambda **kwargs: {'token': token, 'error': 'STORAGE_UNAVAILABLE'})
+    monkeypatch.setattr(components, 'mount_inline', lambda *a, **kwargs: {'token': token, 'error': 'STORAGE_UNAVAILABLE'})
     state, query = {}, {'view_run': token}
     recovery.recover_ui(state, query, 'test-db')
     recovery.recover_ui(state, query, 'test-db')

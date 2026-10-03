@@ -1,9 +1,8 @@
 """Browser-side elapsed time; never polls or reruns the Python app."""
-from pathlib import Path
+INLINE_COMPONENT_DELIVERY = True
 
 
 def render_loading_status():
-    from streamlit.components.v1 import declare_component
-    component = declare_component('flipfynd_loading_status',
-        path=str(Path(__file__).with_name('loading_status_component')))
-    component(key='loading_status', default=None)
+    from src.inline_components import mount_inline
+    mount_inline('flipfynd_loading_status', 'loading_status_component',
+                 key='loading_status', reply=False)

@@ -1,11 +1,5 @@
-<!doctype html><html><body><script>
-(() => {
-  const send=(type,fields)=>parent.postMessage({isStreamlitMessage:true,type,...fields},'*');
-  send('streamlit:componentReady',{apiVersion:1});
-  addEventListener('message',event=>{
-    if(event.source===parent && event.data.type==='streamlit:render')
-      send('streamlit:setFrameHeight',{height:0});
-  });
+export default function({parentElement}) {
+  const parent=window;
   try {
     const doc=parent.document;
     const box=doc.createElement('div');
@@ -24,36 +18,36 @@
     try {samples=JSON.parse(parent.sessionStorage.getItem(key)||'[]')
       .filter(n=>Number.isFinite(n)&&n>0&&n<300).slice(-5);} catch(_){}
     const estimate=samples.length>=3 ? [...samples].sort((a,b)=>a-b)[Math.floor(samples.length/2)] : null;
-    let first=true, started=null, finished=null;
+    const clock=parentElement._flipfyndClock ||
+      (parentElement._flipfyndClock={first:true,started:null,finished:null});
     function tick() {
       const running=!!doc.querySelector('[data-testid="stStatusWidgetRunningIcon"]');
       const now=Date.now();
       if(running) {
-        if(started===null) {
-          started=first ? (parent.performance?.timeOrigin||now) : now;
-          finished=null;
+        if(clock.started===null) {
+          clock.started=clock.first ? (parent.performance?.timeOrigin||now) : now;
+          clock.finished=null;
         }
-        const seconds=Math.max(0,(now-started)/1000);
+        const seconds=Math.max(0,(now-clock.started)/1000);
         box.style.display=seconds>=1?'block':'none';
         let detail='Återstående tid är ännu okänd.';
-        if(first && estimate!==null) detail=seconds<estimate
+        if(clock.first && estimate!==null) detail=seconds<estimate
           ? `Tidigare öppningar tog cirka ${Math.round(estimate)} s totalt.`
           : 'Tar längre tid än tidigare. Återstående tid är okänd.';
-        box.textContent=`${first?'Laddar Flipfynd':'Uppdaterar vyn'} · ${Math.floor(seconds)} s. ${detail}`;
-      } else if(started!==null) {
-        const seconds=(now-started)/1000;
-        if(first) {
+        box.textContent=`${clock.first?'Laddar Flipfynd':'Uppdaterar vyn'} · ${Math.floor(seconds)} s. ${detail}`;
+      } else if(clock.started!==null) {
+        const seconds=(now-clock.started)/1000;
+        if(clock.first) {
           samples.push(seconds);
           try {parent.sessionStorage.setItem(key,JSON.stringify(samples.slice(-5)));} catch(_){}
         }
-        first=false; started=null; finished=now;
+        clock.first=false; clock.started=null; clock.finished=now;
         box.textContent=`Vyn är klar · ${Math.round(seconds)} s`;
         box.style.display=seconds>=1?'block':'none';
-      } else if(finished!==null && now-finished>5000) box.style.display='none';
+      } else if(clock.finished!==null && now-clock.finished>5000) box.style.display='none';
     }
     tick();
     const timer=setInterval(tick,250);
-    addEventListener('pagehide',()=>{clearInterval(timer);box.remove();},{once:true});
-  } catch(_) {} // A restricted iframe must never block the app.
-})();
-</script></body></html>
+    return () => {clearInterval(timer);box.remove();};
+  } catch(_) {} // The timing helper must never block the app.
+}

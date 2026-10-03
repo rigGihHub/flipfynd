@@ -11,6 +11,8 @@ import uuid
 from src.resumable_search import valid_token
 from src.persistent_store import load_namespace, save_namespace
 
+INLINE_COMPONENT_DELIVERY = True
+
 _ROOT = Path(__file__).resolve().parent.parent / 'workspace_snapshots'
 _LOCK = globals().get('_LOCK') or RLock()
 _HASHES = globals().get('_HASHES', {})
@@ -159,7 +161,7 @@ def persist_current(state, query, database_url=None):
 def recover_ui(state, query, database_url=None):
     """Run before defaults and widgets, including on the plain start URL."""
     from src.browser_search_backup import encode_snapshot, decode_snapshot
-    from streamlit.components.v1 import declare_component
+    from src.inline_components import mount_inline
     import streamlit as st
     token = str(query.get('view_run') or '')
     requested_token = token
@@ -175,10 +177,10 @@ def recover_ui(state, query, database_url=None):
         current = snapshot(state, query)
     wrapper = {'status': 'COMPLETED', 'params': {}, 'results': [], 'debug': {'workspace': current}}
     blob = encode_snapshot(token, wrapper) if current else ''
-    component = declare_component('flipfynd_workspace_recovery', path=str(Path(__file__).with_name('workspace_browser_storage')))
-    copy = component(token=token if valid_token(token) else '', blob=blob,
-                     hydrated=state.get('_workspace_browser_loaded') == token,
-                     key='workspace_recovery', default=None)
+    copy = mount_inline('flipfynd_workspace_recovery', 'workspace_browser_storage',
+                        data={'token': token if valid_token(token) else '', 'blob': blob,
+                              'hydrated': state.get('_workspace_browser_loaded') == token},
+                        key='workspace_recovery')
     if not isinstance(copy, dict):
         return
     saved_token = copy.get('token')

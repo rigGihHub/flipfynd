@@ -1,7 +1,6 @@
 """Compact per-browser result backup; never a shared marketplace cache."""
 import base64
 import json
-from pathlib import Path
 import zlib
 
 MAX_COMPRESSED = 3_000_000
@@ -52,14 +51,14 @@ def decode_snapshot(token, blob):
 
 def browser_backup(token, snapshot, *, clear=False):
     import streamlit as st
-    from streamlit.components.v1 import declare_component
-    component = declare_component("flipfynd_search_backup", path=str(Path(__file__).with_name("search_browser_storage")))
+    from src.inline_components import mount_inline
     identity = (token, (snapshot or {}).get("status"), (snapshot or {}).get("completed_at"))
     if st.session_state.get("_browser_backup_identity") != identity:
         st.session_state["_browser_backup_identity"] = identity
         st.session_state["_browser_backup_blob"] = encode_snapshot(token, snapshot)
-    return component(token=token, blob=st.session_state.get("_browser_backup_blob", ""),
-                     clear=clear, key="browser_search_backup", default=None)
+    return mount_inline('flipfynd_search_backup', 'search_browser_storage',
+                        data={'token': token, 'blob': st.session_state.get('_browser_backup_blob', ''),
+                              'clear': clear}, key='browser_search_backup')
 
 
 def recover_browser_search(token, blob, database_url=None):

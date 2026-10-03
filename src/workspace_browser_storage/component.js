@@ -1,9 +1,10 @@
-<!doctype html><html><body><script>
-(() => {
+export default function({data,parentElement,setStateValue}) {
   const prefix = 'flipfynd.workspace.v1.';
   const valid = t => /^[a-f0-9]{32}$/.test(t || '');
-  const send = (type, fields) => parent.postMessage({isStreamlitMessage:true,type,...fields}, '*');
-  let repliedFor=null, token='', doc=null, timer;
+  const parent=window, args=data||{};
+  let token='', doc=null, timer;
+  const scheduleDrafts=()=>{clearTimeout(timer);timer=setTimeout(drafts,250);};
+  const visibilityDrafts=()=>{if(doc.hidden) drafts();};
   const names = {'Säljare (valfritt)':'seller_top5_alias','Tradera-profil':'seller_top5_profile_url',
     'Sök spelare, set eller kort':'search_text','Budget – max totalpris inkl. frakt':'search_budget',
     'Sport':'search_sport','Annonsform':'search_sale_type','Korttyp':'ordinary_card_type_filter',
@@ -30,34 +31,40 @@
   }
   try {
     doc=parent.document;
-    doc.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(drafts,250);},true);
-    doc.addEventListener('change',()=>{clearTimeout(timer);timer=setTimeout(drafts,250);},true);
-    doc.addEventListener('visibilitychange',()=>{if(doc.hidden) drafts();});
+    doc.addEventListener('input',scheduleDrafts,true);
+    doc.addEventListener('change',scheduleDrafts,true);
+    doc.addEventListener('visibilitychange',visibilityDrafts);
     parent.addEventListener('pagehide',drafts);
-  } catch (_) {} // A restricted iframe still provides server/browser snapshot recovery.
-  addEventListener('message',event=>{
-    if(event.source!==parent || event.data.type!=='streamlit:render') return;
-    const args=event.data.args||{};
-    let reply={token:'',blob:''};
-    try {
-      token=valid(args.token) ? args.token : localStorage.getItem(prefix+'latest');
-      if(valid(token)) {
-        if(args.blob) {
-          localStorage.setItem(prefix+token,args.blob);
-          localStorage.setItem(prefix+'latest',token);
-          // Do not discard another open tab's recovery record.
-        }
-        reply={token,blob:localStorage.getItem(prefix+token)||'',
-          drafts:JSON.parse(localStorage.getItem(prefix+token+'.drafts')||'null')};
+  } catch (_) {} // Restricted browser storage must not prevent server recovery.
+
+  let reply={token:'',blob:''};
+  try {
+    token=valid(args.token) ? args.token : localStorage.getItem(prefix+'latest');
+    if(valid(token)) {
+      if(args.blob) {
+        localStorage.setItem(prefix+token,args.blob);
+        localStorage.setItem(prefix+'latest',token);
+        // Do not discard another open tab's recovery record.
       }
-    } catch (_) {reply={token:args.token||'',error:'STORAGE_UNAVAILABLE'};}
-    // Recovery is a handshake, not a notification for each saved snapshot.
-    // Echoing a new blob/draft makes Streamlit rerun the entire app.
-    const requestToken=args.token||'';
-    if(args.hydrated) repliedFor=requestToken;
-    if(requestToken!==repliedFor) {repliedFor=requestToken;send('streamlit:setComponentValue',{value:reply,dataType:'json'});}
-    send('streamlit:setFrameHeight',{height:0});
-  });
-  send('streamlit:componentReady',{apiVersion:1});
-})();
-</script></body></html>
+      reply={token,blob:localStorage.getItem(prefix+token)||'',
+        drafts:JSON.parse(localStorage.getItem(prefix+token+'.drafts')||'null')};
+    }
+  } catch (_) {reply={token:args.token||'',error:'STORAGE_UNAVAILABLE'};}
+  // Recovery is a handshake, not a notification for each saved snapshot.
+  // Echoing a new blob/draft makes Streamlit rerun the entire app.
+  const requestToken=args.token||'';
+  if(args.hydrated) parentElement.dataset.repliedFor=requestToken;
+  if(requestToken!==parentElement.dataset.repliedFor) {
+    parentElement.dataset.repliedFor=requestToken;
+    setStateValue('reply',reply);
+  }
+  return () => {
+    clearTimeout(timer);
+    if(doc) {
+      doc.removeEventListener('input',scheduleDrafts,true);
+      doc.removeEventListener('change',scheduleDrafts,true);
+      doc.removeEventListener('visibilitychange',visibilityDrafts);
+    }
+    parent.removeEventListener('pagehide',drafts);
+  };
+}

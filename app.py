@@ -231,8 +231,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-from src.loading_status import render_loading_status
-render_loading_status()
+import src.loading_status as _startup_loading_status
+if not getattr(_startup_loading_status, 'INLINE_COMPONENT_DELIVERY', False):
+    importlib.reload(_startup_loading_status)
+_startup_loading_status.render_loading_status()
 _startup_notice = st.empty()
 _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
@@ -338,7 +340,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.124"
+APP_VERSION = "v0.14.125"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -1262,6 +1264,8 @@ def analyze_data(*args, **kwargs):
 
 
 import src.workspace_recovery as _workspace_recovery
+if not getattr(_workspace_recovery, 'INLINE_COMPONENT_DELIVERY', False):
+    importlib.reload(_workspace_recovery)
 _workspace_recovery.recover_ui(st.session_state, st.query_params, DATABASE_URL)
 ensure_state()
 update_fetch_status()
