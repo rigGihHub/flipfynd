@@ -5,9 +5,10 @@ import time
 
 from src.analysis_scope import _listing_key
 from src.search_progress import begin_phase, report_phase
+from src.price_research_checkpoint import listing_fingerprint
 
 
-def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=600, limit=1000):
+def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=600, limit=1000, completed=()):
     """Screen unseen listings, retaining input order and stopping on API limits.
 
     No ranking/value rules live here. Only the existing exact comparison
@@ -16,9 +17,14 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=600, limit=1
     seen = {_listing_key(row) for row in analysed
             if isinstance(row.get("asking_price_opportunity"), dict)}
     pending = []
+    completed = set(completed)
+    previous_count = 0
     for route in routes:
         row = route.get("source_item") or route
         key = _listing_key(row)
+        if listing_fingerprint(row) in completed:
+            previous_count += 1
+            continue
         if key not in seen:
             seen.add(key)
             pending.append(row)
@@ -26,6 +32,7 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=600, limit=1
            in {401, 403, 429} for row in analysed):
         return [], {"inventory_price_checked": 0,
                     "inventory_price_remaining": len(pending),
+                    "inventory_price_previously_checked": previous_count,
                     "inventory_price_stop": "API_LIMIT", "inventory_price_seconds": 0}
     results = []
     begin_phase("Prisjämför återstående kort", len(pending))
@@ -48,6 +55,7 @@ def sweep_inventory(routes, analysed, enrich, *, workers=6, seconds=600, limit=1
     if remaining and stop == "COMPLETE":
         stop = "REQUEST_LIMIT"
     return results, {"inventory_price_checked": len(results),
+                     "inventory_price_previously_checked": previous_count,
                      "inventory_price_remaining": remaining,
                      "inventory_price_stop": stop,
                      "inventory_price_seconds": round(time.monotonic() - started, 2)}

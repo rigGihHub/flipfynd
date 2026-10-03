@@ -109,14 +109,16 @@ def test_old_saved_429_results_are_not_reported_as_no_finds():
     assert price_research_problem({"price_research_status_counts": {"NO_MARGIN": 75}}) is None
 
 
-def test_empty_primary_search_does_not_consume_a_second_query(monkeypatch):
+def test_empty_primary_search_gets_one_broader_discovery_query(monkeypatch):
     from src import asking_price_opportunity as module
     calls = []
     monkeypatch.setattr(module, "configured_credentials", lambda: ("id", "secret"))
     monkeypatch.setattr(module, "fetch_configured_ebay_active_context",
-        lambda *a: (calls.append(1) or {"rows": [], "raw_listing_count": 0}))
+        lambda query, identity: (calls.append((query, identity)) or {"rows": [], "raw_listing_count": 0}))
     attach_asking_price_opportunity({"titel": TITLE, "pris": 10, "frakt": 22})
-    assert calls == [1]
+    assert len(calls) == 2
+    assert calls[1][0] == 'Connor Bedard #451'
+    assert calls[0][1] == calls[1][1]
 
 
 def test_api_error_cache_is_never_reused(monkeypatch):

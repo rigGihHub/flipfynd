@@ -338,7 +338,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.122"
+APP_VERSION = "v0.14.123"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -2418,6 +2418,9 @@ with st.form("analysis_form"):
         _find_label = "📥 Hämta annonser först"
     else:
         _find_label = "🔎 Hitta fynd"
+        _prior_debug = (_saved_search or {}).get('debug') or {}
+        if _prior_debug.get('inventory_price_remaining') or _prior_debug.get('description_identity_remaining'):
+            _find_label = "🔎 Fortsätt hitta fynd"
     run = st.form_submit_button(
         _find_label,
         type="primary",
@@ -2481,6 +2484,12 @@ if run:
         strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
         auto_only=auto_only, include_older=include_older,
         data_version=f"{get_data_version()}:{APP_VERSION}", sold_comp_data=get_sold_comp_data())
+    _prior_params = (_saved_search or {}).get('params') or {}
+    _prior_debug = (_saved_search or {}).get('debug') or {}
+    if (_prior_params.get('widgets') == _params['widgets']
+            and _prior_params.get('app_version') == APP_VERSION
+            and (_prior_debug.get('inventory_price_remaining') or _prior_debug.get('description_identity_remaining'))):
+        _job_kwargs['research_checkpoint'] = _prior_debug.get('research_checkpoint')
     if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
         import src.card_parser as _card_parser_module
         importlib.reload(_card_parser_module)
@@ -2793,6 +2802,13 @@ if st.session_state.get("results") is not None:
             _unchecked_prices = int((st.session_state.get("debug") or {}).get("inventory_price_remaining") or 0)
             if _unchecked_prices:
                 st.warning(f"Ofullständig prisjämförelse: {_unchecked_prices} sökbara kort återstår. Resultaten gäller bara kontrollerade kort.")
+                st.caption("Tryck Fortsätt hitta fynd för att gå vidare till återstående kort. Positiva prisuppslag kontrolleras på nytt.")
+            _coverage_debug = st.session_state.get('debug') or {}
+            _funnel = _coverage_debug.get('price_research_funnel') or {}
+            st.caption(f"{int(_coverage_debug.get('total_items') or 0)} annonser inlästa · "
+                       f"{int(_coverage_debug.get('integrity_eligible_candidates') or 0)} enkelkort inom dina filter · "
+                       f"{int(_funnel.get('opportunity_attached') or 0)} prisundersökta i denna omgång · "
+                       f"{int(_funnel.get('usable_reference') or 0)} med användbara jämförelsepriser.")
             if simple_buy.get("status") == "READY" and simple_buy.get("card"):
                 card = simple_buy["card"]
                 st.success(f"### KÖP · {card['title']}")
@@ -2823,8 +2839,8 @@ if st.session_state.get("results") is not None:
                 if _price_problem:
                     st.warning(_price_problem)
                 else:
-                    from src.asking_price_ui import positive_price_suggestions
-                    _positive_suggestions = positive_price_suggestions(
+                    from src.asking_price_ui import practical_price_suggestions
+                    _positive_suggestions = practical_price_suggestions(
                         st.session_state.get("results") or [],
                         (st.session_state.get("debug") or {}).get("single_price_research_leads") or [])
                     if _positive_suggestions:
@@ -2835,7 +2851,7 @@ if st.session_state.get("results") is not None:
                                 f"möjligt netto +{_best_scenario['net_margin']:.2f} kr i scenariot.")
                         st.caption("Begärda jämförelsepriser. Underlaget och alla kostnader visas nedan; faktisk försäljning är inte bekräftad.")
                     else:
-                        st.info("Inget positivt fyndscenario just nu.")
+                        st.info("Inget prisuppslag når fyndkravet: minst 35 kr netto och 15% avkastning efter alla kostnader.")
                         st.caption(simple_buy.get("note") or "")
 
             if _price_problem and _saved_search:
@@ -2856,7 +2872,9 @@ if st.session_state.get("results") is not None:
                 total_limit=5,
                 require_verified_economic_edge=True,
             )
-            opportunity_top5 = build_opportunity_top5(st.session_state.get("results") or [], limit=5)
+            from src.asking_price_ui import meaningful_opportunity_candidates
+            opportunity_top5 = build_opportunity_top5(
+                meaningful_opportunity_candidates(st.session_state.get("results") or []), limit=5)
             top_rows = [
                 row for row in (opportunity_top5.get("rows") or [])
                 if not known_negative_net_profit(row)

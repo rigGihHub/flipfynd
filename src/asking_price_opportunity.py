@@ -286,15 +286,16 @@ def attach_asking_price_opportunity(item):
         # One shorter discovery query can recover spelling/set-title variants.
         # Both searches still pass the unchanged exact-identity matcher.
         eligible = [row for row in context.get("rows") or [] if row.get("asking_comparison_eligible")]
-        # Spend a second request only on an already profitable single-price
-        # lead. Empty/negative queries formerly doubled quota consumption.
+        # Broaden discovery after a missed exact match or a single-price lead.
+        # Every returned title still passes the unchanged complete identity
+        # gate (season, set, number, parallel, autograph/grade and product).
         primary = build_asking_price_opportunity(out, context, fx=(
             _cached_fx(int(time.time() // 3600)) if any(
                 row.get("asking_comparison_eligible") and row.get("currency") != "SEK"
                 for row in context.get("rows") or []) else None))
-        if len(eligible) == 1 and primary.get("research_signal"):
+        if not eligible or (len(eligible) == 1 and primary.get("research_signal")):
             shorter = " ".join(str(value) for value in (
-                identity.get("player_name"), identity.get("season"),
+                identity.get("player_name"),
                 "#" + str(identity.get("card_number") or "")) if value)
             if shorter != price_lookup_query(identity):
                 try:

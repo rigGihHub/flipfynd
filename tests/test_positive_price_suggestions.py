@@ -49,7 +49,8 @@ render_asking_price_shortlist(st.session_state['results'], research_leads=st.ses
     assert not app.exception
     text = '\n'.join(element.value for element in app.markdown)
     assert text.index('#### One price') < text.index('#### Two prices')
-    assert 'Osäkert fyndförslag · endast 1 jämförelsepris' in text
+    assert 'Osäkert prisuppslag · endast 1 jämförelsepris' in text
+    assert any('bara ett jämförelsepris' in element.label for element in app.expander)
     assert 'Ingen marginal' not in text
 
 

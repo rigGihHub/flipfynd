@@ -83,11 +83,13 @@ def recover_description_identity(item):
     return fields
 
 
-def enrich_description_routes(rows, *, limit=80, verifier=None):
+def enrich_description_routes(rows, *, limit=80, verifier=None, previously_checked=()):
     """Bound HTTP detail work to cheap identifiable cards missing a number."""
     from src.tradera_purchase_cost import verify_purchase_cost
     from src.search_progress import begin_phase, report_phase
     verifier = verifier or verify_purchase_cost
+    from src.price_research_checkpoint import listing_fingerprint
+    previously_checked = set(previously_checked)
     candidates = []
     reused = 0
     for row in rows:
@@ -105,7 +107,8 @@ def enrich_description_routes(rows, *, limit=80, verifier=None):
                 and re.match(r"/item/\d+/\d+(?:/|$)", parts.path)
                 and parsed.get("player_name") and parsed.get("set_name")
                 and not title_number and not parsed.get("is_lot")):
-            candidates.append(row)
+            if listing_fingerprint(row) not in previously_checked:
+                candidates.append(row)
     # Give low entry costs the first chance; retain the rest for a later scan.
     candidates.sort(key=lambda row: float(row.get("pris") or row.get("price") or 999999))
     selected = candidates[:limit]
@@ -142,6 +145,7 @@ def enrich_description_routes(rows, *, limit=80, verifier=None):
             checked += 1
             report_phase(phase, checked=checked, total=len(selected))
     return {"description_identity_candidates": len(candidates), "description_identity_checked": checked,
+            "description_checked_fingerprints": [listing_fingerprint(row) for row in selected],
             "description_identity_reused": reused,
             "description_identity_recovered": recovered, "description_identity_inactive": inactive,
             "description_identity_remaining": max(0, len(candidates) - checked)}

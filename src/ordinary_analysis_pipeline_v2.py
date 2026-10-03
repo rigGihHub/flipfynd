@@ -23,6 +23,7 @@ from src.asking_price_opportunity import attach_asking_price_opportunity, select
 from src.ebay_browse_context import configured_credentials
 from src.inventory_price_sweep import sweep_inventory
 from src.price_route_coverage import add_price_route_coverage, spread_price_routes
+from src.price_research_checkpoint import fresh_checkpoint, extend_checkpoint, listing_fingerprint
 
 from src.price_research_session import price_research_run
 from src.search_progress import begin_phase, report_phase
@@ -44,8 +45,11 @@ def analyze_data(
     *,
     data_version="worker",
     sold_comp_data=None,
+    research_checkpoint=None,
 ):
     analysis_started = time.perf_counter()
+    research_checkpoint = fresh_checkpoint(research_checkpoint)
+    completed_prices = set(research_checkpoint.get('completed') or [])
     from src.ebay_browse_context import fetch_configured_quota
     ebay_quota = fetch_configured_quota()
     raw_total_items = len(data)
@@ -232,7 +236,8 @@ def analyze_data(
     debug["integrity_rejected_candidates"] = len(fast_pool_source) - len(integrity_eligible)
     from src.description_price_identity import enrich_description_routes
     if all(configured_credentials()):
-        debug.update(enrich_description_routes(integrity_eligible))
+        debug.update(enrich_description_routes(integrity_eligible,
+            previously_checked=research_checkpoint.get('description_checked') or []))
         integrity_eligible = [row for row in integrity_eligible if not row.get("listing_inactive")]
     fast_pool_budget = fast_analysis_budget(len(fast_pool_source), context="ordinary")
     fast_pool_source, scope_debug = select_recent_archive_fast_pool(
@@ -248,9 +253,12 @@ def analyze_data(
         [{"source_item": row} for row in integrity_eligible],
         limit=max(1, len(integrity_eligible)),
     )
+    # A continued round reserves research capacity for previously unseen ads.
+    unchecked_routes = [route for route in all_price_routes
+                        if listing_fingerprint(route['source_item']) not in completed_prices]
     fast_pool_source, price_route_added = add_price_route_coverage(
         fast_pool_source,
-        [route["source_item"] for route in spread_price_routes(all_price_routes, limit=140)],
+        [route["source_item"] for route in spread_price_routes(unchecked_routes, limit=140)],
         max_new=min(40, fast_pool_budget // 4),
     )
     latest_keys = {_listing_key(row) for row in latest_scope if isinstance(row, dict)}
@@ -311,7 +319,9 @@ def analyze_data(
     )
 
     results = []
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=20, max_cap=140)
+    # Price-screen the wider inventory cheaply; reserve full CPU analysis for
+    # discovery leaders and subsequently detected economic signals.
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=20, max_cap=60)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
         candidates,
@@ -372,7 +382,7 @@ def analyze_data(
     # Mispricing sweep: cover a much broader part of the exact-identifiable
     # market before spending ranking attention. This is intentionally bounded,
     # but large enough to hunt beyond the obvious cheapest base cards.
-    initial_price_limit = min(140, len(all_asking_eligible))
+    initial_price_limit = min(40, len(all_asking_eligible))
     asking_routes = all_asking_eligible[:initial_price_limit]
     asking_indices = []
     routed_indices = []
@@ -423,6 +433,11 @@ def analyze_data(
         cached = get_cached_analysis(signature)
         if cached:
             debug["cache_hits"] += 1
+            scenario = cached.get('asking_price_opportunity') or {}
+            if research_checkpoint and (scenario.get('possible_find') or scenario.get('research_signal')):
+                # CPU work may be reused, but a retained positive lead needs
+                # current comparisons and purchase costs on a continued round.
+                cached = attach_asking_price_opportunity(dict(cached, purchase_cost_verified=False))
             return cached
 
         full = analyze_item(
@@ -536,9 +551,15 @@ def analyze_data(
     # the user wants the best findings, not a search that stops at its first hit.
     inventory_screened = []
     if debug.get("ebay_credentials_configured"):
+        sweep_options = {'completed': completed_prices} if completed_prices else {}
+        # Probe beyond the cheapest cluster early enough to survive a time or
+        # request cap, then keep every unselected route in the remaining queue.
+        front_routes = spread_price_routes(unchecked_routes, limit=250)
+        front_keys = {_listing_key(route['source_item']) for route in front_routes}
+        sweep_routes = front_routes + [route for route in all_price_routes
+                                      if _listing_key(route['source_item']) not in front_keys]
         inventory_screened, sweep_debug = sweep_inventory(
-            all_price_routes, results, attach_asking_price_opportunity,
-        )
+            sweep_routes, results, attach_asking_price_opportunity, **sweep_options)
         debug.update(sweep_debug)
         positive = [row for row in inventory_screened
                     if (row.get("asking_price_opportunity") or {}).get("possible_find")]
@@ -564,6 +585,8 @@ def analyze_data(
     price_results = list(price_rows.values())
     from src.tradera_purchase_cost import refine_purchase_costs
     debug["purchase_cost_checks"] = refine_purchase_costs(price_results)
+    debug['research_checkpoint'] = extend_checkpoint(all_price_routes, price_results, research_checkpoint,
+        description_checked=debug.pop('description_checked_fingerprints', []))
     result_keys = {_listing_key(row) for row in results}
     recovered = [row for row in price_results if _listing_key(row) not in result_keys
                  and (row.get("asking_price_opportunity") or {}).get("possible_find")]
