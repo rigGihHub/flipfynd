@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-04.130-football-product-scope"
+RUNTIME_BUILD = "2026-10-04.131-football-hobby-ranking"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.130"
+APP_VERSION = "v0.14.131"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime

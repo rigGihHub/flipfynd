@@ -79,7 +79,8 @@ def test_old_results_refill_five_with_allowed_losses_and_filter_research_leads()
     result = build_best_alternatives(rows, research_leads=[
         {'title': GAME_TITLES[0], 'url': rows[0]['lank'], 'scenario': rows[0]['asking_price_opportunity']}])
     assert len(result['rows']) == result['available_count'] == 5
-    assert [r['title'] for r in result['rows']] == HOBBY_TITLES
+    assert {r['title'] for r in result['rows']} == set(HOBBY_TITLES)
+    assert result['rows'][0]['title'] == HOBBY_TITLES[1]
     assert all(r['decision'] == 'AVSTÅ' and r['market_value'] is None for r in result['rows'])
     assert rows == original
 
@@ -92,6 +93,25 @@ def test_hobby_priority_never_promotes_buy_or_prices_a_card():
     result = build_best_alternatives([generic, numbered])['rows']
     assert result[0]['title'] == numbered['titel']
     assert all(r['decision'] != 'KÖP' and r['market_value'] is None for r in result)
+
+
+def test_model_loss_or_tiny_margin_cannot_outrank_numbered_hobby_research():
+    numbered = listing(2, 'Topps Simplicidad Rodrigo Riquelme 49/99 Real Betis Balompié')
+    numbered['guide_price'] = 37
+    weak = listing(1, 'Alexander Isak Prized Footballers samlarkort', 2)
+    model = listing(3, 'Erling Haaland Panini Top Class 2023 Rainbow Master Fotbollskort')
+    model['guide_price'] = 1000
+    result = build_best_alternatives([weak, model, numbered])['rows']
+    assert result[0]['title'] == numbered['titel']
+    assert all(r['decision'] != 'KÖP' and r['market_value'] is None for r in result)
+
+
+def test_supported_meaningful_economics_still_precede_hobby_potential():
+    numbered = listing(2, HOBBY_TITLES[1])
+    positive = listing(1, HOBBY_TITLES[0], 60)
+    result = build_best_alternatives([numbered, positive])['rows']
+    assert result[0]['title'] == positive['titel']
+    assert result[0]['decision'] != 'KÖP'
 
 
 def test_excluded_attachment_does_not_call_price_api():

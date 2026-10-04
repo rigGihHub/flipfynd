@@ -88,7 +88,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "football-product-scope-v014130",
+        "analysis_engine_marker": "football-product-scope-v014131",
         "product_scope_rejected": 0,
         "product_scope_reasons": {},
         "ebay_quota": ebay_quota,
@@ -621,7 +621,8 @@ def analyze_data(
     ]
     # Independent local market lane: no eBay calls and no SOLD/BUY promotion.
     from src.tradera_price_context import screen_tradera_prices
-    local_leads, local_debug = screen_tradera_prices(integrity_eligible, sport_items)
+    local_leads, local_debug = screen_tradera_prices(integrity_eligible,
+        [row for row in sport_items if product_scope(row, sport)['allowed']])
     debug.update(local_debug)
     debug["tradera_price_find_rows"] = [row for row in local_leads
         if row["asking_price_opportunity"].get("possible_find")][:5]

@@ -81,6 +81,8 @@ def render_best_alternatives(result, *, explain=None, seller=None):
     rows = result.get('rows') or []
     st.markdown('### 🏆 De 5 bästa alternativen')
     st.caption('Bäst bland de tillgängliga alternativen i din sökning. En plats i listan betyder inte att kortet är ett lönsamt köp.')
+    if any(str((row.get('_source_item') or {}).get('source_category') or '').casefold().find('fotboll') >= 0 for row in rows):
+        st.caption('Utan ett styrkt fynd prioriteras numrerade kort, autografer, relikkort och identifierade hobbyserier framför vanliga inserts med svaga modellvärden.')
     if result.get('product_scope_excluded_count'):
         st.caption(f"{result['product_scope_excluded_count']} annonser uteslutna av produktfiltret. Match Attax, Adrenalyn och vanliga Beast Mode-inserts fyller inte topplistan.")
     if len(rows) < 5:

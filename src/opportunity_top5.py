@@ -484,10 +484,18 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         def alternative_rank(row):
             margin = row.get('practical_margin')
             losing = known_negative_net_profit(row) or (margin is not None and margin < 0)
-            return (row.get('decision') == 'KÖP', not losing,
+            roi = row.get('practical_roi')
+            supported_find = bool(margin is not None and margin >= 35 and roi is not None and roi >= .15
+                and (row.get('practical_price_source') == 'VERIFIED'
+                     or (row.get('practical_price_source') == 'ACTIVE_PRICE'
+                         and int(row.get('asking_comparison_count') or 0) >= 2)))
+            # A cheap model estimate is not a documented economic edge. When
+            # no supported find exists, choose identifiable hobby variants
+            # before weak base/insert fillers, without changing their prices.
+            return (row.get('decision') == 'KÖP', supported_find,
+                    football_card_priority(row), not losing,
                     margin is not None and margin > 0,
                     margin if margin is not None else -10**9,
-                    football_card_priority(row),
                     row.get('certainty') or 0, row.get('potential') or 0)
         alternatives = []
         for row in sorted(all_gated_rows, key=alternative_rank, reverse=True)[:max(0, int(limit))]:
