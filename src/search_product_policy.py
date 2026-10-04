@@ -4,7 +4,7 @@ import unicodedata
 
 from src.card_parser import parse_card_features
 
-POLICY_VERSION = "football-hobby-v1"
+POLICY_VERSION = "football-hobby-v2"
 EXCLUDED_PRODUCT_LABEL = "Match Attax och Adrenalyn är uteslutna, även Limited Edition och numrerade varianter."
 
 
@@ -39,6 +39,11 @@ def product_scope(item, sport=None):
                                 for key in ("sport", "source_category", "category_name", "category")))
     football = str(sport or "").casefold() in {"football", "fotboll"} or bool(
         re.search(r"\b(?:football|fotboll|soccer|premier league|uefa|fifa)\b", categories + " " + text))
+    # Marketplace categories can be wrong. Explicit product sport names must
+    # override a soccer category; otherwise a numbered tennis card ranks as a
+    # football hobby variant in restored results as well as fresh searches.
+    if football and re.search(r"\b(?:tennis|basketball|baseball|hockey|nhl|nba|nfl|mlb|ufc|nascar|wwe|formula 1|formel 1)\b", text):
+        return {"allowed": False, "reason": "NON_FOOTBALL_PRODUCT", "product": "kort från annan sport"}
     # Beast Mode also exists outside Match Attax. Do not misidentify the product
     # or ban a genuinely numbered/autograph variant of a hobby collection.
     # Manufacturer context: investor.fanatics.com, Premier League launch 2025-07-17.

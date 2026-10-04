@@ -43,7 +43,12 @@ HOBBY_TITLES = [
 ]
 
 
-@pytest.mark.parametrize('title', GAME_TITLES)
+@pytest.mark.parametrize('title', GAME_TITLES + [
+    'Hugo Gaston Topps Chrome Tennis kort 17/25',
+    '2023-24 Upper Deck NHL Connor Bedard 12/99',
+    '2024 Panini Prizm NBA Stephen Curry autograph',
+    '2024 Panini NFL Patrick Mahomes 1/1',
+])
 def test_game_products_and_ordinary_beast_mode_are_hard_excluded(title):
     row = listing(1, title, 1000)
     row.update(decision='KÖP', sold_comps=20, market_value=2000, valuation_display_safe=True)
@@ -70,6 +75,16 @@ def test_nested_identity_filter_and_no_mutation():
     assert filtered == [rows[-1]]
     assert reasons == {'EXCLUDED_ADRENALYN': 1, 'EXCLUDED_MATCH_ATTAX': 1}
     assert rows == original
+
+
+def test_tennis_identity_overrides_wrong_category_but_is_preserved_outside_soccer():
+    tennis = {'title': 'Hugo Gaston Topps Chrome Tennis kort 17/25'}
+    assert product_scope(tennis)['allowed']
+    assert not product_scope(tennis, 'football')['allowed']
+    wrongly_categorized = dict(tennis, source_category='Fotboll')
+    result = build_best_alternatives([wrongly_categorized, listing(10, HOBBY_TITLES[1])])
+    assert len(result['rows']) == 1
+    assert result['rows'][0]['title'] == HOBBY_TITLES[1]
 
 
 def test_old_results_refill_five_with_allowed_losses_and_filter_research_leads():

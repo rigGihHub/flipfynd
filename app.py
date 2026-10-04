@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-04.131-football-hobby-ranking"
+RUNTIME_BUILD = "2026-10-04.132-football-hobby-sport-scope"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.131"
+APP_VERSION = "v0.14.132"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -2882,10 +2882,10 @@ def render_card_explanation_button(item: dict, key: str) -> None:
 
 if st.session_state.get("results") is not None:
     # Filter the presentation copy, preserving saved results and dismissals.
-    _display_results, _product_excluded = filter_search_products(st.session_state.get("results") or [])
+    _display_results, _product_excluded = filter_search_products(st.session_state.get("results") or [], sport=sport)
     _display_debug = dict(st.session_state.get("debug") or {})
     for _field in ("single_price_research_leads", "tradera_price_find_rows"):
-        _display_debug[_field], _ = filter_search_products(_display_debug.get(_field) or [])
+        _display_debug[_field], _ = filter_search_products(_display_debug.get(_field) or [], sport=sport)
     st.caption(EXCLUDED_PRODUCT_LABEL)
     if _product_excluded:
         st.caption(f"{sum(_product_excluded.values())} sparade resultat bortfiltrerade av produktkraven. Nästa analys använder samma filter före prisresearch.")
