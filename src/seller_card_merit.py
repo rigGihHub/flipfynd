@@ -9,6 +9,7 @@ import re
 from src.seller_collector_signals import collector_signals
 from src.card_listing_integrity import assess_listing_integrity
 from src.seller_profit_display import build_seller_net_profit_summary
+from src.search_product_policy import product_scope
 
 _MASS_MARKET = re.compile(r"\b(match\s*attax|adrenalyn(?:\s*xl)?|sticker)\b", re.I)
 _FAUX_PREMIUM = re.compile(r"\b(signature\s*style|silver\s*script|facsimile(?:\s*signature)?|printed\s*signature|pre[- ]?printed\s*signature)\b", re.I)
@@ -56,7 +57,10 @@ def assess_seller_card_merit(row: dict) -> dict:
         or (score>=25 and not mass_market_base and not faux_premium and not generic_rookie and not unsupported_base_like)
         or (identity_ok and sold>=1 and not mass_market_base)
     )
+    scope = product_scope(row)
+    eligible = eligible and scope["allowed"]
     reasons=[]
+    if not scope["allowed"]: reasons.append("utesluten produkt: " + str(scope["product"]))
     if mass_market_base: reasons.append("massproducerad lågprisprodukt utan verifierad variant")
     if mass_market_team_badge and not team_badge_evidence_ok: reasons.append("massproducerat lagmärke kräver exakt identitet och minst två SOLD-comps")
     if faux_premium: reasons.append("produktnamn/tryckt signatur är inte autograf")

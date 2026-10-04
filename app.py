@@ -11,6 +11,7 @@ from src.player_knowledge import knowledge_coverage
 from src.card_explanation import build_card_explanation, build_card_identity_summary
 from src.card_parser import parse_card_features
 from src.collector_evidence import money as evidence_money, timestamp as evidence_time, snapshot_notice, render_listing_review
+from src.search_product_policy import product_scope, filter_search_products, EXCLUDED_PRODUCT_LABEL
 
 
 import streamlit as st
@@ -241,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-04.129-collector-evidence"
+RUNTIME_BUILD = "2026-10-04.130-football-product-scope"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -341,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.129"
+APP_VERSION = "v0.14.130"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -366,6 +367,15 @@ if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
     importlib.reload(_ebay_runtime)
     _ebay_runtime._flipfynd_loaded_version = APP_VERSION
 import src.seller_analysis_registry as _seller_registry_runtime
+import src.search_product_policy as _product_scope_runtime
+import src.seller_card_domain as _seller_domain_runtime
+import src.seller_card_merit as _seller_merit_runtime
+for _scope_module in (_product_scope_runtime, _seller_domain_runtime, _seller_merit_runtime):
+    if getattr(_scope_module, "_flipfynd_loaded_version", None) != APP_VERSION:
+        importlib.reload(_scope_module)
+        _scope_module._flipfynd_loaded_version = APP_VERSION
+product_scope = _product_scope_runtime.product_scope
+filter_search_products = _product_scope_runtime.filter_search_products
 import src.seller_dynamic_top5 as _seller_dynamic_runtime
 import src.seller_checkpoint_store as _seller_checkpoint_runtime
 import src.seller_profit_display as _seller_profit_runtime
@@ -384,7 +394,7 @@ full_analyze_live_seller_item = _seller_full_runtime.full_analyze_live_seller_it
 build_seller_top5 = _seller_top5_runtime.build_seller_top5
 seller_result_tier = _seller_top5_runtime.seller_result_tier
 seller_has_positive_purchase_price = _seller_top5_runtime.seller_has_positive_purchase_price
-SELLER_PRESENTATION_CONTRACT = "dynamic-top5-collector-evidence-v5"
+SELLER_PRESENTATION_CONTRACT = "dynamic-top5-football-product-scope-v6"
 
 # Saved searches must also render with the current deployed UI after hot reload.
 import src.asking_price_ui as _asking_ui_module
@@ -418,6 +428,8 @@ def _seller_ui_row_is_safe(row):
     final money-safety check local so cached analyser code cannot bypass it.
     """
     if not isinstance(row, dict):
+        return False
+    if not product_scope(row)["allowed"]:
         return False
 
     source = row.get("source_item") if isinstance(row.get("source_item"), dict) else {}
@@ -1230,7 +1242,7 @@ def _fast_signature(item, sport, strategy):
         "price": item.get("pris"), "shipping": item.get("frakt"),
         "raw_text": item.get("raw_text"),
         "full_description": item.get("full_description"),
-        "sport": sport, "strategy": strategy, "seller_parser_contract": "collector-identity-v3",
+        "sport": sport, "strategy": strategy, "seller_parser_contract": "football-product-scope-v4",
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
@@ -1248,7 +1260,7 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
     signature = build_analysis_signature(
         item,
         data_size=inventory_size,
-        mode=f"seller_v9_collector_identity_evidence_{sport}_{strategy_mode}",
+        mode=f"seller_v10_football_product_scope_{sport}_{strategy_mode}",
     )
     cached = get_cached_analysis(signature)
     if cached:
@@ -2364,6 +2376,8 @@ with st.form("analysis_form"):
             key="search_sport",
         )
         sport = "hockey" if sport_label == "Hockey" else "football"
+        if sport == "football":
+            st.caption(EXCLUDED_PRODUCT_LABEL)
 
     with p2:
         max_price = st.number_input(
@@ -2867,6 +2881,14 @@ def render_card_explanation_button(item: dict, key: str) -> None:
 
 
 if st.session_state.get("results") is not None:
+    # Filter the presentation copy, preserving saved results and dismissals.
+    _display_results, _product_excluded = filter_search_products(st.session_state.get("results") or [])
+    _display_debug = dict(st.session_state.get("debug") or {})
+    for _field in ("single_price_research_leads", "tradera_price_find_rows"):
+        _display_debug[_field], _ = filter_search_products(_display_debug.get(_field) or [])
+    st.caption(EXCLUDED_PRODUCT_LABEL)
+    if _product_excluded:
+        st.caption(f"{sum(_product_excluded.values())} sparade resultat bortfiltrerade av produktkraven. Nästa analys använder samma filter före prisresearch.")
     _result_version = (_saved_search or {}).get("params", {}).get("app_version")
     if _result_version and tuple(int(part) for part in re.findall(r"\d+", _result_version)[:3]) < (0, 14, 88):
         st.warning("Sparad sökning från en äldre prisanalys. Kortmatchningen har rättats. Tryck Hitta fynd för en ny prisjämförelse; dina filter är kvar.")
@@ -2875,7 +2897,7 @@ if st.session_state.get("results") is not None:
         st.stop()
     filtered = []
 
-    for item in st.session_state["results"]:
+    for item in _display_results:
         if item.get("confidence", 0) < minimum_confidence:
             continue
 
@@ -2891,14 +2913,14 @@ if st.session_state.get("results") is not None:
         st.divider()
         if _main_view == "Vad ska jag köpa?":
             from src.price_research_status import price_research_problem
-            _price_problem = price_research_problem(st.session_state.get("debug"))
+            _price_problem = price_research_problem(_display_debug)
             simple_buy = build_buy_view(filtered)
             st.subheader("🎯 Ditt beslut just nu")
-            _unchecked_prices = int((st.session_state.get("debug") or {}).get("inventory_price_remaining") or 0)
+            _unchecked_prices = int((_display_debug or {}).get("inventory_price_remaining") or 0)
             if _unchecked_prices:
                 st.warning(f"Ofullständig prisjämförelse: {_unchecked_prices} sökbara kort återstår. Resultaten gäller bara kontrollerade kort.")
                 st.caption("Tryck Fortsätt hitta fynd för att gå vidare till återstående kort. Positiva prisuppslag kontrolleras på nytt.")
-            _coverage_debug = st.session_state.get('debug') or {}
+            _coverage_debug = _display_debug or {}
             _funnel = _coverage_debug.get('price_research_funnel') or {}
             st.caption(f"{int(_coverage_debug.get('total_items') or 0)} annonser inlästa · "
                        f"{int(_coverage_debug.get('integrity_eligible_candidates') or 0)} enkelkort inom dina filter · "
@@ -2936,8 +2958,8 @@ if st.session_state.get("results") is not None:
                 else:
                     from src.asking_price_ui import practical_price_suggestions
                     _positive_suggestions = practical_price_suggestions(
-                        st.session_state.get("results") or [],
-                        (st.session_state.get("debug") or {}).get("single_price_research_leads") or [])
+                        _display_results,
+                        (_display_debug or {}).get("single_price_research_leads") or [])
                     if _positive_suggestions:
                         from src.card_parser import clean_card_title
                         _best_suggestion = _positive_suggestions[0]
@@ -2954,26 +2976,26 @@ if st.session_state.get("results") is not None:
                 if resumable_search.valid_token(_previous):
                     st.link_button("Visa föregående sparade sökning", f"?search_run={_previous}")
             render_asking_price_shortlist(
-                st.session_state.get("results") or [],
-                research_leads=(st.session_state.get("debug") or {}).get("single_price_research_leads") or [])
-            _local_rows = (st.session_state.get("debug") or {}).get("tradera_price_find_rows") or []
+                _display_results,
+                research_leads=(_display_debug or {}).get("single_price_research_leads") or [])
+            _local_rows = (_display_debug or {}).get("tradera_price_find_rows") or []
             render_asking_price_shortlist(_local_rows, heading="Möjliga fynd mot begärda Tradera-priser")
 
             # One compact Top 5. Research signals may rank UNDERSÖK candidates,
             # but KÖP remains gated by verified economic evidence.
             decision_tiers = build_decision_tiers_compat(
                 build_decision_tiers,
-                st.session_state.get("results") or [],
+                _display_results,
                 total_limit=5,
                 require_verified_economic_edge=True,
             )
             from src.best_alternatives import build_best_alternatives, render_best_alternatives
             opportunity_top5 = build_best_alternatives(
-                st.session_state.get('results') or [],
-                research_leads=(st.session_state.get('debug') or {}).get('single_price_research_leads') or [],
-                extra_rows=(st.session_state.get('debug') or {}).get('tradera_price_find_rows') or [])
+                _display_results,
+                research_leads=(_display_debug or {}).get('single_price_research_leads') or [],
+                extra_rows=(_display_debug or {}).get('tradera_price_find_rows') or [])
 
-            current_debug = st.session_state.get("debug") or {}
+            current_debug = _display_debug or {}
             price_funnel = current_debug.get("price_research_funnel") or {}
             if not price_funnel:
                 st.error("Prisfunneln saknas i analysresultatet. Debug-fält: " + (", ".join(sorted(current_debug.keys())) or "inga"))
@@ -3022,7 +3044,7 @@ if st.session_state.get("results") is not None:
                             f"{current_debug.get('inventory_price_remaining', 0)} återstår · "
                             f"status {current_debug.get('inventory_price_stop', '')}."
                         )
-                    statuses = (st.session_state.get("debug") or {}).get("price_research_status_counts") or {}
+                    statuses = (_display_debug or {}).get("price_research_status_counts") or {}
                     if statuses:
                         st.caption("Prisstatus: " + " · ".join(f"{k}: {v}" for k, v in sorted(statuses.items())))
                     failure_reasons = current_debug.get("price_research_failure_reasons") or {}
@@ -3055,7 +3077,7 @@ if st.session_state.get("results") is not None:
                 explain=render_card_explanation_button, seller=render_same_seller_button)
 
             with st.expander("🔬 Avancerad fyndjakt / så tänker FlipFynd", expanded=False):
-                coverage = evidence_coverage(st.session_state.get("results") or [])
+                coverage = evidence_coverage(_display_results)
                 if coverage.get("total"):
                     st.caption(
                         f"Evidens: {coverage['with_2_sold']}/{coverage['total']} har minst 2 exact SOLD · "
@@ -3067,7 +3089,7 @@ if st.session_state.get("results") is not None:
                     st.caption("Vanligaste verifieringsluckorna: " + " · ".join(f"{reason} ({count})" for reason, count in common))
 
                 segment_yield = build_segment_yield_report(
-                    st.session_state.get("results") or [],
+                    _display_results,
                     budget=max_price,
                     minimum_hits=8,
                 )
@@ -3156,13 +3178,13 @@ if st.session_state.get("results") is not None:
 
         if _main_view == "Vad ska jag köpa?":
             funnel = build_finding_funnel_diagnostic(
-                st.session_state.get("debug") or {},
-                st.session_state.get("results") or [],
+                _display_debug or {},
+                _display_results,
             )
             no_buy = funnel.get("decisions", {}).get("KÖP", 0) == 0
             expansion_category = "Hockey - NHL" if sport_label == "Hockey" else "Fotboll"
             expansion_plan = build_search_expansion_plan(
-                st.session_state.get("results") or [],
+                _display_results,
                 expansion_category,
                 player_limit=6,
                 max_searches=36,
@@ -3211,7 +3233,7 @@ if st.session_state.get("results") is not None:
                     if len(expansion_plan.get("searches") or []) > 12:
                         st.caption("Fler sökvägar finns i planen men döljs här för att hålla vyn enkel.")
 
-            yield_report = build_yield_report(st.session_state.get("results") or [])
+            yield_report = build_yield_report(_display_results)
             if yield_report.get("rows"):
                 with st.expander("📈 Search Yield – vilka sökvägar hittar bäst kandidater?", expanded=False):
                     st.caption("Observerad träffkvalitet, inte en ny fyndscore. KÖP-regler eller sökbudget ändras inte automatiskt.")
@@ -3221,7 +3243,7 @@ if st.session_state.get("results") is not None:
                         st.caption(f"{yrow['hits']} träffar · {yrow['buy']} KÖP · {yrow['watch']} BEVAKA · {yrow['safe_value']} säkra värden · {yrow['evidence_status']}")
 
             exact_supply_items = []
-            for exact_item in st.session_state.get("results") or []:
+            for exact_item in _display_results:
                 if not isinstance(exact_item, dict):
                     continue
                 exact_plan = build_exact_supply_query(exact_item)
@@ -3247,7 +3269,7 @@ if st.session_state.get("results") is not None:
                         st.write(f"**{player} · {set_name} · {season} · #{card_number}**")
                         local_exact = count_analyzed_exact_matches(
                             exact_item,
-                            st.session_state.get("results") or [],
+                            _display_results,
                         )
                         st.caption(
                             f"{local_exact.get('exact_analyzed_matches', 0)} exakt identitetsmatchande aktiva kandidater "
@@ -3257,7 +3279,7 @@ if st.session_state.get("results") is not None:
                         confirmation_target = {**exact_item, "search_expansion_query": exact_plan.get("query")}
                         confirmation = build_confirmation_report(
                             confirmation_target,
-                            st.session_state.get("results") or [],
+                            _display_results,
                         )
                         if confirmation.get("rows"):
                             st.caption(
@@ -3366,7 +3388,7 @@ if st.session_state.get("results") is not None:
                         st.info("Exakt Tradera-kontroll aktiveras när säkra Tradera API-uppgifter finns i appens secrets.")
 
             pressure_queue = build_pressure_research_queue(
-                st.session_state.get("results") or [],
+                _display_results,
                 load_history(EXACT_SUPPLY_HISTORY_PATH),
                 _load_sold_comp_records(),
                 limit=6,
@@ -3378,7 +3400,7 @@ if st.session_state.get("results") is not None:
                         "observerade fakta sammanfaller. Ingen ny score skapas."
                     )
                     pressure_source_map = {}
-                    for source_item in st.session_state.get("results") or []:
+                    for source_item in _display_results:
                         if isinstance(source_item, dict):
                             source_key = exact_identity_key(source_item)
                             if source_key and source_key not in pressure_source_map:
@@ -3478,7 +3500,7 @@ if st.session_state.get("results") is not None:
                         "Pressure Research påverkar inte KÖP, marknadsvärde, maxpris, demand-signal eller scarcity-score."
                     )
 
-            market_gap_queue = build_market_gap_queue(st.session_state.get("results") or [], limit=5)
+            market_gap_queue = build_market_gap_queue(_display_results, limit=5)
             if market_gap_queue.get("rows"):
                 with st.expander("📉 Market Gap – tunt utbud att undersöka", expanded=False):
                     st.caption(
@@ -3513,7 +3535,7 @@ if st.session_state.get("results") is not None:
                                 )
                                 st.caption(supply.get("scope_note", ""))
 
-            lot_treasure_queue = build_lot_treasure_queue(st.session_state.get("results") or [], limit=5)
+            lot_treasure_queue = build_lot_treasure_queue(_display_results, limit=5)
             if lot_treasure_queue.get("rows"):
                 with st.expander("🧰 Lot Treasure – paket värda kort-för-kort-kontroll", expanded=False):
                     st.caption(
@@ -3535,7 +3557,7 @@ if st.session_state.get("results") is not None:
                             st.markdown(f"[Öppna annonsen]({lrow['url']})")
                         st.divider()
 
-            oddity_story_queue = build_oddity_story_queue(st.session_state.get("results") or [], limit=6)
+            oddity_story_queue = build_oddity_story_queue(_display_results, limit=6)
             if oddity_story_queue.get("rows"):
                 with st.expander("🧠 Oddity & Story Hunter – märkliga kort som kan vara felbeskrivna", expanded=False):
                     _od_stats = registry_stats()
@@ -3559,7 +3581,7 @@ if st.session_state.get("results") is not None:
                             st.markdown(f"[Öppna annonsen]({orow['url']})")
                         st.divider()
 
-            registry_proposals = build_registry_proposal_queue(st.session_state.get("results") or [], limit=8)
+            registry_proposals = build_registry_proposal_queue(_display_results, limit=8)
             if registry_proposals.get("rows"):
                 with st.expander("🧪 Förslag till Oddity-kunskapsbas – kräver granskning", expanded=False):
                     st.caption(
@@ -3585,7 +3607,7 @@ if st.session_state.get("results") is not None:
                         st.divider()
                     st.caption(registry_proposals.get("note") or "")
 
-            bad_listing_queue = build_bad_listing_queue(st.session_state.get("results") or [], limit=5)
+            bad_listing_queue = build_bad_listing_queue(_display_results, limit=5)
             if bad_listing_queue.get("rows"):
                 with st.expander("🧩 Dåligt beskrivna annonser – kan vara lättare att missa", expanded=False):
                     st.caption(
@@ -3605,7 +3627,7 @@ if st.session_state.get("results") is not None:
                             st.markdown(f"[Öppna annonsen]({brow['url']})")
                         st.divider()
 
-            mispricing_queue = build_mispricing_review_queue(st.session_state.get("results") or [], limit=5)
+            mispricing_queue = build_mispricing_review_queue(_display_results, limit=5)
             if mispricing_queue.get("rows"):
                 with st.expander("🕵️ Misstänkt felprissatta – extra kontroll", expanded=False):
                     st.caption(
@@ -3643,7 +3665,7 @@ if st.session_state.get("results") is not None:
                     d2.metric("BEVAKA", int(d.get("BEVAKA", 0)))
                     d3.metric("EJ KÖPKLARA", int(d.get("SKIP", 0)))
 
-                    debug_state = st.session_state.get("debug") or {}
+                    debug_state = _display_debug or {}
                     coverage_added = int(debug_state.get("coverage_diversified_added", 0) or 0)
                     if coverage_added > 0:
                         st.info(
@@ -3709,7 +3731,7 @@ if st.session_state.get("results") is not None:
 
             if _advanced_terminal:
                 hidden_analysed = [
-                    item for item in (st.session_state.get("results") or [])
+                    item for item in (_display_results)
                     if item not in visible
                 ]
                 if hidden_analysed:
@@ -3734,18 +3756,18 @@ if st.session_state.get("results") is not None:
         st.stop()
 
     st.divider()
-    non_skip_count = sum(1 for item in st.session_state["results"] if item.get("beslut") != "SKIP")
+    non_skip_count = sum(1 for item in _display_results if item.get("beslut") != "SKIP")
     if non_skip_count > 0:
         st.subheader(f"Bästa fynden ({len(visible)})")
     else:
         st.subheader(f"Bästa kandidaterna ({len(visible)})")
         if visible:
-            analysed_total = int(st.session_state.get("debug", {}).get("final_results", len(st.session_state["results"])) or 0)
+            analysed_total = int(st.session_state.get("debug", {}).get("final_results", len(_display_results)) or 0)
             st.info(
                 f"🔎 {analysed_total} {sport_label.lower()}annonser analyserade – inget är tillräckligt säkert för KÖP ännu. "
                 "Här nedanför visas de kandidater som ligger närmast."
             )
-            why = summarize_no_find_reasons(st.session_state["results"])
+            why = summarize_no_find_reasons(_display_results)
             if why.get("reasons"):
                 st.markdown("### Varför blir det inga KÖP?")
                 cols_why = st.columns(min(3, len(why["reasons"])))
@@ -3757,7 +3779,7 @@ if st.session_state.get("results") is not None:
             # Show a short, actionable queue instead of forcing the user to inspect
             # twenty full cards to understand what would need to improve.
             near_buy_rows = []
-            for candidate in st.session_state["results"]:
+            for candidate in _display_results:
                 guidance = build_near_buy_guidance(candidate)
                 if guidance.get("readiness_score", 0) <= 0:
                     continue
@@ -3859,9 +3881,9 @@ if st.session_state.get("results") is not None:
         st.caption(best_buy["note"])
     from src.best_alternatives import build_best_alternatives, render_best_alternatives
     render_best_alternatives(build_best_alternatives(
-        st.session_state.get('results') or [],
-        research_leads=(st.session_state.get('debug') or {}).get('single_price_research_leads') or [],
-        extra_rows=(st.session_state.get('debug') or {}).get('tradera_price_find_rows') or []),
+        _display_results,
+        research_leads=(_display_debug or {}).get('single_price_research_leads') or [],
+        extra_rows=(_display_debug or {}).get('tradera_price_find_rows') or []),
         explain=render_card_explanation_button, seller=render_same_seller_button)
 
     buy_queue = build_top_buy_queue(filtered)
@@ -5969,7 +5991,7 @@ with _admin_panel:
             )
 
         with st.expander("🎯 Sold Data Expansion – vad saknas för korten jag faktiskt hittar?", expanded=False):
-            current_candidates = st.session_state.get("results") or []
+            current_candidates, _ = filter_search_products(st.session_state.get("results") or [])
             queue = build_sold_research_queue(current_candidates, current_sold, limit=12)
             st.caption(
                 "FlipFynd prioriterar sold-research utifrån dina redan analyserade kandidater. "

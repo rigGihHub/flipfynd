@@ -19,7 +19,7 @@ def test_app_and_seller_workflow_use_release_limit():
 def test_seller_ui_has_app_local_fail_closed_money_guard():
     app = Path("app.py").read_text(encoding="utf-8")
 
-    assert 'SELLER_PRESENTATION_CONTRACT = "dynamic-top5-collector-evidence-v5"' in app
+    assert 'SELLER_PRESENTATION_CONTRACT = "dynamic-top5-football-product-scope-v6"' in app
     assert "def _seller_ui_row_is_safe(row):" in app
     assert "_seller_ui_row_is_safe(row)" in app
     assert "float(value) < 0" in app

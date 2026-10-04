@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from src.search_product_policy import product_scope
 
 _BLOCK_PATTERNS = (
     r"\bserie\s*nytt\b",
@@ -40,6 +41,9 @@ _CARD_HINTS = (
 def seller_item_domain_check(item: dict, sport: str = "hockey") -> dict:
     title = str(item.get("titel") or item.get("title") or "").strip()
     text = title.casefold()
+    scope = product_scope(item, sport)
+    if not scope["allowed"]:
+        return {"allowed": False, "reason": scope["reason"], "title": title}
     for pattern in _BLOCK_PATTERNS:
         if re.search(pattern, text, re.I):
             return {"allowed": False, "reason": "NOT_A_TRADING_CARD", "title": title}

@@ -18,6 +18,7 @@ from src.seller_live_full_analysis import full_analyze_live_seller_item
 from src.card_parser import parse_card_features
 from src.adaptive_deepening import select_dynamic_seller_deep_rows
 from src.seller_card_merit import assess_seller_card_merit
+from src.search_product_policy import product_scope
 from src.seller_collector_signals import collector_signals
 from src.fast_analysis_pool import select_fast_analysis_pool
 from src.analysis_budget import fast_analysis_budget, seller_deep_analysis_budget
@@ -296,6 +297,8 @@ def _seller_presentation_label(row: dict) -> dict:
 
 def seller_result_tier(row: dict) -> str:
     """Separate actual finds from research candidates and weak filler."""
+    if not product_scope(row)["allowed"]:
+        return "WEAK"
     # Purchase price is part of the deal identity. A missing/zero price may be
     # a parser or auction-state failure and must not survive as an internal
     # FIND merely because another layer later hides it from the UI.
@@ -458,6 +461,8 @@ def _select_hidden_find_exploration(rows: list[dict], *, exclude_keys=None, slot
     exclude_keys = set(exclude_keys or set())
     candidates = []
     for position, row in enumerate(rows or []):
+        if not product_scope(row)["allowed"]:
+            continue
         key = _identity_key(row.get("source_item") or row)
         if not key or key in exclude_keys or assess_seller_card_merit(row)["eligible"]:
             continue
@@ -601,7 +606,7 @@ def build_seller_top5(seller_alias: str, items: Iterable[dict] | None, *, analyz
     for row in quick.get("rows") or []:
         pending[listing_key(row.get("source_item") or row)] = row
     pending = {key: _refresh_collector_research(row) for key, row in pending.items()}
-    all_quick_rows = sorted(pending.values(), key=_quick_rank_key)
+    all_quick_rows = sorted((row for row in pending.values() if product_scope(row)["allowed"]), key=_quick_rank_key)
     deep_budget = min(
         SELLER_DEEP_ANALYSIS_CAP,
         max(int(full_limit or 8), seller_deep_analysis_budget(len(inventory))),

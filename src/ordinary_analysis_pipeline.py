@@ -18,6 +18,7 @@ from src.find_more_cards import select_second_pass_indices
 from src.latest_market import latest_analysis_items
 from src.analysis_scope import select_recent_archive_fast_pool
 from src.pricing import total_acquisition_cost
+from src.search_product_policy import product_scope
 
 def analyze_data(
     data,
@@ -61,6 +62,8 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
+        "product_scope_rejected": 0,
+        "product_scope_reasons": {},
         "total_items": raw_total_items,
         "performance_items": len(data),
         "after_sport": 0,
@@ -98,7 +101,7 @@ def analyze_data(
                    and _sport_of(item) in {None, sport}]
     sold_items = [item for item in (sold_comp_data or []) if isinstance(item, dict)
                   and _sport_of(item) in {None, sport}]
-    market_items = sport_items + sold_items
+    market_items = [item for item in sport_items + sold_items if product_scope(item, sport)["allowed"]]
 
     # Seller presentation context: only descriptive metadata. It must never
     # create a valuation. A high generic-title ratio can reveal listings that
@@ -140,6 +143,13 @@ def analyze_data(
         debug[
             "after_sport"
         ] += 1
+
+        scope = product_scope(item, sport)
+        if not scope["allowed"]:
+            debug["product_scope_rejected"] += 1
+            reason = scope["reason"]
+            debug["product_scope_reasons"][reason] = debug["product_scope_reasons"].get(reason, 0) + 1
+            continue
 
         price = item.get(
             "pris"

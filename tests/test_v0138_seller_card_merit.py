@@ -19,12 +19,12 @@ def test_signature_style_is_not_autograph_or_research_merit():
     assert seller_result_tier(row) == "WEAK"
 
 
-def test_numbered_match_attax_can_be_researched_but_is_not_automatically_a_find():
+def test_numbered_match_attax_is_excluded_by_product_preference():
     row = {"title": "Haaland Match Attax 2024/25 Red 7/25", "price": 50, "collector_signal_score": 18, "sold_comps": 0}
     merit = assess_seller_card_merit(row)
     assert merit["mass_market_base"] is False
-    assert merit["eligible"] is True
-    assert seller_result_tier(row) == "RESEARCH"
+    assert merit["eligible"] is False
+    assert seller_result_tier(row) == "WEAK"
 
 
 def test_verified_buy_remains_a_find():
@@ -53,4 +53,4 @@ def test_mass_market_team_badge_needs_real_sold_evidence():
     assert seller_result_tier({"title": title, "sold_comps": 0}) == "WEAK"
 
     verified = assess_seller_card_merit({"title": title, "sold_comps": 2, "identity_ok": True})
-    assert verified["eligible"] is True
+    assert verified["eligible"] is False

@@ -5,6 +5,7 @@ other active listings from the same seller and quantifies a transparent
 "shipping-once" scenario that the user must verify with Tradera/the seller.
 """
 from __future__ import annotations
+from src.search_product_policy import product_scope
 
 from typing import Iterable
 from math import isfinite
@@ -89,6 +90,8 @@ def find_same_seller_listings(current: dict, market_items: Iterable[dict] | None
         merged = dict(raw)
         if key and key in analysed:
             merged.update(analysed[key])
+        if not product_scope(merged)["allowed"]:
+            continue
         price = _price(merged)
         if price is None:
             continue

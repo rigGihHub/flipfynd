@@ -1,5 +1,6 @@
 """Explicit asking-price scenarios. Never SOLD evidence or a verified BUY."""
 from __future__ import annotations
+from src.search_product_policy import product_scope
 
 from datetime import date
 from functools import lru_cache
@@ -208,6 +209,8 @@ def select_asking_price_research(rows, *, limit=24):
     eligible = []
     for row in rows:
         item = row.get("source_item") or row
+        if not product_scope(row)["allowed"]:
+            continue
         if item.get("listing_inactive"):
             continue
         identity = asking_research_identity(item)
@@ -273,6 +276,8 @@ def select_asking_price_research(rows, *, limit=24):
 def attach_asking_price_opportunity(item):
     """Enrich full analyses only; no network request without usable identity/keys."""
     out = dict(item)
+    if not product_scope(out)["allowed"]:
+        return out
     identity = asking_research_identity(out)
     core = bool(identity.get("player_name") and identity.get("card_number"))
     context_ready = bool(identity.get("season") or identity.get("set_name"))

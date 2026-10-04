@@ -6,6 +6,7 @@ from src.opportunity_top5 import build_opportunity_top5, listing_url
 from src.seller_profit_display import build_seller_net_profit_summary
 from src.collector_evidence import acquisition_breakdown, money as evidence_money, render_listing_review
 from src.card_parser import clean_card_title
+from src.search_product_policy import product_scope
 
 
 def _number(value):
@@ -17,7 +18,7 @@ def _number(value):
 
 
 def build_best_alternatives(results, *, research_leads=(), extra_rows=()):
-    pool, positions = [], {}
+    pool, positions, excluded = [], {}, set()
     def add(raw):
         if not isinstance(raw, dict):
             return
@@ -25,6 +26,9 @@ def build_best_alternatives(results, *, research_leads=(), extra_rows=()):
         url = listing_url(item)
         title = item.get('titel') or item.get('title')
         if not title:
+            return
+        if not product_scope(item)["allowed"]:
+            excluded.add(url or str(title).casefold())
             return
         parts = urlsplit(url or '')
         marker = (parts.netloc, parts.path.rstrip('/')) if url else str(title).casefold()
@@ -50,6 +54,7 @@ def build_best_alternatives(results, *, research_leads=(), extra_rows=()):
                  'asking_price_opportunity': lead.get('scenario') or {}})
     result = build_opportunity_top5(pool, limit=5, fill_alternatives=True)
     result['available_count'] = len(pool)
+    result['product_scope_excluded_count'] = len(excluded)
     return result
 
 
@@ -76,6 +81,8 @@ def render_best_alternatives(result, *, explain=None, seller=None):
     rows = result.get('rows') or []
     st.markdown('### 🏆 De 5 bästa alternativen')
     st.caption('Bäst bland de tillgängliga alternativen i din sökning. En plats i listan betyder inte att kortet är ett lönsamt köp.')
+    if result.get('product_scope_excluded_count'):
+        st.caption(f"{result['product_scope_excluded_count']} annonser uteslutna av produktfiltret. Match Attax, Adrenalyn och vanliga Beast Mode-inserts fyller inte topplistan.")
     if len(rows) < 5:
         st.info(f'Endast {len(rows)} unika alternativ finns i det analyserade underlaget. Listan fylls på när fler har analyserats.')
     if not rows:

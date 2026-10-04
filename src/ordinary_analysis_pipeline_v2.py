@@ -27,6 +27,7 @@ from src.price_research_checkpoint import fresh_checkpoint, extend_checkpoint, l
 
 from src.price_research_session import price_research_run
 from src.search_progress import begin_phase, report_phase
+from src.search_product_policy import product_scope
 
 
 @price_research_run
@@ -87,7 +88,9 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "collector-identity-evidence-v014128",
+        "analysis_engine_marker": "football-product-scope-v014130",
+        "product_scope_rejected": 0,
+        "product_scope_reasons": {},
         "ebay_quota": ebay_quota,
         "total_items": raw_total_items,
         "performance_items": len(data),
@@ -126,7 +129,7 @@ def analyze_data(
                    and _sport_of(item) in {None, sport}]
     sold_items = [item for item in (sold_comp_data or []) if isinstance(item, dict)
                   and _sport_of(item) in {None, sport}]
-    market_items = sport_items + sold_items
+    market_items = [item for item in sport_items + sold_items if product_scope(item, sport)["allowed"]]
 
     # Seller presentation context: only descriptive metadata. It must never
     # create a valuation. A high generic-title ratio can reveal listings that
@@ -168,6 +171,13 @@ def analyze_data(
         debug[
             "after_sport"
         ] += 1
+
+        scope = product_scope(item, sport)
+        if not scope["allowed"]:
+            debug["product_scope_rejected"] += 1
+            reason = scope["reason"]
+            debug["product_scope_reasons"][reason] = debug["product_scope_reasons"].get(reason, 0) + 1
+            continue
 
         price = item.get(
             "pris"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from math import isfinite
 from urllib.parse import urlsplit
 import re
+from src.search_product_policy import product_scope
 
 MINIMUM_FIND_PROFIT = 35.0
 MINIMUM_FIND_ROI = 15.0
@@ -94,6 +95,8 @@ def positive_price_suggestions(results, research_leads=None):
     ]
     rows, seen = [], set()
     for row in candidates:
+        if not product_scope(row)["allowed"]:
+            continue
         data = row.get("asking_price_opportunity") or {}
         try:
             margin = float(data.get("net_margin"))

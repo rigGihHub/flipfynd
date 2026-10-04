@@ -15,6 +15,7 @@ from src.top5_reality_gate import gate_and_sort
 from src.opportunity_discovery_signals import opportunity_discovery_score, opportunity_discovery_signals
 from src.top5_usefulness_guard import build_useful_top5
 from src.seller_profit_display import known_negative_net_profit
+from src.search_product_policy import product_scope, football_card_priority
 
 
 def _n(value, default=0.0):
@@ -56,6 +57,8 @@ def _expand_special_engine_candidates(items):
     seen = set()
     for raw in items or []:
         if not isinstance(raw, dict):
+            continue
+        if not product_scope(raw)["allowed"]:
             continue
         item = dict(raw)
         url = listing_url(item)
@@ -484,6 +487,7 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
             return (row.get('decision') == 'KÖP', not losing,
                     margin is not None and margin > 0,
                     margin if margin is not None else -10**9,
+                    football_card_priority(row),
                     row.get('certainty') or 0, row.get('potential') or 0)
         alternatives = []
         for row in sorted(all_gated_rows, key=alternative_rank, reverse=True)[:max(0, int(limit))]:
