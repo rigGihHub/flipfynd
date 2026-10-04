@@ -247,6 +247,10 @@ def enrich_listing_detail(page, item, timeout_ms=30000):
         page.goto(link, wait_until="domcontentloaded", timeout=int(timeout_ms))
         page.wait_for_timeout(700)
         html = page.content()
+        from src.tradera_purchase_cost import parse_purchase_detail, purchase_seller_metadata
+        from urllib.parse import urlsplit
+        id_match = re.match(r"/item/\d+/(\d+)(?:/|$)", urlsplit(link).path)
+        exact_detail = parse_purchase_detail(html, id_match[1]) if id_match else {}
         body_text = ""
         try:
             body_text = page.locator("body").inner_text(timeout=5000)
@@ -255,6 +259,8 @@ def enrich_listing_detail(page, item, timeout_ms=30000):
 
         parsed = extract_jsonld_detail(html)
         parsed.update(parse_detail_text(body_text))
+        if exact_detail:
+            parsed.update(purchase_seller_metadata(exact_detail, html))
 
         if not parsed.get("full_description"):
             try:

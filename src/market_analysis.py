@@ -645,6 +645,8 @@ def _comparable_detail(similarity: int, item: dict, state: str) -> dict:
         "similarity_score": similarity,
         "match_quality": _match_label(similarity),
         "provenance": item.get("provenance") or item.get("source") or _source_platform(item),
+        "condition": item.get("condition") or item.get("condition_text"),
+        "currency": "SEK",
     }
 
 

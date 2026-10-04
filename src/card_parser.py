@@ -6,6 +6,15 @@ from src.player_market import get_all_player_names, normalize_player_name
 
 KNOWN_PLAYERS = [name.casefold() for name in get_all_player_names()]
 
+# Printed insert names are product text, never fallback player names.
+INSERT_NAMES = ("Century Momentous", "Diamond Dominance", "New Breed Materials")
+
+
+def extract_insert_name(title: str) -> Optional[str]:
+    text = normalize_text(clean_card_title(title))
+    return next((name for name in INSERT_NAMES if re.search(
+        r"(?<!\w)" + re.escape(normalize_text(name)) + r"(?!\w)", text)), None)
+
 
 SET_PATTERNS = [
     ("in the game between the pipes", "In The Game Between The Pipes"),
@@ -235,6 +244,8 @@ def extract_player_name(title: str) -> Optional[str]:
     for raw_pattern, _display in SET_PATTERNS:
         pattern = normalize_text(raw_pattern)
         norm = re.sub(r"(?<!\w)" + re.escape(pattern) + r"(?!\w)", " ", norm)
+    for name in INSERT_NAMES:
+        norm = re.sub(r"(?<!\w)" + re.escape(normalize_text(name)) + r"(?!\w)", " ", norm)
     tokens = norm.split()
     candidates = []
 
@@ -336,7 +347,7 @@ def extract_serial_number(title: str) -> Optional[int]:
             serial_text,
         )
 
-    match = re.search(r"/(\d{1,4})\b", serial_text)
+    match = re.search(r"/\s*(\d{1,4})\b", serial_text)
     if match:
         try:
             return int(match.group(1))
@@ -529,9 +540,15 @@ def detect_parallel_info(norm: str) -> tuple[Optional[str], str, str]:
     }
     context = r"(?:parallel|prizm|refractor|wave|shimmer|pulsar|mojo|speckle)"
     for colour, (name, tier) in colour_names.items():
+        # Numbered Stature titles commonly omit the word "parallel". Require
+        # both the product and a print-run, and reject team-name colour phrases.
+        stature_colour = (re.search(r"\bstature\b", text)
+                          and extract_serial_number(text)
+                          and re.search(rf"\b{colour}\b", text)
+                          and not re.search(rf"\b{colour}\s+(?:wings|jackets|blues)\b", text))
         if re.search(rf"\b{colour}\b(?:\s+\w+){{0,2}}\s+{context}\b", text) or re.search(
             rf"\b{context}\b(?:\s+\w+){{0,2}}\s+{colour}\b", text
-        ):
+        ) or stature_colour:
             return name, tier, "medium"
 
     return None, "none", "low"
@@ -684,6 +701,7 @@ def parse_card_features(title: str) -> dict:
         "normalized_title": norm,
         "player_name": player_name,
         "set_name": set_name,
+        "insert_name": extract_insert_name(title),
         "year": extract_year(title),
         "season": extract_season(title),
         "parallel": parallel,

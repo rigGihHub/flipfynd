@@ -91,6 +91,6 @@ def test_ui_distinguishes_active_loss_from_sold_backed_loss():
     rendered = '\n'.join(element.value for element in app.markdown)
     assert 'Negativ marginal mot begärda priser · osäkert scenario' in rendered
     assert 'Avstå · negativ beräknad nettovinst' in rendered
-    assert 'Nettovinst mot prisindikation: -1 kr' in rendered
+    assert 'Nettoscenario mot begärda priser: -1 kr' in rendered
     assert 'Nettovinst efter kostnader: -2 kr' in rendered
     assert 'KÖP · verifierat fynd' not in rendered

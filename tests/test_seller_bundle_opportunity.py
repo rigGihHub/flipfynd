@@ -19,10 +19,10 @@ def test_analysed_buy_rows_rank_before_unanalysed():
 
 
 def test_shared_shipping_scenario_is_explicitly_only_a_scenario():
-    current={"pris":100,"frakt":39}
-    other={"source_item":{"pris":60,"frakt":39}}
+    current={"pris":100,"frakt":39,"buyer_protection_fee":5}
+    other={"source_item":{"pris":60,"frakt":39,"buyer_protection_fee":3}}
     out=build_shared_shipping_scenario(current,[other])
-    assert out["scenario_total"] == 199
+    assert out["scenario_total"] == 207
     assert out["potential_shipping_saving"] == 39
     assert "verifieras" in out["note"]
 
@@ -50,11 +50,11 @@ def _strong(title, price, shipping, potential, sold=2):
     return {
         "title": title, "price": price, "shipping": shipping, "analysed": True,
         "decision": "KÖP", "identity_ok": True, "sold_comps": sold,
-        "potential": potential, "source_item": {"pris": price, "frakt": shipping},
+        "potential": potential, "source_item": {"pris": price, "frakt": shipping, "buyer_protection_fee":0},
     }
 
 def test_best_basket_stays_within_budget_and_prefers_stronger_cards():
-    current={"pris":100,"frakt":39}
+    current={"pris":100,"frakt":39,"buyer_protection_fee":0}
     rows=[_strong("A",100,39,80), _strong("B",80,39,70), _strong("C",300,39,99)]
     out=build_best_same_seller_basket(current, rows, 330)
     assert out["status"] == "FOUND"
@@ -63,13 +63,13 @@ def test_best_basket_stays_within_budget_and_prefers_stronger_cards():
     assert titles == ["A", "B"]
 
 def test_best_basket_never_auto_adds_review_or_skip_rows():
-    current={"pris":100,"frakt":39}
+    current={"pris":100,"frakt":39,"buyer_protection_fee":0}
     weak={"title":"Weak","price":10,"shipping":39,"analysed":False,"potential":99,"source_item":{"pris":10,"frakt":39}}
     out=build_best_same_seller_basket(current,[weak],500)
     assert out["status"] == "NO_ELIGIBLE_ADDONS"
 
 def test_best_basket_excludes_unknown_shipping_to_preserve_budget_truth():
-    current={"pris":100,"frakt":39}
+    current={"pris":100,"frakt":39,"buyer_protection_fee":0}
     row=_strong("Unknown ship",20,None,95)
     out=build_best_same_seller_basket(current,[row],500)
     assert out["status"] == "NO_ELIGIBLE_ADDONS"

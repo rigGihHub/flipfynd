@@ -13,7 +13,7 @@ def test_active_price_scenario_shows_negative_net_profit():
     })
     assert result["available"] is True
     assert result["value"] == -17
-    assert result["label"] == "Nettovinst mot prisindikation"
+    assert result["label"] == "Nettoscenario mot begärda priser"
 
 
 def test_verified_net_profit_is_shown_after_costs():

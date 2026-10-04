@@ -10,6 +10,7 @@ from pathlib import Path
 from src.player_knowledge import knowledge_coverage
 from src.card_explanation import build_card_explanation, build_card_identity_summary
 from src.card_parser import parse_card_features
+from src.collector_evidence import money as evidence_money, timestamp as evidence_time, snapshot_notice, render_listing_review
 
 
 import streamlit as st
@@ -240,7 +241,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-09-20.63-decode-tradera-markup"
+RUNTIME_BUILD = "2026-10-04.128-collector-evidence"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -340,7 +341,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.127"
+APP_VERSION = "v0.14.128"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -383,19 +384,31 @@ full_analyze_live_seller_item = _seller_full_runtime.full_analyze_live_seller_it
 build_seller_top5 = _seller_top5_runtime.build_seller_top5
 seller_result_tier = _seller_top5_runtime.seller_result_tier
 seller_has_positive_purchase_price = _seller_top5_runtime.seller_has_positive_purchase_price
-SELLER_PRESENTATION_CONTRACT = "dynamic-top5-alternatives-v4"
+SELLER_PRESENTATION_CONTRACT = "dynamic-top5-collector-evidence-v5"
 
 # Saved searches must also render with the current deployed UI after hot reload.
 import src.asking_price_ui as _asking_ui_module
 import src.opportunity_top5 as _opportunity_ui_module
 import src.best_alternatives as _best_alternatives_ui_module
-for _ui_module in (_asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module):
+import src.collector_evidence as _collector_ui_module
+import src.card_explanation as _card_explanation_module
+import src.seller_identity as _seller_identity_module
+import src.seller_bundle_opportunity as _seller_bundle_module
+for _ui_module in (_collector_ui_module, _card_explanation_module, _seller_identity_module, _seller_bundle_module,
+                   _asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module):
     if getattr(_ui_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_ui_module)
         _ui_module._flipfynd_loaded_version = APP_VERSION
 render_asking_price_opportunity = _asking_ui_module.render_asking_price_opportunity
 render_asking_price_shortlist = _asking_ui_module.render_asking_price_shortlist
 build_opportunity_top5 = _opportunity_ui_module.build_opportunity_top5
+build_card_explanation = _card_explanation_module.build_card_explanation
+build_card_identity_summary = _card_explanation_module.build_card_identity_summary
+recover_seller_from_market = _seller_identity_module.recover_seller_from_market
+find_same_seller_listings = _seller_bundle_module.find_same_seller_listings
+build_shared_shipping_scenario = _seller_bundle_module.build_shared_shipping_scenario
+build_best_same_seller_basket = _seller_bundle_module.build_best_same_seller_basket
+render_listing_review = _collector_ui_module.render_listing_review
 
 
 def _seller_ui_row_is_safe(row):
@@ -1217,7 +1230,7 @@ def _fast_signature(item, sport, strategy):
         "price": item.get("pris"), "shipping": item.get("frakt"),
         "raw_text": item.get("raw_text"),
         "full_description": item.get("full_description"),
-        "sport": sport, "strategy": strategy, "seller_parser_contract": "material-identity-v2",
+        "sport": sport, "strategy": strategy, "seller_parser_contract": "collector-identity-v3",
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
@@ -1235,7 +1248,7 @@ def _cached_seller_analysis(item, *, all_items=None, mode="fast", strategy_mode=
     signature = build_analysis_signature(
         item,
         data_size=inventory_size,
-        mode=f"seller_v8_material_identity_balanced_routes_{sport}_{strategy_mode}",
+        mode=f"seller_v9_collector_identity_evidence_{sport}_{strategy_mode}",
     )
     cached = get_cached_analysis(signature)
     if cached:
@@ -2046,6 +2059,7 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             else:
                 st.markdown("**Nettovinst: ej beräkningsbar**")
             render_asking_price_opportunity(row.get("asking_price_opportunity"))
+            render_listing_review(row, total_cost=row.get("total_cost"))
             _opportunity_score = float(row.get("seller_opportunity_score") or _rank_score)
             _signal_labels = {
                 "one_of_one": "1/1",
@@ -2093,18 +2107,18 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
                 )
                 st.caption(
                     f"Exact SOLD {int(row.get('sold_comps') or 0)} · "
-                    f"riskjusterad vinst {float(row.get('risk_adjusted_profit') or 0):.0f} kr"
+                    "riskjusterat modellmått används för ranking och är inte nettovinsten"
                 )
                 _ebay = row.get("ebay_active_context") or {}
                 if _ebay.get("ok"):
                     _median = _ebay.get("median_usd")
                     _range = ""
                     if _ebay.get("min_usd") is not None and _ebay.get("max_usd") is not None:
-                        _range = f" · spann ${_ebay['min_usd']:.2f}–${_ebay['max_usd']:.2f}"
+                        _range = f" · spann {evidence_money(_ebay['min_usd'], 'USD')}–{evidence_money(_ebay['max_usd'], 'USD')}"
                     st.caption(
                         f"eBay aktiva annonser: {int(_ebay.get('listing_count') or 0)} identitetsmatchade av "
                         f"{int(_ebay.get('raw_listing_count') or 0)} träffar"
-                        + (f" · median ${_median:.2f}" if _median is not None else "")
+                        + (f" · median {evidence_money(_median, 'USD')}" if _median is not None else "")
                         + _range
                     )
                     st.caption("Begärda priser kan ge möjliga fynd. De visar inte vad korten har sålts för.")
@@ -2187,11 +2201,15 @@ _latest_window_count = len(_latest_window)
 
 st.caption(
     (
-        f"{_total_loaded:,} annonser • "
+        f"Aktuell marknad: {_total_loaded:,} annonser • "
         + " • ".join(_count_parts)
         + f" • {_latest_label} {_latest_fetch}"
     ).replace(",", " ")
 )
+if st.session_state.get("results") is not None:
+    st.info(snapshot_notice(_saved_search, st.session_state.get("debug"), _total_loaded))
+    if (_saved_search or {}).get("params", {}).get("app_version") != APP_VERSION:
+        st.caption("Analysen sparades med en äldre version. Kortidentiteten har förbättrats; kör en ny analys innan ett köpbeslut.")
 
 if len(data) > MAX_ACTIVE_ITEMS_PER_CATEGORY * 2:
     st.info(
@@ -2548,13 +2566,53 @@ elif _saved_search and _saved_search.get("status") in {"FAILED", "INTERRUPTED"}:
 def render_same_seller_button(item: dict, key: str) -> None:
     """Find more cards from the same seller so shipping may be shared."""
     seller_market = list(data or [])
+    _seller_result = st.session_state.get("seller_top5_result") or {}
+    seller_market.extend((_seller_result.get("public_checkpoint") or {}).get("items", {}).values())
+    _detail_cache = st.session_state.setdefault("listing_seller_details", {})
+    _ad_key = str(item.get("lank") or item.get("url") or "")
+    if _ad_key in _detail_cache:
+        item = _seller_identity_module.apply_seller_metadata(item, _detail_cache[_ad_key])
+        _checked_cost = _detail_cache[_ad_key]
+        if _checked_cost.get("purchase_cost_verified"):
+            item.update({field: _checked_cost[field] for field in (
+                "pris", "frakt", "buyer_protection_fee", "purchase_checked_at", "purchase_cost_verified"
+            ) if field in _checked_cost})
     seller, item = recover_seller_from_market(item, seller_market)
     label = "🧺 Fler kort från samma säljare"
     with st.popover(label, use_container_width=True):
         if not seller:
-            st.info("FlipFynd hittar ännu inget säkert säljaralias för just den här annonsen. Annonsen har först matchats mot den inlästa marknaden.")
-            return
+            st.info("Säljaren saknas i det sparade resultatet. Kontrollera originalannonsen för att koppla dess profil.")
+            if st.button("Kontrollera säljaren i originalannonsen", key=f"seller_detail_{key}", disabled=not bool(_ad_key)):
+                with st.spinner("Kontrollerar originalannonsens säljare…"):
+                    checked = _purchase_cost_runtime.verify_purchase_cost(item)
+                _detail_cache[_ad_key] = checked
+                seller, item = recover_seller_from_market(
+                    _seller_identity_module.apply_seller_metadata(item, checked), seller_market)
+                if checked.get("purchase_cost_verified"):
+                    item.update({field: checked[field] for field in (
+                        "pris", "frakt", "buyer_protection_fee", "purchase_checked_at", "purchase_cost_verified"
+                    ) if field in checked})
+            if not seller:
+                if _ad_key:
+                    st.link_button("Öppna originalannonsen för att se säljaren ↗", _ad_key)
+                return
         st.markdown(f"### 🧺 Samfraktsjakt hos {seller}")
+        if (_detail_cache.get(_ad_key) or {}).get("listing_inactive") or item.get("listing_inactive"):
+            st.warning("Originalannonsen är avslutad eller har ersatts. Bygg ett paket från en aktuell annons.")
+            return
+        if item.get("purchase_checked_at"):
+            st.caption("Huvudkortets kostnad kontrollerad: " + evidence_time(item["purchase_checked_at"]))
+        _profile = _seller_identity_module.seller_url(item)
+        if _profile:
+            st.link_button("Öppna säljarens profil ↗", _profile)
+            if st.button("Hämta säljarens första sida", key=f"seller_profile_fetch_{key}"):
+                with st.spinner("Hämtar säljarens kortannonser…"):
+                    public = fetch_public_seller_inventory_batch(_profile, max_pages=1)
+                st.session_state[f"seller_public_items_{key}"] = public.get("items") or []
+                if not public.get("ok"):
+                    st.warning("Säljarens sida kunde inte hämtas fullständigt. Visar endast redan tillgängliga annonser.")
+            seller_market.extend(st.session_state.get(f"seller_public_items_{key}") or [])
+        st.caption("Samfrakt är inte bekräftad. Paketkostnaden nedan är ett scenario som måste kontrolleras hos säljaren.")
         st.caption("FlipFynd börjar med den inlästa marknaden. Med Tradera API kan du dessutom hämta säljarens hela aktiva lager direkt.")
 
         creds = _resolve_tradera_api_credentials()
@@ -2681,7 +2739,7 @@ def render_same_seller_button(item: dict, key: str) -> None:
         if best_basket.get("status") == "FOUND":
             names = [r.get("title") or "Kort" for r in best_basket.get("selected", [])]
             st.success(
-                f"Bästa verifierbara paketet under {basket_budget:.0f} kr: "
+                f"Bästa paketscenariot under {basket_budget:.0f} kr: "
                 f"huvudkortet + {best_basket['selected_count']} extra kort · "
                 f"scenario {best_basket['scenario_total']:.0f} kr · "
                 f"{best_basket['remaining_budget']:.0f} kr kvar."
@@ -2697,11 +2755,13 @@ def render_same_seller_button(item: dict, key: str) -> None:
         elif best_basket.get("status") == "NO_FIT":
             st.info("Det finns starka add-on-kandidater, men ingen ryms inom den valda totalbudgeten.")
         elif best_basket.get("status") == "ANCHOR_OVER_BUDGET":
-            st.warning("Huvudkortet plus dess angivna frakt ligger redan över vald budget.")
+            st.warning("Huvudkortet inklusive frakt och köparskydd ligger redan över vald budget.")
         else:
-            st.caption("Automatisk paketoptimering kräver känt pris och känd frakt på huvudkortet.")
+            st.caption("Automatisk paketoptimering kräver känt pris, frakt och köparskydd på huvudkortet.")
         if best_basket.get("excluded_unknown_shipping"):
             st.caption(f"{best_basket['excluded_unknown_shipping']} stark kandidat med okänd frakt hölls utanför auto-korgen för att budgeten inte ska bli missvisande.")
+        if best_basket.get("excluded_unknown_fee"):
+            st.caption(f"{best_basket['excluded_unknown_fee']} stark kandidat saknar köparskyddsavgift och hölls utanför auto-korgen.")
         st.divider()
         selected = []
         for idx, row in enumerate(bundle["rows"], start=1):
@@ -2738,6 +2798,8 @@ def render_same_seller_button(item: dict, key: str) -> None:
             c1.metric("Kortens pris", f"{scenario.get('item_total',0):.0f} kr")
             c2.metric("Frakt en gång", f"{scenario['shipping_once']:.0f} kr" if scenario.get("shipping_once") is not None else "Ej känt")
             c3.metric("Scenario totalt", f"{scenario['scenario_total']:.0f} kr" if scenario.get("scenario_total") is not None else "Ej känt")
+            st.caption("Summa före köparskydd: " + evidence_money(scenario.get("subtotal_before_buyer_protection"))
+                       + " · köparskydd: " + evidence_money(scenario.get("buyer_protection_total")))
             if scenario.get("potential_shipping_saving") is not None and scenario.get("potential_shipping_saving") > 0:
                 st.success(f"Teoretisk fraktbesparing: {scenario['potential_shipping_saving']:.0f} kr jämfört med att betala de angivna frakterna separat.")
             st.warning(scenario.get("note"))
@@ -3715,7 +3777,7 @@ if st.session_state.get("results") is not None:
     if not visible:
         if not data:
             st.warning(
-                "Inga annonser är inlästa ännu. Hämta annonser från Tradera först – dina filter är inte problemet."
+                "Marknadsarkivet saknas i den här sessionen. Sparade analysresultat visas nedan; hämta aktuella annonser för en ny sökning."
             )
         elif st.session_state.get("debug", {}).get("final_results", 0) == 0:
             st.warning(

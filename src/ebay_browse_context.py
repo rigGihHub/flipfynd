@@ -253,6 +253,7 @@ def fetch_ebay_active_context(query, *, identity=None, client_id, client_secret,
             "item_price": value, "currency": price.get("currency"),
             "shipping_price": shipping_cost,
             "url": item.get("itemWebUrl"), "source": "eBay Browse",
+            "condition": item.get("condition"),
             "buying_options": item.get("buyingOptions") or [], "item_id": item.get("itemId")
         })
     rows = match_active_rows(raw_rows, identity)

@@ -7,14 +7,12 @@ other active listings from the same seller and quantifies a transparent
 from __future__ import annotations
 
 from typing import Iterable
+from math import isfinite
+from src.seller_identity import seller_alias, seller_id
 
 
 def _seller(item: dict) -> str | None:
-    for key in ("saljare", "säljare", "seller", "seller_name", "username", "seller_detail"):
-        value = item.get(key)
-        if value not in (None, "") and str(value).strip():
-            return str(value).strip()
-    return None
+    return seller_alias(item)
 
 
 def _url(item: dict) -> str | None:
@@ -34,7 +32,7 @@ def _price(item: dict) -> float | None:
 
 
 def _shipping(item: dict) -> float | None:
-    value = item.get("frakt")
+    value = item.get("frakt", item.get("shipping"))
     try:
         if value is not None:
             number = float(value)
@@ -42,6 +40,14 @@ def _shipping(item: dict) -> float | None:
     except (TypeError, ValueError):
         pass
     return None
+
+
+def _buyer_fee(item: dict) -> float | None:
+    try:
+        value = float(item.get("buyer_protection_fee"))
+        return value if isfinite(value) and value >= 0 else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _identity_key(item: dict) -> str:
@@ -70,7 +76,12 @@ def find_same_seller_listings(current: dict, market_items: Iterable[dict] | None
     analysed = _result_map(results)
     rows = []
     for raw in market_items or []:
-        if not isinstance(raw, dict) or _seller(raw) != seller:
+        if not isinstance(raw, dict) or raw.get("listing_inactive"):
+            continue
+        left_id, right_id = seller_id(current), seller_id(raw)
+        if (left_id and right_id and left_id != right_id) or (
+            not (left_id and right_id) and str(_seller(raw) or "").casefold() != seller.casefold()
+        ):
             continue
         key = _identity_key(raw)
         if key and current_key and key == current_key:
@@ -187,15 +198,20 @@ def build_shared_shipping_scenario(current: dict, selected_rows: Iterable[dict])
     shipping_once = max(known_shipping) if known_shipping else None
     separate_shipping = sum(known_shipping) if all_shipping_known else None
     potential_saving = (separate_shipping - shipping_once) if separate_shipping is not None and shipping_once is not None else None
+    fees = [_buyer_fee(item) for item in items]
+    fee_total = sum(fees) if all(fee is not None for fee in fees) else None
+    subtotal = item_total + shipping_once if all_shipping_known else None
     return {
-        "status": "READY" if all_shipping_known else "PARTIAL",
+        "status": "READY" if all_shipping_known and fee_total is not None else "PARTIAL",
         "item_total": round(item_total, 2),
         "shipping_once": round(shipping_once, 2) if shipping_once is not None else None,
-        "scenario_total": round(item_total + shipping_once, 2) if shipping_once is not None else None,
+        "scenario_total": round(subtotal + fee_total, 2) if subtotal is not None and fee_total is not None else None,
+        "subtotal_before_buyer_protection": round(subtotal, 2) if subtotal is not None else None,
+        "buyer_protection_total": round(fee_total, 2) if fee_total is not None else None,
         "separate_shipping": round(separate_shipping, 2) if separate_shipping is not None else None,
         "potential_shipping_saving": round(potential_saving, 2) if potential_saving is not None else None,
         "listing_count": len(items),
-        "note": "Scenario endast. Samfrakt och slutlig frakt måste verifieras hos Tradera/säljaren.",
+        "note": "Scenario endast. Frakt räknas en gång som högsta angivna frakt; ingen samfrakt är bekräftad. Kända köparskyddsavgifter summeras per annons. Slutlig frakt och avgift måste verifieras hos Tradera/säljaren.",
     }
 
 
@@ -216,10 +232,11 @@ def build_best_same_seller_basket(current: dict, rows: Iterable[dict], budget: f
 
     anchor_price = _price(current)
     anchor_shipping = _shipping(current)
-    if anchor_price is None or anchor_shipping is None:
-        return {"status": "INCOMPLETE_ANCHOR", "selected": [], "reason": "pris eller frakt saknas på huvudkortet"}
+    anchor_fee = _buyer_fee(current)
+    if anchor_price is None or anchor_shipping is None or anchor_fee is None:
+        return {"status": "INCOMPLETE_ANCHOR", "selected": [], "reason": "pris, frakt eller köparskydd saknas på huvudkortet"}
 
-    base_total = anchor_price + anchor_shipping
+    base_total = anchor_price + anchor_shipping + anchor_fee
     if base_total > budget:
         return {
             "status": "ANCHOR_OVER_BUDGET",
@@ -230,6 +247,7 @@ def build_best_same_seller_basket(current: dict, rows: Iterable[dict], budget: f
 
     eligible = []
     excluded_unknown_shipping = 0
+    excluded_unknown_fee = 0
     for row in rows or []:
         if not isinstance(row, dict):
             continue
@@ -249,6 +267,10 @@ def build_best_same_seller_basket(current: dict, rows: Iterable[dict], budget: f
             shipping = float(shipping)
         except (TypeError, ValueError):
             excluded_unknown_shipping += 1
+            continue
+
+        if _buyer_fee(row.get("source_item") or row) is None:
+            excluded_unknown_fee += 1
             continue
 
         potential = row.get("potential")
@@ -273,6 +295,7 @@ def build_best_same_seller_basket(current: dict, rows: Iterable[dict], budget: f
             "budget": round(budget, 2),
             "anchor_total": round(base_total, 2),
             "excluded_unknown_shipping": excluded_unknown_shipping,
+            "excluded_unknown_fee": excluded_unknown_fee,
         }
 
     best = {"utility": -1.0, "selected": [], "scenario_total": base_total}
@@ -307,6 +330,7 @@ def build_best_same_seller_basket(current: dict, rows: Iterable[dict], budget: f
             "anchor_total": round(base_total, 2),
             "eligible_count": len(eligible),
             "excluded_unknown_shipping": excluded_unknown_shipping,
+            "excluded_unknown_fee": excluded_unknown_fee,
         }
 
     return {
@@ -320,5 +344,6 @@ def build_best_same_seller_basket(current: dict, rows: Iterable[dict], budget: f
         "remaining_budget": round(budget - best["scenario_total"], 2),
         "eligible_count": len(eligible),
         "excluded_unknown_shipping": excluded_unknown_shipping,
-        "note": "Automatisk korg använder bara redan starka add-on-kandidater med känd frakt. Samfrakt måste fortfarande verifieras hos säljaren.",
+        "excluded_unknown_fee": excluded_unknown_fee,
+        "note": "Automatisk korg använder starka kandidater med känd frakt och summerar köparskydd per annons. Samfrakt och avgifter måste fortfarande verifieras hos säljaren/Tradera.",
     }

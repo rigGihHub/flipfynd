@@ -60,7 +60,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
         return {
             "available": True,
             "value": asking_margin,
-            "label": "Nettovinst mot prisindikation",
+            "label": "Nettoscenario mot begärda priser",
             "basis": "aktiv jämförelse, inte genomförd försäljning",
             "evidence_kind": "ACTIVE_ASKING",
         }
@@ -70,7 +70,7 @@ def build_seller_net_profit_summary(row: dict | None) -> dict:
         return {
             "available": True,
             "value": active_margin,
-            "label": "Nettovinst mot prisindikation",
+            "label": "Nettoscenario mot begärda priser",
             "basis": "aktiva jämförelser, inte genomförda försäljningar",
             "evidence_kind": "ACTIVE_ASKING",
         }

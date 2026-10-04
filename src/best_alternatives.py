@@ -4,6 +4,8 @@ from urllib.parse import urlsplit
 
 from src.opportunity_top5 import build_opportunity_top5, listing_url
 from src.seller_profit_display import build_seller_net_profit_summary
+from src.collector_evidence import acquisition_breakdown, money as evidence_money, render_listing_review
+from src.card_parser import clean_card_title
 
 
 def _number(value):
@@ -90,26 +92,29 @@ def render_best_alternatives(result, *, explain=None, seller=None):
                 'Modell/guide' if row.get('heuristic_indication') is not None else 'Saknas'))
         net = (('Scenario ' if summary['evidence_kind'] == 'ACTIVE_ASKING' else '')
                + f"{summary['value']:+.0f} kr") if summary['available'] else 'Ej beräkningsbar'
-        table.append({'#': rank, 'Kort': row['title'], 'Bedömning': alternative_status(row),
+        table.append({'#': rank, 'Kort': clean_card_title(row['title']), 'Bedömning': alternative_status(row),
                       'Total kostnad': money(row.get('total_cost')), 'Prisindikation': money(indication),
                       'Underlag': source, 'Netto / scenario': net,
                       'Fyndpotential': f"{float(row.get('potential') or 0):.0f}/100",
                       'Säkerhet': f"{float(row.get('certainty') or 0):.0f}/100"})
     st.dataframe(table, use_container_width=True, hide_index=True)
     for rank, row in enumerate(rows, 1):
-        with st.expander(f"#{rank} · {row['title']}", expanded=False):
+        with st.expander(f"#{rank} · {clean_card_title(row['title'])}", expanded=False):
             st.write('**' + alternative_status(row) + '**')
             source_item = row.get('_source_item') or {}
             scenario = source_item.get('asking_price_opportunity') or {}
             price = scenario.get('purchase_price', source_item.get('pris', source_item.get('price')))
             shipping = scenario.get('shipping', source_item.get('frakt', source_item.get('shipping')))
-            st.caption(f"Pris {money(price)} · frakt {money(shipping)} · total kostnad {money(row.get('total_cost'))}")
+            costs = acquisition_breakdown(source_item, row.get('total_cost'))
+            st.caption(' · '.join(label + ' ' + evidence_money(value) for label, value in costs['parts'])
+                       + ' · total kostnad ' + evidence_money(costs['total']))
             summary = build_seller_net_profit_summary(row)
             if summary['available']:
                 st.write(f"{summary['label']}: **{summary['value']:+.2f} kr**")
                 st.caption(summary['basis'])
             else:
                 st.caption('Nettovinst kan inte beräknas med tillräckligt underlag.')
+            render_listing_review(source_item, total_cost=row.get('total_cost'))
             if row.get('reasons'):
                 st.caption('Varför: ' + ' · '.join(row['reasons']))
             if row.get('primary_blocker'):

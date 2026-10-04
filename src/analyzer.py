@@ -1,5 +1,6 @@
 import re
 import statistics
+from datetime import datetime, timezone
 
 from src.card_parser import build_card_identity, detect_lot_info, has_relic_material_evidence, parse_card_features
 from src.card_listing_integrity import assess_listing_integrity
@@ -3797,6 +3798,8 @@ def analyze_core(
         "sold_comparable_count": sold_comparable_count,
         "asking_comparable_count": asking_comparable_count,
         "comparable_details": comparable_details,
+        "analysed_at": datetime.now(timezone.utc).isoformat(),
+        "profit_breakdown": profits.get("profit_breakdown"),
         "comp_valuation_range": comp_valuation_range,
         "rejected_comparable_count": rejected_comparable_count,
         "rejected_comparables": rejected_comparables,

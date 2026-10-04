@@ -64,7 +64,7 @@ def render_asking_price_opportunity(opportunity):
          if data.get("weak_find_signal")
          else "Detta är ett scenario mot aktiva begärda priser, inte ett verifierat marknadsvärde eller en genomförd försäljning.")
     )
-    st.caption(data["note"])
+    st.caption(data.get("note") or "Sparat scenario mot begärda priser. Kontrollera aktuellt pris, frakt och avgifter före köp.")
     if data.get("fx_date"):
         st.caption(f"Omräknat till SEK med ECB:s referenskurs {data['fx_date']}.")
     if data.get("fetched_at"):

@@ -127,14 +127,15 @@ def build_card_identity_summary(item: dict) -> dict:
     def pick(name, *fallbacks):
         value = fields.get(name)
         if value not in (None, ""):
-            return value, "verified"
+            return value, "verified" if item.get("exact_identity_gate_supports_exact_comp_search") else "interpreted"
         for key in fallbacks:
             value = item.get(key)
             if value not in (None, ""):
                 return value, "interpreted"
-        value = observed.get(name)
-        if value not in (None, ""):
-            return value, "observed"
+        for key in (name,) + fallbacks:
+            value = observed.get(key)
+            if value not in (None, ""):
+                return value, "observed"
         return None, "missing"
 
     rows = []
@@ -150,8 +151,16 @@ def build_card_identity_summary(item: dict) -> dict:
         source_label = {"verified": "verifierat", "interpreted": "strukturerat", "observed": "från annonstitel"}.get(level, level)
         rows.append({"label": label, "value": str(value), "known": True, "level": level, "source": source_label})
 
-    add("Spelare", pick("player_name", "player_name"), "spelare")
+    player = pick("player_name", "player_name")
+    # Old snapshots may carry an insert label in the player slot. Repair only
+    # that known parser error for display; never change the valuation gate.
+    from src.card_parser import INSERT_NAMES
+    if str(player[0] or "").casefold() in {name.casefold() for name in INSERT_NAMES}:
+        player = (observed.get("player_name"), "observed")
+    add("Spelare", player, "spelare")
     add("Set / program", pick("set_name", "set_name"), "set/program")
+    if observed.get("insert_name"):
+        add("Insert", (observed["insert_name"], "observed"))
     season = pick("season", "season", "rookie_window_card_year")
     if season[0] in (None, ""):
         year = item.get("year") or observed.get("year")

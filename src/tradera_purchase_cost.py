@@ -2,9 +2,44 @@
 import json
 import re
 from html import unescape
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urljoin, unquote
+from datetime import datetime, timezone
 
 import requests
+
+
+def purchase_seller_metadata(detail, html=""):
+    """Read seller metadata only after the exact itemDetails id was checked.
+
+    Profile links must agree with this item's structured seller identity.
+    Related sellers never identify the anchor card.
+    """
+    from src.seller_identity import apply_seller_metadata, seller_alias, seller_id
+    source = dict(detail)
+    for key in ("sellerInformation", "sellerDetails"):
+        if isinstance(detail.get(key), dict):
+            source["seller"] = detail[key]
+            break
+    if detail.get("sellerAlias"):
+        source["seller_alias"] = detail["sellerAlias"]
+    structured_seller = source.get("seller") if isinstance(source.get("seller"), dict) else {}
+    source["seller_id"] = (detail.get("sellerMemberId") or source.get("seller_id")
+                           or structured_seller.get("memberId"))
+    out = apply_seller_metadata({}, source)
+    profiles = {}
+    for href in re.findall(r'href=["\']([^"\']+)["\']', html, re.I):
+        url = urljoin("https://www.tradera.com", unescape(href))
+        parts = urlsplit(url)
+        match = re.fullmatch(r"/profile/items/(\d+)/([^/?#]+?)/?", parts.path)
+        if parts.hostname in {"www.tradera.com", "tradera.com"} and match:
+            profiles[(match[1], unquote(match[2]).casefold())] = (url.split("?")[0].split("#")[0], unquote(match[2]))
+    sid, alias = seller_id(out), seller_alias(out)
+    candidates = [(key, value) for key, value in profiles.items()
+                  if (not sid or sid == key[0]) and (not alias or alias.casefold() == key[1])]
+    if len(candidates) == 1 and (sid or alias):
+        key, (url, name) = candidates[0]
+        out = apply_seller_metadata(out, {"seller_alias": name, "seller_id": key[0], "seller_url": url})
+    return out
 
 
 def parse_purchase_detail(html, item_id):
@@ -48,6 +83,8 @@ def verify_purchase_cost(item, *, session=requests):
         if not detail:
             out["purchase_cost_verification"] = "UNAVAILABLE"
             return out
+        out["purchase_checked_at"] = datetime.now(timezone.utc).isoformat()
+        out.update(purchase_seller_metadata(detail, response.text))
         # Identity details remain useful even when shipping is unspecified.
         description = unescape(str(detail.get("description") or ""))
         out.update(full_description=re.sub(r"<[^>]+>", " ", description)[:8000],
