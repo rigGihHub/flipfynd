@@ -10,6 +10,7 @@ from src.seller_bundle_opportunity import (
     find_same_seller_listings, build_shared_shipping_scenario, build_best_same_seller_basket,
 )
 from src.tradera_purchase_cost import purchase_seller_metadata, verify_purchase_cost
+from src.seller_identity import seller_id, seller_url
 
 
 ORR = '2020-21 Upper Deck Stature Century Momentous Green #CM-5 Bobby Orr /149 Sluttid 23 nov 20:21 . Pris: 67 kr , Köp nu .'
@@ -86,6 +87,13 @@ def test_same_seller_uses_canonical_metadata_casefold_and_rejects_conflicting_id
     wrong = dict(same, seller={'alias':'Viennafloyd','id':'999'},lank='wrong')
     out = find_same_seller_listings(anchor,[anchor,same,wrong,dict(same,lank='ended',listing_inactive=True)])
     assert [row['url'] for row in out['rows']] == ['same']
+
+
+def test_saved_public_inventory_has_canonical_seller_id_and_profile():
+    saved = {'saljare':'viennafloyd', 'seller_user_id':'6180729'}
+    assert seller_id(saved) == '6180729'
+    assert seller_url(saved) == 'https://www.tradera.com/profile/items/6180729/viennafloyd'
+    assert seller_url({'saljare':'other'}) is None
 
 
 def test_public_profile_fallback_is_unambiguous_and_respects_structured_seller():

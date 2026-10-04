@@ -241,7 +241,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-04.128-collector-evidence"
+RUNTIME_BUILD = "2026-10-04.129-collector-evidence"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -341,7 +341,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.128"
+APP_VERSION = "v0.14.129"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -1079,7 +1079,7 @@ def update_fetch_status():
         st.session_state["fetch_process"] = _record["process"]
     elif st.session_state.get("fetch_status") == "running":
         st.session_state["fetch_status"] = "failed"
-        st.session_state["fetch_last_message"] = "Servern startades om. Inlästa annonser är sparade; nästa uppdatering fortsätter med återstående sidor."
+        st.session_state["fetch_last_message"] = "Servern startades om och hämtningen avbröts. Kontrollera aktuell marknad ovan och läs in annonser igen."
     process = st.session_state.get(
         "fetch_process"
     )
@@ -2272,7 +2272,10 @@ elif _fetch_status == "finished" and st.session_state.pop("continue_market_after
         _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
         st.rerun()
 elif _fetch_status == "failed":
-    st.error(st.session_state.get("fetch_last_message") or "Hämtningen misslyckades. Försök igen.")
+    _failed_message = st.session_state.get("fetch_last_message") or "Hämtningen misslyckades. Försök igen."
+    if not data and "Inlästa annonser är sparade" in _failed_message:
+        _failed_message = "Servern startades om och marknadsarkivet saknas. Läs in annonser igen; sparade analysresultat visas separat."
+    st.error(_failed_message)
     log_tail = read_fetch_log_tail()
     if log_tail:
         with st.expander("Tekniska detaljer"):
@@ -2597,6 +2600,16 @@ def render_same_seller_button(item: dict, key: str) -> None:
                     st.link_button("Öppna originalannonsen för att se säljaren ↗", _ad_key)
                 return
         st.markdown(f"### 🧺 Samfraktsjakt hos {seller}")
+        if st.button("Kontrollera huvudkortets aktuella kostnad", key=f"seller_anchor_cost_{key}", disabled=not bool(_ad_key)):
+            with st.spinner("Kontrollerar pris, frakt och köparskydd…"):
+                checked = _purchase_cost_runtime.verify_purchase_cost(item)
+            _detail_cache[_ad_key] = checked
+            if checked.get("purchase_cost_verified"):
+                item.update({field: checked[field] for field in (
+                    "pris", "frakt", "buyer_protection_fee", "purchase_checked_at", "purchase_cost_verified"
+                ) if field in checked})
+            else:
+                st.info("Kostnaden kunde inte verifieras. Okända avgifter räknas inte som noll.")
         if (_detail_cache.get(_ad_key) or {}).get("listing_inactive") or item.get("listing_inactive"):
             st.warning("Originalannonsen är avslutad eller har ersatts. Bygg ett paket från en aktuell annons.")
             return

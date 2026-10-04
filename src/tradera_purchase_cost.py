@@ -39,6 +39,7 @@ def purchase_seller_metadata(detail, html=""):
     if len(candidates) == 1 and (sid or alias):
         key, (url, name) = candidates[0]
         out = apply_seller_metadata(out, {"seller_alias": name, "seller_id": key[0], "seller_url": url})
+        out.update(seller_url=url, saljare_url=url)
     return out
 
 

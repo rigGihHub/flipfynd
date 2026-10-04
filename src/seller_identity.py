@@ -1,5 +1,6 @@
 """Recover seller identity across fetched, analysed and API-backed listing shapes."""
 from __future__ import annotations
+from urllib.parse import quote
 
 
 def _text(value) -> str:
@@ -32,14 +33,14 @@ def seller_alias(item: dict | None) -> str | None:
 
 def seller_id(item: dict | None) -> str | None:
     item = item or {}
-    for key in ("seller_id", "saljare_id", "SellerId", "sellerId"):
+    for key in ("seller_id", "saljare_id", "SellerId", "sellerId", "seller_user_id"):
         value = item.get(key)
         if value not in (None, "") and str(value).strip():
             return str(value).strip()
     for key in ("seller", "seller_detail"):
         value = item.get(key)
         if isinstance(value, dict):
-            for nested_key in ("id", "Id", "ID", "SellerId", "seller_id"):
+            for nested_key in ("id", "Id", "ID", "SellerId", "seller_id", "memberId"):
                 nested = value.get(nested_key)
                 if nested not in (None, "") and str(nested).strip():
                     return str(nested).strip()
@@ -71,6 +72,9 @@ def seller_url(item: dict | None) -> str | None:
             value = seller_url(nested)
             if value:
                 return value
+    sid, alias = seller_id(item), seller_alias(item)
+    if sid and sid.isdecimal() and alias:
+        return "https://www.tradera.com/profile/items/" + sid + "/" + quote(alias, safe="")
     return None
 
 
