@@ -4,12 +4,17 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+from threading import RLock
+from src.snapshot_encoding import json_size
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CACHE_PATH = BASE_DIR / "analysis_cache.json"
 
 CACHE_SCHEMA_VERSION = 2
 CACHE_MODEL_VERSION = "flip_v38_football_hobby_sport_scope"
+CACHE_MAX_ENTRIES = 128
+CACHE_MAX_BYTES = 8 * 1024 * 1024
+_LOCK = RLock()
 
 _memory_cache: Optional[Dict[str, Any]] = None
 
@@ -63,7 +68,9 @@ def _normalize_loaded_payload(data: Any) -> dict:
         "entries": {},
     }
 
-    for key, value in entries.items():
+    for key, value in sorted(entries.items(), key=lambda pair:
+            (pair[1].get('last_accessed', 0), pair[1].get('created_at', 0))
+            if isinstance(pair[1], dict) else (0, 0), reverse=True)[:CACHE_MAX_ENTRIES]:
         if not isinstance(key, str):
             continue
         if not isinstance(value, dict):
@@ -75,8 +82,9 @@ def _normalize_loaded_payload(data: Any) -> dict:
             "result": value.get("result"),
             "created_at": value.get("created_at", _now_ts()),
             "last_accessed": value.get("last_accessed", _now_ts()),
+            "size_bytes": json_size(value.get('result'), CACHE_MAX_BYTES),
         }
-
+    normalized['entries'] = _prune_entries(normalized['entries'])
     return normalized
 
 
@@ -90,7 +98,12 @@ def _load_cache_payload() -> dict:
         _memory_cache = _empty_cache_payload()
         return _memory_cache
 
+    # This is a recomputable analysis cache, separate from saved searches.
+    # Do not deserialize an old oversized cache before its new bound applies.
     try:
+        if CACHE_PATH.stat().st_size > CACHE_MAX_BYTES * 2:
+            _memory_cache = _empty_cache_payload()
+            return _memory_cache
         with CACHE_PATH.open("r", encoding="utf-8") as file:
             data = json.load(file)
     except Exception:
@@ -114,26 +127,17 @@ def _save_cache_payload(payload: dict) -> None:
         pass
 
 
-def _prune_entries(entries: dict, max_entries: int = 4000) -> dict:
-    if len(entries) <= max_entries:
-        return entries
-
-    sortable = []
-    for key, value in entries.items():
-        last_accessed = value.get("last_accessed", 0)
-        created_at = value.get("created_at", 0)
-        sortable.append((key, last_accessed, created_at))
-
-    sortable.sort(key=lambda x: (x[1], x[2]))  # äldst/sämst använda först
-
-    remove_count = len(entries) - max_entries
-    keys_to_remove = {row[0] for row in sortable[:remove_count]}
-
-    pruned = {}
-    for key, value in entries.items():
-        if key not in keys_to_remove:
-            pruned[key] = value
-
+def _prune_entries(entries: dict, max_entries: int = CACHE_MAX_ENTRIES) -> dict:
+    pruned, used = {}, 0
+    for key, entry in sorted(entries.items(), key=lambda pair:
+            (pair[1].get('last_accessed', 0), pair[1].get('created_at', 0)), reverse=True):
+        size = entry.get('size_bytes')
+        if size is None:
+            size = json_size(entry.get('result'), CACHE_MAX_BYTES)
+            entry['size_bytes'] = size
+        if len(pruned) < max_entries and used + size <= CACHE_MAX_BYTES:
+            pruned[key] = entry
+            used += size
     return pruned
 
 
@@ -167,6 +171,11 @@ def build_analysis_signature(item: dict, data_size: int, mode: str) -> str:
 
 
 def get_cached_analysis(signature: str):
+    with _LOCK:
+        return _get_cached_analysis(signature)
+
+
+def _get_cached_analysis(signature: str):
     payload = _load_cache_payload()
     entries = payload["entries"]
 
@@ -191,8 +200,17 @@ def get_cached_analysis(signature: str):
 
 
 def set_cached_analysis(signature: str, result: dict) -> None:
+    with _LOCK:
+        _set_cached_analysis(signature, result)
+
+
+def _set_cached_analysis(signature: str, result: dict) -> None:
     if str((result.get("asking_price_opportunity") or {}).get("status", "")).startswith("COMPARISON_"):
         return
+    try:
+        size = json_size(result, CACHE_MAX_BYTES)
+    except (TypeError, ValueError):
+        return  # An optional cache must never fail an otherwise valid analysis.
     payload = _load_cache_payload()
     entries = payload["entries"]
 
@@ -203,7 +221,8 @@ def set_cached_analysis(signature: str, result: dict) -> None:
         "result": result,
         "created_at": created_at,
         "last_accessed": _now_ts(),
+        "size_bytes": size,
     }
 
-    payload["entries"] = _prune_entries(entries, max_entries=4000)
+    payload["entries"] = _prune_entries(entries, max_entries=CACHE_MAX_ENTRIES)
     _save_cache_payload(payload)

@@ -9,6 +9,13 @@ def start(key, spawn, *, category, mode):
         current = _RUNS.get(key)
         if current and current['process'].poll() is None:
             return current
+        # Every browser writes the same market file. Concurrent Chromium
+        # crawlers duplicate memory and race to overwrite that shared inventory.
+        for active in _RUNS.values():
+            if active['process'].poll() is None:
+                _RUNS[key] = active
+                return active
+        _RUNS.clear()
         current = {'process': spawn(), 'category': category, 'mode': mode}
         _RUNS[key] = current
         return current

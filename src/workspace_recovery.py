@@ -10,10 +10,11 @@ import uuid
 
 from src.resumable_search import valid_token
 from src.persistent_store import load_namespace, save_namespace
+from src.snapshot_encoding import detach_json, fits_json_budget, json_chunks
 
 INLINE_COMPONENT_DELIVERY = True
 
-_ROOT = Path(__file__).resolve().parent.parent / 'workspace_snapshots'
+_ROOT = globals().get('_ROOT') or Path(__file__).resolve().parent.parent / 'workspace_snapshots'
 _LOCK = globals().get('_LOCK') or RLock()
 _HASHES = globals().get('_HASHES', {})
 _BACKUP_POOL = globals().get('_BACKUP_POOL') or ThreadPoolExecutor(max_workers=2, thread_name_prefix='workspace-backup')
@@ -26,7 +27,9 @@ def _queue_backup(token, value, database_url):
     with _LOCK:
         # save() already owns a detached JSON copy. Keep that copy rather than
         # duplicating the entire workspace again while a search is finishing.
-        _PENDING[token] = (database_url, value)
+        # The atomic local file owns the complete snapshot. Queued database
+        # writes retain its path, not another large workspace per browser.
+        _PENDING[token] = (database_url, _ROOT / (token + '.json'))
         if token in _BACKUP_ACTIVE:
             return
         _BACKUP_ACTIVE.add(token)
@@ -38,7 +41,9 @@ def _queue_backup(token, value, database_url):
                     _BACKUP_ACTIVE.discard(token)
                     return
             try:
-                save_namespace(item[0], 'workspace:' + token, item[1])
+                with item[1].open(encoding='utf-8') as handle:
+                    payload = json.load(handle)
+                save_namespace(item[0], 'workspace:' + token, payload)
             except Exception:
                 pass  # The synchronous local/browser copies remain available.
     _BACKUP_POOL.submit(flush)
@@ -60,10 +65,9 @@ ENUMS = {'search_sport': {'Hockey', 'Fotboll'},
 def snapshot(state, query):
     values = {k: v for k, v in dict(state).items()
               if k in FIELDS or k.startswith(PREFIXES)}
-    # The JSON round trip below already detaches every nested value. A deepcopy
-    # before it retained another complete result set during serialization.
-    # JSON only: no pickle, connection objects, action buttons or pending clicks.
-    values = json.loads(json.dumps(values, ensure_ascii=False, default=lambda _: None))
+    # Detach mutable containers without duplicating immutable description text
+    # through a complete JSON string. Unsupported objects become null.
+    values = detach_json(values)
     return {'schema': 1, 'state': values,
             'query': {k: str(v) for k, v in dict(query).items() if k in QUERY}}
 
@@ -72,7 +76,7 @@ def validate(value):
     if not isinstance(value, dict) or value.get('schema') != 1 or not isinstance(value.get('state'), dict):
         return None
     try:
-        if len(json.dumps(value, ensure_ascii=False).encode()) > MAX_BYTES:
+        if not fits_json_budget(value, MAX_BYTES):
             return None
     except (TypeError, ValueError):
         return None
@@ -100,8 +104,10 @@ def save(token, value, database_url=None):
     value = validate(value)
     if not valid_token(token) or value is None:
         return False
-    payload = json.dumps({k: v for k, v in value.items() if k != 'updated_at'}, ensure_ascii=False)
-    digest = hashlib.sha256(payload.encode()).hexdigest()
+    hasher = hashlib.sha256()
+    for chunk in json_chunks({k: v for k, v in value.items() if k != 'updated_at'}):
+        hasher.update(chunk.encode('utf-8'))
+    digest = hasher.hexdigest()
     with _LOCK:
         if _HASHES.get(token) == digest and (_ROOT / (token + '.json')).exists():
             return True
@@ -110,7 +116,8 @@ def save(token, value, database_url=None):
         tmp = path.with_name(token + '.' + uuid.uuid4().hex + '.tmp')
         try:
             _ROOT.mkdir(exist_ok=True)
-            tmp.write_text(json.dumps(value, ensure_ascii=False))
+            with tmp.open('w', encoding='utf-8') as handle:
+                json.dump(value, handle, ensure_ascii=False)
             tmp.replace(path)
         except OSError:
             return False
@@ -173,10 +180,15 @@ def recover_ui(state, query, database_url=None):
         restore(state, query, current)
         state['_workspace_loaded'] = token
     if current and state.get('_workspace_browser_loaded') == token:
-        persist_current(state, query, database_url)
-        current = snapshot(state, query)
+        save(token, current, database_url)
     wrapper = {'status': 'COMPLETED', 'params': {}, 'results': [], 'debug': {'workspace': current}}
-    blob = encode_snapshot(token, wrapper) if current else ''
+    identity = (token, _HASHES.get(token))
+    if (current and identity[1] and state.get('_workspace_blob_identity') == identity):
+        blob = state.get('_workspace_blob', '')
+    else:
+        blob = encode_snapshot(token, wrapper) if current else ''
+        state['_workspace_blob_identity'] = identity
+        state['_workspace_blob'] = blob
     copy = mount_inline('flipfynd_workspace_recovery', 'workspace_browser_storage',
                         data={'token': token if valid_token(token) else '', 'blob': blob,
                               'hydrated': state.get('_workspace_browser_loaded') == token},

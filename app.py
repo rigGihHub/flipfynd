@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-05.133-broader-candidate-review"
+RUNTIME_BUILD = "2026-10-05.134-bounded-memory-recovery"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.133"
+APP_VERSION = "v0.14.134"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -369,13 +369,21 @@ if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
 import src.seller_analysis_registry as _seller_registry_runtime
 import src.search_product_policy as _product_scope_runtime
 import src.adaptive_deepening as _adaptive_runtime
+import src.analysis_cache as _analysis_cache_runtime
+import src.background_fetch_registry as _background_fetch_runtime
+_reset_analysis_memory = getattr(_analysis_cache_runtime, '_flipfynd_loaded_version', None) != APP_VERSION
 import src.seller_card_domain as _seller_domain_runtime
 import src.seller_card_merit as _seller_merit_runtime
-for _scope_module in (_product_scope_runtime, _adaptive_runtime, _seller_domain_runtime, _seller_merit_runtime):
+for _scope_module in (_product_scope_runtime, _adaptive_runtime, _analysis_cache_runtime,
+                      _background_fetch_runtime, _seller_domain_runtime, _seller_merit_runtime):
     if getattr(_scope_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_scope_module)
         _scope_module._flipfynd_loaded_version = APP_VERSION
 product_scope = _product_scope_runtime.product_scope
+get_cached_analysis = _analysis_cache_runtime.get_cached_analysis
+set_cached_analysis = _analysis_cache_runtime.set_cached_analysis
+clear_analysis_cache = _analysis_cache_runtime.clear_analysis_cache
+build_analysis_signature = _analysis_cache_runtime.build_analysis_signature
 filter_search_products = _product_scope_runtime.filter_search_products
 import src.seller_dynamic_top5 as _seller_dynamic_runtime
 import src.seller_checkpoint_store as _seller_checkpoint_runtime
@@ -1230,10 +1238,14 @@ def is_auto(item):
 
 
 
-@st.cache_data(show_spinner=False, max_entries=6000)
+@st.cache_data(show_spinner=False, ttl=300, max_entries=256)
 def _cached_fast_analysis(item_signature, item, sport, strategy):
     """Reuse the shared worker-safe first-pass analysis across reruns."""
     return analyze_item(item, mode="fast", strategy_mode=strategy, sport=sport)
+
+
+if _reset_analysis_memory:
+    _cached_fast_analysis.clear()
 
 
 def _fast_signature(item, sport, strategy):
@@ -1303,8 +1315,9 @@ def analyze_data(*args, **kwargs):
 
 
 import src.workspace_recovery as _workspace_recovery
-if not getattr(_workspace_recovery, 'INLINE_COMPONENT_DELIVERY', False):
+if getattr(_workspace_recovery, '_flipfynd_loaded_version', None) != APP_VERSION:
     importlib.reload(_workspace_recovery)
+    _workspace_recovery._flipfynd_loaded_version = APP_VERSION
 _workspace_recovery.recover_ui(st.session_state, st.query_params, DATABASE_URL)
 ensure_state()
 update_fetch_status()

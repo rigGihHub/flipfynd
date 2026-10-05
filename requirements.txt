@@ -1,4 +1,4 @@
-# Cloud rebuild v0.14.120: bounded inventory cache and lower snapshot memory.
+# Cloud rebuild v0.14.134: bounded analysis memory and streamed workspace backups.
 streamlit==1.64.0
 # Match Community Cloud's Arrow workaround before Streamlit is imported.
 pyarrow==24.0.0

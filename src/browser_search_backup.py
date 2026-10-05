@@ -2,6 +2,7 @@
 import base64
 import json
 import zlib
+from src.snapshot_encoding import json_chunks
 
 MAX_COMPRESSED = 3_000_000
 MAX_JSON = 32_000_000
@@ -11,10 +12,21 @@ def encode_snapshot(token, snapshot):
     from src.resumable_search import valid_token
     if not valid_token(token) or not isinstance(snapshot, dict):
         return ""
-    raw = json.dumps({"token": token, "snapshot": snapshot}, ensure_ascii=False, default=str).encode()
-    if len(raw) > MAX_JSON:
-        return ""
-    blob = base64.b64encode(zlib.compress(raw, 6)).decode()
+    compressor = zlib.compressobj(6)
+    pieces, raw_size, compressed_size = [], 0, 0
+    for text in json_chunks({"token": token, "snapshot": snapshot}, default=str):
+        raw = text.encode('utf-8')
+        raw_size += len(raw)
+        if raw_size > MAX_JSON:
+            return ""
+        chunk = compressor.compress(raw)
+        if chunk:
+            pieces.append(chunk)
+        compressed_size += len(chunk)
+        if compressed_size > MAX_COMPRESSED // 4 * 3:
+            return ""
+    pieces.append(compressor.flush())
+    blob = base64.b64encode(b''.join(pieces)).decode()
     return blob if len(blob) <= MAX_COMPRESSED else ""
 
 
