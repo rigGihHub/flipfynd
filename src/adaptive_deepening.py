@@ -64,7 +64,17 @@ def select_adaptive_full_analysis_indices(candidates, base_limit=12, hard_cap=30
         return selected
 
     cutoff_fast = float(candidates[min(base_limit, total) - 1][1].get("rank_score", 0) or 0)
-    near_cutoff = cutoff_fast * 0.85 if cutoff_fast > 0 else None
+    near_cutoff = cutoff_fast * 0.70 if cutoff_fast > 0 else None
+
+    # Reserve part of the same bounded budget for independent signals before
+    # the broader score band can consume it. A low model score is not a veto.
+    protected = [idx for idx in range(base_limit, total)
+                 if _independent_value_signal(candidates[idx])]
+    protected.sort(key=lambda idx: (
+        collector_signals(candidates[idx][0] or {}).get("score", 0),
+        (candidates[idx][2] or {}).get("score", 0), -idx), reverse=True)
+    selected.extend(protected[:min(hard_cap - len(selected), max(1, hard_cap // 4))])
+    seen = set(selected)
 
     for idx in range(base_limit, total):
         if len(selected) >= hard_cap:
@@ -73,6 +83,16 @@ def select_adaptive_full_analysis_indices(candidates, base_limit=12, hard_cap=30
         fast_score = float(fast.get("rank_score", 0) or 0)
         close_enough = near_cutoff is not None and fast_score >= near_cutoff
         independent_signal = _independent_value_signal(candidates[idx])
-        if close_enough or independent_signal:
+        if idx not in seen and (close_enough or independent_signal):
             selected.append(idx)
     return selected
+
+
+def merge_deep_analysis_routes(candidates, selected, asking, *, hard_cap):
+    """Keep scarce/review candidates when exact-price routes fill the budget."""
+    protected = [idx for idx in selected if _independent_value_signal(candidates[idx])]
+    protected.sort(key=lambda idx: (
+        collector_signals(candidates[idx][0] or {}).get("score", 0),
+        (candidates[idx][2] or {}).get("score", 0), -idx), reverse=True)
+    protected = protected[:max(1, hard_cap // 4)]
+    return list(dict.fromkeys(protected + list(asking) + list(selected)))[:hard_cap]

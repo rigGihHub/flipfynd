@@ -2,7 +2,7 @@
 from math import isfinite
 from urllib.parse import urlsplit
 
-from src.opportunity_top5 import build_opportunity_top5, listing_url
+from src.opportunity_top5 import build_opportunity_top5, listing_url, has_supported_price_context
 from src.seller_profit_display import build_seller_net_profit_summary
 from src.collector_evidence import acquisition_breakdown, money as evidence_money, render_listing_review
 from src.card_parser import clean_card_title
@@ -52,7 +52,12 @@ def build_best_alternatives(results, *, research_leads=(), extra_rows=()):
         if isinstance(lead, dict):
             add({'titel': lead.get('title'), 'lank': lead.get('url'),
                  'asking_price_opportunity': lead.get('scenario') or {}})
-    result = build_opportunity_top5(pool, limit=5, fill_alternatives=True)
+    result = build_opportunity_top5(pool, limit=len(pool), fill_alternatives=True)
+    ranked = result['rows']
+    result['rows'] = ranked[:5]
+    result['review_candidates'] = [row for row in ranked[5:]
+        if not has_supported_price_context(row)
+        or (row.get('decision') != 'AVSTÅ' and (_number(row.get('practical_margin')) or 0) > 0)][:15]
     result['available_count'] = len(pool)
     result['product_scope_excluded_count'] = len(excluded)
     return result
@@ -62,17 +67,19 @@ def alternative_status(row):
     if row.get('decision') == 'KÖP':
         return 'KÖP · verifierat underlag'
     margin = _number(row.get('practical_margin'))
+    source = row.get('practical_price_source')
+    if source == 'MODEL_GUIDE':
+        return 'Potentiell kandidat · endast modell/guide'
+    if source == 'ACTIVE_PRICE' and int(row.get('asking_comparison_count') or 0) < 2:
+        return ('Osäkert · endast ett jämförelsepris' if int(row.get('asking_comparison_count') or 0) == 1
+                else 'Potentiell kandidat · prisunderlag behöver verifieras')
+    if margin is None:
+        return 'Potentiell kandidat · prisunderlag saknas'
     if row.get('decision') == 'AVSTÅ' or (margin is not None and margin <= 0):
         return 'AVSTÅ · ingen positiv marginal'
-    if margin is None:
-        return 'Osäkert · prisunderlag saknas'
     roi = _number(row.get('practical_roi'))
     if margin < 35 or (roi is not None and roi < .15):
         return 'Svag marginal · inget fynd'
-    if row.get('practical_price_source') == 'MODEL_GUIDE':
-        return 'Osäkert · endast modell/guide'
-    if row.get('practical_price_source') == 'ACTIVE_PRICE' and int(row.get('asking_comparison_count') or 0) < 2:
-        return 'Osäkert · endast ett jämförelsepris'
     return 'UNDERSÖK · köp ej bekräftat'
 
 
@@ -134,3 +141,14 @@ def render_best_alternatives(result, *, explain=None, seller=None):
                 seller(source_item, f'top5_{rank}')
             if row.get('url'):
                 st.link_button('Öppna annonsen ↗', row['url'], use_container_width=True)
+    review = result.get('review_candidates') or []
+    if review:
+        with st.expander(f'Fler potentiella kandidater ({len(review)})', expanded=False):
+            st.caption('Ytterligare kort att granska. Saknade jämförpriser eller ett lågt modellvärde räcker inte för att avfärda dem. Dessa är inga bekräftade köp.')
+            for rank, row in enumerate(review, 6):
+                st.markdown(f"**{rank}. {clean_card_title(row['title'])}**")
+                st.caption(alternative_status(row) + ' · total kostnad ' + money(row.get('total_cost')))
+                if row.get('primary_blocker'):
+                    st.caption('Kontrollera först: ' + row['primary_blocker'])
+                if row.get('url'):
+                    st.link_button('Öppna annonsen ↗', row['url'], key=f'review_candidate_{rank}', use_container_width=True)

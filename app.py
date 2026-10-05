@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-04.132-football-hobby-sport-scope"
+RUNTIME_BUILD = "2026-10-05.133-broader-candidate-review"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.132"
+APP_VERSION = "v0.14.133"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -368,9 +368,10 @@ if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
     _ebay_runtime._flipfynd_loaded_version = APP_VERSION
 import src.seller_analysis_registry as _seller_registry_runtime
 import src.search_product_policy as _product_scope_runtime
+import src.adaptive_deepening as _adaptive_runtime
 import src.seller_card_domain as _seller_domain_runtime
 import src.seller_card_merit as _seller_merit_runtime
-for _scope_module in (_product_scope_runtime, _seller_domain_runtime, _seller_merit_runtime):
+for _scope_module in (_product_scope_runtime, _adaptive_runtime, _seller_domain_runtime, _seller_merit_runtime):
     if getattr(_scope_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_scope_module)
         _scope_module._flipfynd_loaded_version = APP_VERSION

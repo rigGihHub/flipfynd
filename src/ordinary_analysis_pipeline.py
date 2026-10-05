@@ -272,7 +272,7 @@ def analyze_data(
     )
 
     results = []
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=18, max_cap=60)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=28, max_cap=72)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
         candidates,

@@ -7,7 +7,7 @@ from src.analysis_cache import build_analysis_signature, get_cached_analysis, se
 from src.analysis_budget import fast_analysis_budget
 from src.card_listing_integrity import assess_listing_integrity
 from src.card_market_knowledge import detect_market_attention
-from src.adaptive_deepening import select_adaptive_full_analysis_indices, dynamic_deep_analysis_cap
+from src.adaptive_deepening import select_adaptive_full_analysis_indices, dynamic_deep_analysis_cap, merge_deep_analysis_routes
 from src.collector_signal_coverage import add_collector_signal_coverage_indices
 from src.candidate_coverage import diversify_full_analysis_indices
 from src.budget_discovery_coverage import add_budget_coverage_indices, budget_coverage_summary
@@ -88,7 +88,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "football-product-scope-v014132",
+        "analysis_engine_marker": "broader-candidate-review-v014133",
         "product_scope_rejected": 0,
         "product_scope_reasons": {},
         "ebay_quota": ebay_quota,
@@ -331,7 +331,7 @@ def analyze_data(
     results = []
     # Price-screen the wider inventory cheaply; reserve full CPU analysis for
     # discovery leaders and subsequently detected economic signals.
-    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=20, max_cap=60)
+    dynamic_deep_cap = dynamic_deep_analysis_cap(candidates, base_limit=full_limit, floor=28, max_cap=72)
     adaptive_indices = select_adaptive_full_analysis_indices(candidates, base_limit=full_limit, hard_cap=dynamic_deep_cap)
     adaptive_indices, collector_coverage_added = add_collector_signal_coverage_indices(
         candidates,
@@ -407,9 +407,8 @@ def analyze_data(
     # deep-analysis set. Previously repeated tail replacement meant only the
     # last asking route survived when the CPU set was already full.
     asking_unique = list(dict.fromkeys(routed_indices))
-    retained_non_asking = [idx for idx in full_indices if idx not in asking_unique]
-    room_for_non_asking = max(0, dynamic_deep_cap - len(asking_unique))
-    full_indices = (asking_unique + retained_non_asking[:room_for_non_asking])[:dynamic_deep_cap]
+    full_indices = merge_deep_analysis_routes(
+        candidates, full_indices, asking_unique, hard_cap=dynamic_deep_cap)
 
     full_index_set = set(full_indices)
     debug["asking_price_routed"] = len(routed_indices)

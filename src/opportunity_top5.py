@@ -122,9 +122,7 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         # sellers ask; it can never create market value or KÖP.
         asking_values = []
         for key in (
-            "guide_price", "guide_value", "asking_price", "asking_market_price",
-            "external_asking_price", "price_guide_value", "pricecharting_price",
-            "sports_cards_pro_price", "ebay_asking_price",
+            "asking_price", "asking_market_price", "external_asking_price", "ebay_asking_price",
         ):
             value = _n(item.get(key), 0.0)
             if value > 0:
@@ -137,7 +135,8 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         # labelled indication. It is useful for discovery even when no external
         # active-price lookup succeeded, but it is never SOLD or verified value.
         heuristic_indication = None
-        for key in ("expected_resale", "floor_resale", "guide_price", "guide_value", "price_guide_value"):
+        for key in ("expected_resale", "floor_resale", "guide_price", "guide_value", "price_guide_value",
+                    "pricecharting_price", "sports_cards_pro_price"):
             value = _n(item.get(key), 0.0)
             if value > 0:
                 heuristic_indication = value
@@ -482,8 +481,9 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
     all_gated_rows = gate_and_sort(rows, limit=max(limit * 20, len(rows)))
     if fill_alternatives:
         def alternative_rank(row):
-            margin = row.get('practical_margin')
-            losing = known_negative_net_profit(row) or (margin is not None and margin < 0)
+            supported = has_supported_price_context(row)
+            margin = row.get('practical_margin') if supported else None
+            losing = supported and (known_negative_net_profit(row) or (margin is not None and margin < 0))
             roi = row.get('practical_roi')
             supported_find = bool(margin is not None and margin >= 35 and roi is not None and roi >= .15
                 and (row.get('practical_price_source') == 'VERIFIED'
@@ -500,7 +500,7 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         alternatives = []
         for row in sorted(all_gated_rows, key=alternative_rank, reverse=True)[:max(0, int(limit))]:
             selected = dict(row)
-            if selected.get('decision') != 'KÖP':
+            if selected.get('decision') != 'KÖP' and has_supported_price_context(selected):
                 margin = selected.get('practical_margin')
                 if known_negative_net_profit(selected) or (margin is not None and margin <= 0):
                     selected.update(decision='AVSTÅ', tier='REMAINDER')
@@ -531,3 +531,10 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         "rows": final_rows,
         "note": "KÖP kräver verifierad ekonomi. Top 5 passerar dessutom en sista reality gate som kan nedranka kandidater med svag eller motsägande prisdata.",
     }
+
+
+def has_supported_price_context(row):
+    """Model guesses and lone asking prices cannot prove economic rejection."""
+    return (row.get('practical_price_source') == 'VERIFIED'
+            or (row.get('practical_price_source') == 'ACTIVE_PRICE'
+                and int(row.get('asking_comparison_count') or 0) >= 2))
