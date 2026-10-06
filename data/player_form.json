@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-10-05T16:02:12.053386+00:00",
+  "checked_at": "2026-10-06T00:49:48.325274+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-10-06",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-10-05",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-10-02",
+      "name": "ESPN esp.1 2026-10-06",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-10-02",
+      "name": "ESPN ger.1 2026-10-06",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-10-02",
+      "name": "ESPN ita.1 2026-10-06",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-10-02",
+      "name": "ESPN fra.1 2026-10-06",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-10-02",
+      "name": "ESPN uefa.champions 2026-10-06",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-10-02",
+      "name": "ESPN usa.1 2026-10-06",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-10-02",
+      "name": "ESPN ksa.1 2026-10-06",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-10-02",
+      "name": "NHL 2026-10-06",
       "ok": true
     },
     {
@@ -139,10 +143,6 @@
     },
     {
       "name": "NHL 2026-10-03",
-      "ok": true
-    },
-    {
-      "name": "NHL 2026-10-02",
       "ok": true
     }
   ],
