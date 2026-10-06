@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-06T14:12:40.712332+00:00",
+  "checked_at": "2026-10-06T23:04:23.274282+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-06",
@@ -123,7 +123,8 @@
     },
     {
       "name": "ESPN ksa.1 2026-10-04",
-      "ok": true
+      "ok": false,
+      "error": "ReadTimeout"
     },
     {
       "name": "ESPN ksa.1 2026-10-03",
