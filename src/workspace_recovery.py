@@ -89,7 +89,8 @@ def load(token, database_url=None):
     if not valid_token(token):
         return None
     try:
-        value = json.loads((_ROOT / (token + '.json')).read_text())
+        with (_ROOT / (token + '.json')).open(encoding='utf-8') as handle:
+            value = json.load(handle)
     except (OSError, ValueError):
         value = None
         if database_url:

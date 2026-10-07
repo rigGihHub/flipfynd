@@ -184,6 +184,8 @@ def build_card_identity_summary(item: dict) -> dict:
     if serial not in (None, ""):
         serial_text = str(serial).strip().lstrip("/")
         serial_display = f"Numrerad till /{serial_text}"
+        if observed.get('serial_copy_number') and str(observed.get('serial_number')) == serial_text:
+            serial_display += f" · exemplar {observed['serial_copy_number']}/{serial_text} enligt titeln"
     add("Numrering", (serial_display, serial_level))
 
     rookie_signal = fields.get("is_rookie")
@@ -199,7 +201,9 @@ def build_card_identity_summary(item: dict) -> dict:
 
     traits = []
     if fields.get("is_auto") or observed.get("is_auto"):
-        traits.append("Autograf")
+        kind = observed.get('autograph_type')
+        traits.append('On-card-autograf enligt titeln' if kind == 'on_card' else
+                      'Sticker-autograf enligt titeln' if kind == 'sticker' else 'Autograf')
     if fields.get("is_patch") or observed.get("is_patch"):
         traits.append("Patch / memorabilia")
     grading_company, gc_level = pick("grading_company", "grading_company")

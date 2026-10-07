@@ -251,6 +251,8 @@ def build_exact_identity_gate(data: dict[str, Any] | None) -> dict[str, Any]:
             exact_requirements.append(f"parallel/variant måste vara {parallel}")
         if serial not in (None, ""):
             exact_requirements.append(f"serienämnare/numrering måste matcha {serial}")
+        if d.get('is_auto') and d.get('autograph_type'):
+            exact_requirements.append(f"autograftyp måste matcha {d['autograph_type']}")
         if grading_company or grade:
             exact_requirements.append("gradering och graderingsbolag måste matcha")
     else:
@@ -267,6 +269,7 @@ def build_exact_identity_gate(data: dict[str, Any] | None) -> dict[str, Any]:
         "grade": grade or None,
         "is_rookie": bool(d.get("is_rookie")),
         "is_auto": bool(d.get("is_auto")),
+        "autograph_type": d.get('autograph_type') if d.get('is_auto') else None,
         "is_patch": bool(d.get("is_patch") or d.get("is_jersey")),
     }
 

@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-05.134-bounded-memory-recovery"
+RUNTIME_BUILD = "2026-10-07.135-evidence-first-collector-review"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.134"
+APP_VERSION = "v0.14.135"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -369,12 +369,22 @@ if getattr(_ebay_runtime, "_flipfynd_loaded_version", None) != APP_VERSION:
 import src.seller_analysis_registry as _seller_registry_runtime
 import src.search_product_policy as _product_scope_runtime
 import src.adaptive_deepening as _adaptive_runtime
+import src.card_parser as _parser_runtime
+import src.seller_collector_signals as _collector_signals_runtime
+import src.research_candidate_matcher as _research_matcher_runtime
+import src.premium_comp_hunter as _premium_hunter_runtime
+import src.exact_identity_gate as _exact_gate_runtime
+import src.candidate_review as _candidate_review_runtime
+import src.candidate_coverage as _candidate_coverage_runtime
+import src.fast_analysis_pool as _fast_pool_runtime
 import src.analysis_cache as _analysis_cache_runtime
 import src.background_fetch_registry as _background_fetch_runtime
 _reset_analysis_memory = getattr(_analysis_cache_runtime, '_flipfynd_loaded_version', None) != APP_VERSION
 import src.seller_card_domain as _seller_domain_runtime
 import src.seller_card_merit as _seller_merit_runtime
-for _scope_module in (_product_scope_runtime, _adaptive_runtime, _analysis_cache_runtime,
+for _scope_module in (_parser_runtime, _research_matcher_runtime, _premium_hunter_runtime, _exact_gate_runtime,
+                      _collector_signals_runtime, _candidate_review_runtime, _candidate_coverage_runtime,
+                      _fast_pool_runtime, _product_scope_runtime, _adaptive_runtime, _analysis_cache_runtime,
                       _background_fetch_runtime, _seller_domain_runtime, _seller_merit_runtime):
     if getattr(_scope_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_scope_module)

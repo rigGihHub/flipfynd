@@ -29,7 +29,7 @@ def _features_from_detail(detail: dict) -> dict[str, Any]:
     raw = str(detail.get("raw_text") or "")
     f = parse_card_features(f"{title} {raw}")
     # Keep explicit structured values if the comp source happens to contain them.
-    for key in ("player_name", "set_name", "season", "year", "card_number", "parallel", "grade", "grading_company"):
+    for key in ("player_name", "set_name", "season", "year", "card_number", "parallel", "grade", "grading_company", "autograph_type"):
         if detail.get(key) not in (None, ""):
             f[key] = detail.get(key)
     if detail.get("serial_denominator") not in (None, ""):
@@ -121,6 +121,7 @@ def _classify(features: dict, detail: dict) -> dict[str, Any]:
     require_equal("parallel", "variant/parallel")
     require_equal("grading_company", "grading")
     require_equal("grade", "grade")
+    require_equal('autograph_type', 'autograftyp')
 
     if features.get("is_auto"):
         if comp.get("is_auto"):

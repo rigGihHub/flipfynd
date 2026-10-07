@@ -91,7 +91,7 @@ def _expand_special_engine_candidates(items):
     return expanded
 
 
-def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
+def build_opportunity_top5(items, limit=5, *, fill_alternatives=False, use_model_indications=True):
     items = _expand_special_engine_candidates(items)
     rows = []
     for item in items or []:
@@ -314,7 +314,7 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         # in practical discovery mode it should still affect ranking when it
         # suggests a real spread. Never promote it to KÖP.
         heuristic_margin = None
-        if heuristic_indication is not None and total is not None:
+        if use_model_indications and heuristic_indication is not None and total is not None:
             heuristic_margin = heuristic_indication - total
             if heuristic_margin > 0 and not verified_edge and not asking_positive:
                 economic += min(14.0, 4.0 + 10.0 * min(1.0, heuristic_margin / max(total, 1.0)))
@@ -335,7 +335,9 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
         elif asking_reference is not None and total is not None:
             practical_margin, practical_source = (asking_margin if "net_margin" in asking_context else asking_reference - total), "ACTIVE_PRICE"
         elif heuristic_indication is not None and total is not None:
-            practical_margin, practical_source = heuristic_indication - total, "MODEL_GUIDE"
+            practical_source = "MODEL_GUIDE"
+            if use_model_indications:
+                practical_margin = heuristic_indication - total
 
         practical_roi = None
         if practical_margin is not None and total and total > 0:
@@ -481,6 +483,7 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
     all_gated_rows = gate_and_sort(rows, limit=max(limit * 20, len(rows)))
     if fill_alternatives:
         def alternative_rank(row):
+            from src.candidate_review import collector_research_priority
             supported = has_supported_price_context(row)
             margin = row.get('practical_margin') if supported else None
             losing = supported and (known_negative_net_profit(row) or (margin is not None and margin < 0))
@@ -493,9 +496,10 @@ def build_opportunity_top5(items, limit=5, *, fill_alternatives=False):
             # no supported find exists, choose identifiable hobby variants
             # before weak base/insert fillers, without changing their prices.
             return (row.get('decision') == 'KÖP', supported_find,
-                    football_card_priority(row), not losing,
+                    not losing, football_card_priority(row),
                     margin is not None and margin > 0,
                     margin if margin is not None else -10**9,
+                    collector_research_priority(row.get('_source_item') or row),
                     row.get('certainty') or 0, row.get('potential') or 0)
         alternatives = []
         for row in sorted(all_gated_rows, key=alternative_rank, reverse=True)[:max(0, int(limit))]:

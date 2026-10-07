@@ -5,6 +5,7 @@ buy thresholds, max prices or decisions.
 """
 from __future__ import annotations
 from statistics import median
+from src.candidate_review import collector_research_priority
 
 
 def _num(value, default=0.0):
@@ -111,8 +112,16 @@ def diversify_full_analysis_indices(
     baseline = list(range(min(base_limit, total)))
     adaptive_tail = [idx for idx in selected if idx not in baseline]
 
+    # Generic coverage tags must not evict the rare/autograph lane selected by
+    # adaptive deepening. Preserve its strongest cards within the SAME budget.
+    protected = sorted((idx for idx in adaptive_tail
+                        if collector_research_priority(candidates[idx][0], candidates[idx][1])[0] > 0),
+                       key=lambda idx: (collector_research_priority(candidates[idx][0], candidates[idx][1]), -idx),
+                       reverse=True)[:max(0, min(hard_cap // 4, hard_cap - len(baseline)))]
+    adaptive_tail = protected + [idx for idx in adaptive_tail if idx not in protected]
+
     # Keep room for coverage even when adaptive selection already filled cap.
-    keep_adaptive = max(0, hard_cap - len(baseline) - coverage_slots)
+    keep_adaptive = max(len(protected), hard_cap - len(baseline) - coverage_slots)
     final = baseline + adaptive_tail[:keep_adaptive]
     final_seen = set(final)
 

@@ -472,7 +472,7 @@ def get_listing_features(item, sport):
     evidence, conflicts, enriched = {}, [], []
     identity_fields = [
         "player_name", "set_name", "season", "year", "card_number", "parallel",
-        "rookie_variant", "grade", "grading_company", "serial_number",
+        "rookie_variant", "grade", "grading_company", "serial_number", "serial_copy_number", "autograph_type",
     ]
     boolean_fields = ["is_rookie", "is_auto", "is_patch", "is_jersey", "is_game_worn", "is_graded", "is_1of1"]
 

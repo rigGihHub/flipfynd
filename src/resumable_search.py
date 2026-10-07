@@ -29,7 +29,8 @@ def _save(token, payload, database_url=None):
         _ROOT.mkdir(exist_ok=True)
         path = _ROOT / (token + '.json')
         tmp = path.with_name(token + '.' + uuid.uuid4().hex + '.tmp')
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, default=str), encoding='utf-8')
+        with tmp.open('w', encoding='utf-8') as handle:
+            json.dump(payload, handle, ensure_ascii=False, default=str)
         tmp.replace(path)
     except OSError:
         pass  # A full/unavailable disk must not abort an otherwise healthy job.
@@ -48,7 +49,8 @@ def load(token, database_url=None):
             return dict(_JOBS[token])
     snapshot = None
     try:
-        snapshot = json.loads((_ROOT / (token + '.json')).read_text(encoding='utf-8'))
+        with (_ROOT / (token + '.json')).open(encoding='utf-8') as handle:
+            snapshot = json.load(handle)
     except (OSError, ValueError):
         if database_url:
             try:

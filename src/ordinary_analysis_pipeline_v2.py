@@ -88,7 +88,7 @@ def analyze_data(
     market_data = _bounded(analysis_rows)
     data = _bounded(analysis_rows)
     debug = {
-        "analysis_engine_marker": "broader-candidate-review-v014133",
+        "analysis_engine_marker": "evidence-first-collector-review-v014135",
         "product_scope_rejected": 0,
         "product_scope_reasons": {},
         "ebay_quota": ebay_quota,

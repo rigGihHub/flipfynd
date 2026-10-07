@@ -663,6 +663,23 @@ def build_card_identity(features: dict) -> dict:
         "card_identity_confidence": confidence,
     }
 
+def autograph_features(title: str) -> dict:
+    """Cheap autograph claim parsing, shared by routing and full identity parsing."""
+    norm = normalize_text(title)
+    negative = bool(re.search(
+        r"\b(?:signature\s+style|facsimile|pre[- ]?printed|printed\s+signature|tryckt\s+autograf|ej\s+(?:autograf|signerad)|not\s+signed|unsigned)\b", norm))
+    positive = bool(re.search(
+        r"\b(?:auto|autograph(?:ed)?|autograf|autograferad|signerad|hand[- ]?signed|on[- ]?card\s+auto|sticker\s+auto|signed\s+by)\b", norm))
+    is_auto = positive and not negative
+    kind = None
+    if is_auto:
+        if re.search(r'\b(?:on[- ]?card|hard[- ]?signed)\b', norm):
+            kind = 'on_card'
+        elif re.search(r'\bsticker\b', norm):
+            kind = 'sticker'
+    return {'is_auto': is_auto, 'autograph_type': kind}
+
+
 def parse_card_features(title: str) -> dict:
     title = clean_card_title(title)
     norm = normalize_text(title)
@@ -679,15 +696,16 @@ def parse_card_features(title: str) -> dict:
     # A bare "signature" is not proof of an autograph. Product/parallel names
     # such as Signature Style or facsimile/printed signatures are common false positives.
     # Strong autograph wording is required, while explicit negative wording wins.
-    auto_negative = bool(re.search(
-        r"\b(?:signature\s+style|facsimile|pre[- ]?printed|printed\s+signature|tryckt\s+autograf|ej\s+autograf|not\s+signed|unsigned)\b",
-        norm,
-    ))
-    auto_positive = bool(re.search(
-        r"\b(?:auto|autograph(?:ed)?|autograf|autograferad|signerad|hand[- ]?signed|on[- ]?card\s+auto|sticker\s+auto|signed\s+by)\b",
-        norm,
-    ))
-    is_auto = bool(auto_positive and not auto_negative)
+    autograph = autograph_features(title)
+    is_auto, autograph_type = autograph['is_auto'], autograph['autograph_type']
+    # The copy number is different from the checklist number and print run.
+    # Preserve it only when the title contains a valid fraction for that run.
+    serial_copy_number = None
+    if serial_number:
+        copies = {int(m.group(1)) for m in re.finditer(r'(?<![\d/])(\d{1,4})\s*/\s*(\d{1,4})(?!\d)', title)
+                  if int(m.group(2)) == serial_number and 0 < int(m.group(1)) <= serial_number}
+        if len(copies) == 1:
+            serial_copy_number = copies.pop()
     relic_evidence = has_relic_material_evidence(norm)
     is_patch = bool(re.search(r"\b(?:patch|relic)\b", norm))
     is_jersey = relic_evidence
@@ -711,6 +729,7 @@ def parse_card_features(title: str) -> dict:
         "rookie_variant": rookie_variant,
         "rookie_tier": rookie_tier,
         "is_auto": is_auto,
+        "autograph_type": autograph_type,
         "is_patch": is_patch,
         "is_jersey": is_jersey,
         "is_game_worn": is_game_worn,
@@ -721,6 +740,7 @@ def parse_card_features(title: str) -> dict:
         "lot_count": lot_info.get("lot_count"),
         "lot_confidence": lot_info.get("lot_confidence", "none"),
         "serial_number": serial_number,
+        "serial_copy_number": serial_copy_number,
         "card_number": card_number,
         "is_low_serial": serial_number is not None and serial_number <= 50,
         "is_mid_serial": serial_number is not None and 51 <= serial_number <= 199,

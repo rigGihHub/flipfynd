@@ -7,6 +7,7 @@ from src.seller_profit_display import build_seller_net_profit_summary
 from src.collector_evidence import acquisition_breakdown, money as evidence_money, render_listing_review
 from src.card_parser import clean_card_title
 from src.search_product_policy import product_scope
+from src.candidate_review import build_candidate_review
 
 
 def _number(value):
@@ -52,8 +53,10 @@ def build_best_alternatives(results, *, research_leads=(), extra_rows=()):
         if isinstance(lead, dict):
             add({'titel': lead.get('title'), 'lank': lead.get('url'),
                  'asking_price_opportunity': lead.get('scenario') or {}})
-    result = build_opportunity_top5(pool, limit=len(pool), fill_alternatives=True)
+    result = build_opportunity_top5(pool, limit=len(pool), fill_alternatives=True, use_model_indications=False)
     ranked = result['rows']
+    for row in ranked[:20]:
+        row['candidate_review'] = build_candidate_review(row.get('_source_item') or row)
     result['rows'] = ranked[:5]
     result['review_candidates'] = [row for row in ranked[5:]
         if not has_supported_price_context(row)
@@ -102,18 +105,30 @@ def render_best_alternatives(result, *, explain=None, seller=None):
         return f'{number:.0f} kr' if number is not None else 'Saknas'
     for rank, row in enumerate(rows, 1):
         summary = build_seller_net_profit_summary(row)
-        indication = row.get('market_value') or row.get('asking_reference') or row.get('heuristic_indication')
+        indication = row.get('market_value') or row.get('asking_reference')
         source = 'SOLD/verifierat' if row.get('market_value') is not None else (
             'Begärda priser' if row.get('asking_reference') is not None else (
-                'Modell/guide' if row.get('heuristic_indication') is not None else 'Saknas'))
+                'Saknas verifierat pris'))
         net = (('Scenario ' if summary['evidence_kind'] == 'ACTIVE_ASKING' else '')
                + f"{summary['value']:+.0f} kr") if summary['available'] else 'Ej beräkningsbar'
         table.append({'#': rank, 'Kort': clean_card_title(row['title']), 'Bedömning': alternative_status(row),
-                      'Total kostnad': money(row.get('total_cost')), 'Prisindikation': money(indication),
+                      'Total kostnad': money(row.get('total_cost')), 'Prisindikation': money(indication) if indication is not None else 'Okänt',
                       'Underlag': source, 'Netto / scenario': net,
                       'Fyndpotential': f"{float(row.get('potential') or 0):.0f}/100",
                       'Säkerhet': f"{float(row.get('certainty') or 0):.0f}/100"})
     st.dataframe(table, use_container_width=True, hide_index=True)
+    st.caption('Okänt betyder att relevant prisunderlag saknas. Schablonvärden används inte som pris eller marginal i denna lista.')
+    def review_details(row):
+        review = row.get('candidate_review') or build_candidate_review(row.get('_source_item') or row)
+        st.write('**Varför granska:** ' + ' · '.join(review['reasons']))
+        st.write('**Kontrollera före köp:**')
+        for check in review['checks']:
+            st.write('• ' + check)
+        with st.expander('Kortidentitet · källa och saknade uppgifter', expanded=False):
+            st.dataframe([{'Uppgift': fact['label'], 'Identifierat': fact['value'],
+                           'Källa': fact['source'] or 'Saknas'} for fact in review['identity']['rows']],
+                         hide_index=True, use_container_width=True)
+            st.caption(review['identity']['note'])
     for rank, row in enumerate(rows, 1):
         with st.expander(f"#{rank} · {clean_card_title(row['title'])}", expanded=False):
             st.write('**' + alternative_status(row) + '**')
@@ -130,6 +145,7 @@ def render_best_alternatives(result, *, explain=None, seller=None):
                 st.caption(summary['basis'])
             else:
                 st.caption('Nettovinst kan inte beräknas med tillräckligt underlag.')
+            review_details(row)
             render_listing_review(source_item, total_cost=row.get('total_cost'))
             if row.get('reasons'):
                 st.caption('Varför: ' + ' · '.join(row['reasons']))
@@ -148,6 +164,9 @@ def render_best_alternatives(result, *, explain=None, seller=None):
             for rank, row in enumerate(review, 6):
                 st.markdown(f"**{rank}. {clean_card_title(row['title'])}**")
                 st.caption(alternative_status(row) + ' · total kostnad ' + money(row.get('total_cost')))
+                review = row.get('candidate_review') or build_candidate_review(row.get('_source_item') or row)
+                st.caption('Varför granska: ' + ' · '.join(review['reasons']))
+                st.caption('Nästa kontroll: ' + review['checks'][0])
                 if row.get('primary_blocker'):
                     st.caption('Kontrollera först: ' + row['primary_blocker'])
                 if row.get('url'):

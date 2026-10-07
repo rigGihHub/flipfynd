@@ -1,4 +1,5 @@
 from src.seller_collector_signals import collector_signals
+from src.candidate_review import collector_research_priority
 
 
 def _independent_value_signal(candidate):
@@ -71,6 +72,7 @@ def select_adaptive_full_analysis_indices(candidates, base_limit=12, hard_cap=30
     protected = [idx for idx in range(base_limit, total)
                  if _independent_value_signal(candidates[idx])]
     protected.sort(key=lambda idx: (
+        collector_research_priority(candidates[idx][0], candidates[idx][1]),
         collector_signals(candidates[idx][0] or {}).get("score", 0),
         (candidates[idx][2] or {}).get("score", 0), -idx), reverse=True)
     selected.extend(protected[:min(hard_cap - len(selected), max(1, hard_cap // 4))])
@@ -92,6 +94,7 @@ def merge_deep_analysis_routes(candidates, selected, asking, *, hard_cap):
     """Keep scarce/review candidates when exact-price routes fill the budget."""
     protected = [idx for idx in selected if _independent_value_signal(candidates[idx])]
     protected.sort(key=lambda idx: (
+        collector_research_priority(candidates[idx][0], candidates[idx][1]),
         collector_signals(candidates[idx][0] or {}).get("score", 0),
         (candidates[idx][2] or {}).get("score", 0), -idx), reverse=True)
     protected = protected[:max(1, hard_cap // 4)]

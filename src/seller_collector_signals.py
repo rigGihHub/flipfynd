@@ -8,22 +8,23 @@ from __future__ import annotations
 
 import re
 
-from src.card_parser import has_relic_material_evidence
+from src.card_parser import has_relic_material_evidence, autograph_features
 from src.sports_card_signal_knowledge import match_sports_card_signals
 
 _FALSE_AUTO = re.compile(r"\b(signature\s*style|silver\s*script|facsimile|facsimile\s*signature|printed\s*signature|pre[- ]?printed\s*signature)\b", re.I)
 
 
 def _has_serial_numbering(text: str) -> bool:
-    if "numbered" in text or "numrerad" in text: return True
+    if "numbered" in text or "numrerad" in text or "numrerat" in text: return True
     serial_text=re.sub(r"\b(?:19|20)\d{2}\s*[-/]\s*(?:(?:19|20)?\d{2})\b"," ",text)
     serial_text=re.sub(r"(?<!\d)(\d{2})\s*[-/]\s*(\d{2})(?!\d)",lambda m:" " if (int(m.group(2))-int(m.group(1)))%100==1 else m.group(0),serial_text)
-    pattern=re.compile(r"(?<![#\d])(\d{1,4})\s*/\s*(5|10|15|20|25|49|50|75|99|100|199|299|499)\b")
+    pattern=re.compile(r"(?<![#\d])(\d{1,4})\s*/\s*(\d{1,4})\b")
     for match in pattern.finditer(serial_text):
         numerator,denominator=int(match.group(1)),int(match.group(2))
         if denominator==numerator+1 and (numerator>=19 or numerator>=1900): continue
-        return True
-    return False
+        if 0 < numerator <= denominator:
+            return True
+    return bool(re.search(r'(?<![\d\w])/(?:[1-9]\d{0,2})\b', serial_text))
 
 
 def collector_signals(item: dict) -> dict:
@@ -32,7 +33,7 @@ def collector_signals(item: dict) -> dict:
         if condition: signals.append((name,weight))
     add("one_of_one",24,bool(re.search(r"(?:\b1\s*/\s*1\b|\bone[- ]of[- ]one\b)",text)))
     add("serial_numbered",18,_has_serial_numbering(text))
-    explicit_auto=bool(re.search(r"\b(?:autograph(?:ed)?|auto|on[- ]card\s+auto|hard[- ]signed)\b",text)); add("autograph",17,explicit_auto and not _FALSE_AUTO.search(text))
+    explicit_auto=autograph_features(title)['is_auto']; add("autograph",17,explicit_auto and not _FALSE_AUTO.search(text))
     add("patch_relic",15,has_relic_material_evidence(text)); add("case_hit_ssp",17,bool(re.search(r"\b(?:ssp|super\s+short\s+print|case\s+hit)\b",text))); add("premium_insert",15,bool(re.search(r"\b(?:downtown|kaboom|color\s+blast|colour\s+blast|stained\s+glass|blank\s+slate)\b",text)))
     # Generic RC/rookie wording is common and not price evidence. Give it only
     # a small discovery nudge; genuinely important rookie structures are added

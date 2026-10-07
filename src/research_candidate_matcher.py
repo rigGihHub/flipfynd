@@ -60,7 +60,7 @@ def _features(candidate: dict) -> dict:
             if candidate.get(key) not in (None, ""):
                 out[target] = candidate.get(key)
                 break
-    for key in ("is_auto", "is_patch", "serial_denominator", "grading_company", "grade"):
+    for key in ("is_auto", "autograph_type", "is_patch", "serial_denominator", "grading_company", "grade"):
         if candidate.get(key) not in (None, ""):
             out[key] = candidate.get(key)
 
@@ -159,6 +159,14 @@ def match_research_candidate(identity: dict | None, candidate: dict | None) -> d
     elif cf.get("is_auto"):
         conflicts.append("extra autograf")
 
+    if target.get('is_auto') and target.get('autograph_type'):
+        if not cf.get('autograph_type'):
+            missing.append('autograftyp')
+        elif target['autograph_type'] != cf['autograph_type']:
+            conflicts.append('autograftyp')
+        else:
+            matches.append('autograftyp')
+
     if target.get("is_patch"):
         if cf.get("is_patch") or cf.get("is_jersey"):
             matches.append("patch/relic"); score += 8
@@ -167,7 +175,7 @@ def match_research_candidate(identity: dict | None, candidate: dict | None) -> d
     elif cf.get("is_patch") or cf.get("is_jersey"):
         conflicts.append("extra patch/relic")
 
-    hard_conflicts = {"spelare", "kortnummer", "säsong", "parallel", "extra parallel", "serienummer", "grading", "grade", "extra autograf", "extra patch/relic"}
+    hard_conflicts = {"spelare", "kortnummer", "säsong", "parallel", "extra parallel", "serienummer", "grading", "grade", "extra autograf", "autograftyp", "extra patch/relic"}
     has_hard_conflict = any(x in hard_conflicts for x in conflicts)
     core_match = "spelare" in matches and "kortnummer" in matches
 

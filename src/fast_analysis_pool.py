@@ -6,6 +6,7 @@ import hashlib
 from src.card_listing_integrity import assess_listing_integrity
 from src.seller_collector_signals import collector_signals
 from src.player_interest import row_interest
+from src.candidate_review import collector_research_priority
 
 
 def _title(item):
@@ -42,6 +43,7 @@ def _priority(item):
     specificity = sum(token in title for token in ("#", "rookie", " rc ", "young guns", "auto", "patch", "relic", "ssp", "variation"))
     generic_mislisting = len(title) < 30 or title in {"hockeykort", "fotbollskort", "samlarkort"}
     return (
+        collector_research_priority(item),
         int(signals.get("score") or 0) + row_interest(item)["ranking_bonus"],
         specificity * 3,
         4 if generic_mislisting else 0,

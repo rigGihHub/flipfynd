@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CACHE_PATH = BASE_DIR / "analysis_cache.json"
 
 CACHE_SCHEMA_VERSION = 2
-CACHE_MODEL_VERSION = "flip_v38_football_hobby_sport_scope"
+CACHE_MODEL_VERSION = "flip_v39_evidence_first_collector_review"
 CACHE_MAX_ENTRIES = 128
 CACHE_MAX_BYTES = 8 * 1024 * 1024
 _LOCK = RLock()
