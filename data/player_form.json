@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-09T14:23:00.241587+00:00",
+  "checked_at": "2026-10-09T23:16:57.969927+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-09",
@@ -147,6 +147,22 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Francisco Trincão",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T14:55:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261009&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Nathan MacKinnon",
