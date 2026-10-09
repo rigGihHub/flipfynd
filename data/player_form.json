@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-10-08T23:45:02.699970+00:00",
+  "checked_at": "2026-10-09T14:23:00.241587+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-10-09",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-10-08",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-10-05",
+      "name": "ESPN esp.1 2026-10-09",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-10-05",
+      "name": "ESPN ger.1 2026-10-09",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-10-05",
+      "name": "ESPN ita.1 2026-10-09",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-10-05",
+      "name": "ESPN fra.1 2026-10-09",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-10-05",
+      "name": "ESPN uefa.champions 2026-10-09",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-10-05",
+      "name": "ESPN usa.1 2026-10-09",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-10-05",
+      "name": "ESPN ksa.1 2026-10-09",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-10-05",
+      "name": "NHL 2026-10-09",
       "ok": true
     },
     {
@@ -140,13 +144,265 @@
     {
       "name": "NHL 2026-10-06",
       "ok": true
-    },
-    {
-      "name": "NHL 2026-10-05",
-      "ok": true
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Nathan MacKinnon",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020064/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Jaden Schwartz",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020064/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Devon Toews",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020064/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Cale Makar",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020064/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Bo Horvat",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:30:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020062/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Morgan Geekie",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020056/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "David Pastrnak",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020056/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 4 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 4
+    },
+    {
+      "status": "READY",
+      "player_name": "Jeremy Swayman",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020056/boxscore",
+      "source_type": "official_league",
+      "detail": "36 räddningar, 97.3% och seger",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 36
+    },
+    {
+      "status": "READY",
+      "player_name": "Wyatt Johnston",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020057/boxscore",
+      "source_type": "official_league",
+      "detail": "0 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Mikko Rantanen",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020057/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 4 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 4
+    },
+    {
+      "status": "READY",
+      "player_name": "Adam Edstrom",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020058/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "John Carlson",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020060/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Jake DeBrusk",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020061/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Logan Stankoven",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020061/boxscore",
+      "source_type": "official_league",
+      "detail": "3 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Andrei Svechnikov",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020061/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Sean Walker",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-08T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020061/boxscore",
+      "source_type": "official_league",
+      "detail": "0 mål och 4 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 4
+    },
     {
       "status": "READY",
       "player_name": "Leon Draisaitl",
