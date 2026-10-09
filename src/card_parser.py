@@ -326,7 +326,8 @@ def extract_serial_number(title: str) -> Optional[int]:
     raw = str(title or "")
     norm = normalize_text(raw)
 
-    if "1/1" in raw.lower() or "1 1" in norm:
+    # Require the entire fraction: 11/15 and 1/10 are not one-of-one cards.
+    if re.search(r"(?<!\d)1\s*/\s*1(?!\d)", raw) or re.search(r"\b1\s+1\b", norm):
         return 1
 
     # A season such as 2022/23 or 22/23 must never be interpreted as a
