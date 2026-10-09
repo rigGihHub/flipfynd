@@ -152,8 +152,8 @@ def test_saved_main_top_five_shows_price_proof_and_complete_cost_without_crash()
         app.session_state['debug'] = {'total_items':2300}
         app.run()
         assert not app.exception
-        assert any('Sparad analys: 2300' in x.value for x in app.info)
-        rendered = '\n'.join(x.value for x in app.markdown)
+        assert any('Sparad analys: 2300' in x.value for x in app.caption)
+        rendered = '\n'.join(x.value for x in [*app.markdown, *app.caption])
         assert 'Köparskydd: 5,00 SEK' in rendered
         assert 'Nettoscenario: 119,00 SEK' in rendered
         assert any('https://www.ebay.com/itm/123' in str(x.proto) for x in app.get('link_button'))

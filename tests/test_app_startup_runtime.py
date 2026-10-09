@@ -58,4 +58,5 @@ def test_fetch_status_message_does_not_reference_function_local_process(monkeypa
     if status == 'finished':
         assert any('Test av hämtningsstatus' in item.value for item in app.success)
     elif status == 'running':
-        assert any('Test av hämtningsstatus' in item.value for item in app.info)
+        assert any('Hämtar' in item.value or 'Startar' in item.value for item in app.info)
+        assert any(item.label == 'Driftstatus och data' for item in app.expander)

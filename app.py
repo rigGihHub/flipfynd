@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-07.135-evidence-first-collector-review"
+RUNTIME_BUILD = "2026-10-09.136-mobile-candidate-search"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.135"
+APP_VERSION = "v0.14.136"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -419,12 +419,13 @@ SELLER_PRESENTATION_CONTRACT = "dynamic-top5-football-product-scope-v6"
 import src.asking_price_ui as _asking_ui_module
 import src.opportunity_top5 as _opportunity_ui_module
 import src.best_alternatives as _best_alternatives_ui_module
+import src.search_experience as _search_experience_module
 import src.collector_evidence as _collector_ui_module
 import src.card_explanation as _card_explanation_module
 import src.seller_identity as _seller_identity_module
 import src.seller_bundle_opportunity as _seller_bundle_module
 for _ui_module in (_collector_ui_module, _card_explanation_module, _seller_identity_module, _seller_bundle_module,
-                   _asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module):
+                   _asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module, _search_experience_module):
     if getattr(_ui_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_ui_module)
         _ui_module._flipfynd_loaded_version = APP_VERSION
@@ -1362,6 +1363,12 @@ if _saved_search:
         st.session_state["debug"] = _saved_search.get("debug") or {}
         st.session_state["restored_completed_search"] = True
 
+_pending_request = st.session_state.get("pending_find_request")
+if _search_experience_module.pending_phase(_pending_request, st.session_state.get("fetch_status"),
+        st.session_state.get("fetch_category")) == "READY":
+    for _key, _value in _pending_request['widgets'].items():
+        st.session_state[_key] = _value
+
 if st.session_state.get("fetch_status") == "running":
     # Data is persisted page-by-page during a crawl; refresh the cached dataset
     # so counts and newly fetched sport data become visible immediately.
@@ -1396,11 +1403,7 @@ st.markdown(
         --ff-line: rgba(244, 234, 215, 0.20);
     }
     .stApp {
-        background:
-            linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px),
-            #111317;
-        background-size: 24px 24px;
+        background: #111317;
     }
     .block-container {
         max-width: 1500px;
@@ -1411,7 +1414,7 @@ st.markdown(
         overflow: hidden;
         border: 2px solid var(--ff-paper);
         border-radius: 6px;
-        padding: 1.05rem 1.25rem 1rem 1.25rem;
+        padding: .65rem 1rem;
         margin: 0.1rem 0 0.75rem 0;
         background: linear-gradient(135deg, #1b1d22 0%, #22262b 100%);
         box-shadow: 7px 7px 0 rgba(232,111,59,.34);
@@ -1427,9 +1430,9 @@ st.markdown(
         margin: 0.15rem 0 0.2rem 0;
         color: var(--ff-cream);
         letter-spacing: .02em;
-        font-size: clamp(2rem, 4vw, 3.35rem);
+        font-size: clamp(1.55rem, 3vw, 2.05rem);
         line-height: 1;
-        text-shadow: 3px 3px 0 rgba(232,111,59,.38);
+        text-shadow: none;
     }
     .ff-kicker {
         color: var(--ff-gold);
@@ -1489,6 +1492,14 @@ st.markdown(
         font-size: 1.05rem;
         font-weight: 750;
         margin-bottom: 0.15rem;
+    }
+    [data-testid="stLinkButton"] a, [data-testid="stFormSubmitButton"] button {
+        min-height: 44px;
+    }
+    @media (max-width: 640px) {
+        .block-container { padding: 1rem .85rem; }
+        h4 { overflow-wrap: anywhere; }
+        [data-testid="stImage"] img { max-width: 100%; height: auto; }
     }
     .ff-card-title {
         font-size: 1.2rem;
@@ -1570,13 +1581,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if st.session_state.get("fetch_last_message"):
-    message = st.session_state["fetch_last_message"]
-    if st.session_state.get("fetch_status") == "finished":
-        st.success(message)
-    elif st.session_state.get("fetch_status") == "running":
-        live_message = fetch_progress_message()
-        st.info(live_message or message)
+_search_panel = st.container()
 
 _startup_notice.empty()
 data = get_data(get_data_version())
@@ -2173,435 +2178,392 @@ with st.expander("🏪 Top 5 per säljare", expanded=_seller_search_needs_attent
             st.divider()
 
 
-# FlipFynd har en huvuduppgift: visa de bästa fynden just nu.
-# Slutar snart/bevakning/research finns kvar som analysmotorer i bakgrunden,
-# men användaren ska inte behöva välja arbetsläge innan fyndjakten.
-_main_view = "Vad ska jag köpa?"
-_advanced_terminal = st.checkbox(
-    "Visa fördjupad analys",
-    value=False,
-    help="Öppnar hela analysterminalen med interna mått, jämförelser, kapitalverktyg och administration.",
-    key="show_advanced_terminal",
-)
-
-st.subheader("Vad ska jag köpa?")
-if repaired_categories:
-    st.info(
-        "🧭 Marknadstäckningen har rättats för "
-        + ", ".join(repaired_categories)
-        + ". Gammal sidstatus stämde inte med annonslänkarna och har därför byggts om från verifierad data."
-    )
-if st.session_state.pop("results_stale_notice", False):
-    st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det sparade resultatet visas tills du startar en ny sökning.")
-if st.session_state.pop("restored_completed_search", False):
-    _saved_version = (_saved_search or {}).get("params", {}).get("app_version", "")
-    st.caption(f"↩️ Din sparade fyndsökning {_saved_version} har återställts utan ny analys. Priserna gäller tidpunkten då sökningen gjordes.")
-_fetch_state_summary = load_fetch_state()
-_last_values = [
-    info.get("last_fetch_at")
-    for info in _fetch_state_summary.get("categories", {}).values()
-    if info.get("last_fetch_at")
-]
-if _last_values:
-    _latest_fetch = format_last_fetch_time(max(_last_values))
-    _latest_label = "senast hämtat"
-else:
-    _dataset_timestamp = get_dataset_timestamp()
-    _latest_fetch = format_last_fetch_time(_dataset_timestamp) if _dataset_timestamp else "Aldrig"
-    _latest_label = "data senast ändrad" if _dataset_timestamp else "senast hämtat"
-
-# Legacy rows without a source category are not a usable market snapshot.
-# After "Rensa huvudsökning" they must not appear as 2 845 live listings.
-_visible_data = [item for item in data if infer_item_sport(item) in ("hockey", "football")]
-_sport_counts = {"hockey": 0, "football": 0, "unknown": 0}
-for _item in _visible_data:
-    _sport = infer_item_sport(_item)
-    if _sport in ("hockey", "football"):
-        _sport_counts[_sport] += 1
-    else:
-        _sport_counts["unknown"] += 1
-
-_count_parts = [
-    f"{_sport_counts['hockey']:,} hockey",
-    f"{_sport_counts['football']:,} fotboll",
-]
-if _sport_counts["unknown"]:
-    _count_parts.append(f"{_sport_counts['unknown']:,} okategoriserade")
-
-# Distinguish the full saved archive from the current latest-scan window.
-# Repeated latest refreshes are expected to overlap heavily and therefore do
-# not necessarily increase the archive by many rows.
-_total_loaded = len(_visible_data)
-_latest_window = latest_analysis_items(_visible_data)
-_latest_window_count = len(_latest_window)
-
-st.caption(
-    (
-        f"Aktuell marknad: {_total_loaded:,} annonser • "
-        + " • ".join(_count_parts)
-        + f" • {_latest_label} {_latest_fetch}"
-    ).replace(",", " ")
-)
-if st.session_state.get("results") is not None:
-    st.info(snapshot_notice(_saved_search, st.session_state.get("debug"), _total_loaded))
-    if (_saved_search or {}).get("params", {}).get("app_version") != APP_VERSION:
-        st.caption("Analysen sparades med en äldre version. Kortidentiteten har förbättrats; kör en ny analys innan ett köpbeslut.")
-
-if len(data) > MAX_ACTIVE_ITEMS_PER_CATEGORY * 2:
-    st.info(
-        "⚡ Prestandaskydd aktivt: FlipFynd analyserar den senaste begränsade delen av marknaden "
-        "i stället för att CPU-analysera hela den äldre masshämtningen på en gång."
-    )
-
-if _sport_counts["hockey"] == 0 and _sport_counts["football"] > 100:
-    st.warning(
-        "🏒 Hockeydata saknas i nuvarande dataset. Nästa smarta uppdatering validerar sport direkt "
-        "mot Traderas kategori-id och stoppar fel sport från att blandas in."
-    )
-
-_detail_enriched_count = sum(
-    1 for _item in data
-    if _item.get("detail_enrichment_status") == "ok"
-)
-
-_fetch_status = st.session_state.get("fetch_status", "idle")
-_has_data = len(data) > 0
-
-fetch_scope = st.radio(
-    "Sport att uppdatera",
-    list(FETCH_SCOPE_MAP.keys()),
-    index=0,
-    horizontal=True,
-    key="onboarding_fetch_scope",
-)
-fetch_category = selected_fetch_category(fetch_scope)
-if st.button(
-    "🔄 Uppdatera senaste annonser" if _has_data else "📥 Läs in senaste annonser",
-    type="primary",
-    use_container_width=True,
-    disabled=_fetch_status == "running",
-    key="top_fetch_selected",
-):
-    # The primary flow is a rolling newest-first crawl: first refresh the latest
-    # window, then continue with the next not-yet-loaded market pages.
-    st.session_state["continue_market_after_latest"] = True
-    start_fetch(fetch_category, True, "latest")
-    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
-    st.rerun()
-st.caption(
-    "Hämtar nya annonser och fortsätter sedan med äldre annonser som ännu inte lästs in."
-)
-if _fetch_status == "running":
-    st.info(fetch_progress_message() or "Hämtningen pågår… Annonser sparas sida för sida.")
-    if st.button("⏹ Avbryt hämtning", key="top_stop_fetch"):
-        stop_fetch()
-        st.rerun()
-elif _fetch_status == "finished" and st.session_state.pop("continue_market_after_latest", False):
-    # Chain the archive-growth pass only after a successful latest refresh.
-    # market_batch uses persisted coverage state and therefore starts at the
-    # next not-yet-loaded page instead of rescanning the newest window.
-    if start_fetch(fetch_category, True, "market_batch"):
-        st.session_state["fetch_last_message"] = (
-            "De senaste annonserna är kontrollerade. Fortsätter automatiskt "
-            "med nästa ännu inte inlästa annonser…"
+with _search_panel:
+    # FlipFynd har en huvuduppgift: visa de bästa fynden just nu.
+    # Slutar snart/bevakning/research finns kvar som analysmotorer i bakgrunden,
+    # men användaren ska inte behöva välja arbetsläge innan fyndjakten.
+    _main_view = "Vad ska jag köpa?"
+    st.subheader("Sök kort att granska")
+    if repaired_categories:
+        st.info(
+            "🧭 Marknadstäckningen har rättats för "
+            + ", ".join(repaired_categories)
+            + ". Gammal sidstatus stämde inte med annonslänkarna och har därför byggts om från verifierad data."
         )
+    if st.session_state.pop("results_stale_notice", False):
+        st.caption("🔄 Annonsdata ändrades efter din förra sökning. Det sparade resultatet visas tills du startar en ny sökning.")
+    if st.session_state.pop("restored_completed_search", False):
+        _saved_version = (_saved_search or {}).get("params", {}).get("app_version", "")
+        st.caption(f"↩️ Din sparade fyndsökning {_saved_version} har återställts utan ny analys. Priserna gäller tidpunkten då sökningen gjordes.")
+    _fetch_state_summary = load_fetch_state()
+    _last_values = [
+        info.get("last_fetch_at")
+        for info in _fetch_state_summary.get("categories", {}).values()
+        if info.get("last_fetch_at")
+    ]
+    if _last_values:
+        _latest_fetch = format_last_fetch_time(max(_last_values))
+        _latest_label = "senast hämtat"
+    else:
+        _dataset_timestamp = get_dataset_timestamp()
+        _latest_fetch = format_last_fetch_time(_dataset_timestamp) if _dataset_timestamp else "Aldrig"
+        _latest_label = "data senast ändrad" if _dataset_timestamp else "senast hämtat"
+
+    # Legacy rows without a source category are not a usable market snapshot.
+    # After "Rensa huvudsökning" they must not appear as 2 845 live listings.
+    _visible_data = [item for item in data if infer_item_sport(item) in ("hockey", "football")]
+    _sport_counts = {"hockey": 0, "football": 0, "unknown": 0}
+    for _item in _visible_data:
+        _sport = infer_item_sport(_item)
+        if _sport in ("hockey", "football"):
+            _sport_counts[_sport] += 1
+        else:
+            _sport_counts["unknown"] += 1
+
+    _count_parts = [
+        f"{_sport_counts['hockey']:,} hockey",
+        f"{_sport_counts['football']:,} fotboll",
+    ]
+    if _sport_counts["unknown"]:
+        _count_parts.append(f"{_sport_counts['unknown']:,} okategoriserade")
+
+    # Distinguish the full saved archive from the current latest-scan window.
+    # Repeated latest refreshes are expected to overlap heavily and therefore do
+    # not necessarily increase the archive by many rows.
+    _total_loaded = len(_visible_data)
+    _latest_window = latest_analysis_items(_visible_data)
+    _latest_window_count = len(_latest_window)
+
+    _market_summary = (f"{_total_loaded:,} annonser · " + " · ".join(_count_parts)
+                       + f" · {_latest_label} {_latest_fetch}").replace(",", " ")
+    _fetch_status = st.session_state.get("fetch_status", "idle")
+    _has_data = len(_visible_data) > 0
+    if "search_sport" not in st.session_state:
+        st.session_state["search_sport"] = "Fotboll" if _sport_counts['football'] and not _sport_counts['hockey'] else "Hockey"
+
+    def render_search_pipeline(debug, sport_label, max_price, search):
+        """Explain where listings disappear without guessing about the market."""
+        if not isinstance(debug, dict):
+            return
+        stages = [
+            ("Dataset", int(debug.get("total_items", 0) or 0)),
+            ("Efter prestandaskydd", int(debug.get("performance_items", 0) or 0)),
+            (f"{sport_label}", int(debug.get("after_sport", 0) or 0)),
+            ("Har giltigt pris", int(debug.get("valid_price", 0) or 0)),
+            (f"Inom budget {int(max_price)} kr", int(debug.get("within_budget", 0) or 0)),
+            ("Matchar sökning", int(debug.get("after_search", 0) or 0)),
+            ("Rätt annonsform", int(debug.get("after_sale_type", 0) or 0)),
+            ("Efter specialfilter", int(debug.get("after_feature_filters", 0) or 0)),
+            ("Fysiska kortannonser", int(debug.get("integrity_eligible_candidates", debug.get("after_feature_filters", 0)) or 0)),
+            ("Snabbanalyserade", int(debug.get("fast_pool_selected", debug.get("final_results", 0)) or 0)),
+            ("Djupanalyserade", int(debug.get("deep_analysed_candidates", debug.get("full_analysis", 0)) or 0)),
+        ]
+        st.markdown("### 🔎 Sållning – var försvinner annonserna?")
+        st.caption("Varje steg visar hur många annonser som återstår. Då ser du om problemet är data, budget, sökning eller ett filter.")
+        cols = st.columns(3)
+        for idx, (label, value) in enumerate(stages):
+            cols[idx % 3].metric(label, value)
+
+        latest_selected = int(debug.get("latest_fast_selected", 0) or 0)
+        archive_selected = int(debug.get("archive_fast_selected", 0) or 0)
+        if debug.get("automatic_archive_coverage"):
+            st.caption(
+                f"Analysurval: {latest_selected} från senaste hämtningen + "
+                f"{archive_selected} äldre sparade annonser. Äldre annonser får en reserverad chans utan att analysbudgeten ökas."
+            )
+
+        sport_count = int(debug.get("after_sport", 0) or 0)
+        if sport_count and int(debug.get("valid_price", 0) or 0) == 0:
+            st.error("Alla annonser för vald sport saknar ett användbart pris. Det pekar på ett inläsnings-/parserfel, inte på dina sökfilter.")
+        elif int(debug.get("valid_price", 0) or 0) and int(debug.get("within_budget", 0) or 0) == 0:
+            st.warning("Alla annonser med giltigt pris ligger över vald totalbudget. Höj budgeten för att se kandidater.")
+        elif int(debug.get("within_budget", 0) or 0) and int(debug.get("after_search", 0) or 0) == 0 and str(search or "").strip():
+            st.warning("Budgeten släpper igenom annonser, men ingen matchar söktexten. Prova kortare eller tom sökning.")
+        elif int(debug.get("after_search", 0) or 0) and int(debug.get("after_sale_type", 0) or 0) == 0:
+            st.warning("Annonsform-filtret sorterar bort allt. Välj Alla för att kontrollera marknaden.")
+        elif int(debug.get("after_sale_type", 0) or 0) and int(debug.get("after_feature_filters", 0) or 0) == 0:
+            st.warning("Ett specialfilter – numrerat, patch/relic eller autograf – sorterar bort alla annonser.")
+
+
+    _flow_fetching = st.session_state.get("fetch_status") == "running"
+    st.caption("Välj sport och budget. Tom sökruta ger en bred sökning. Saknas annonser hämtas de innan analysen startar.")
+
+    with st.container(border=True):
+        p1, p2 = st.columns(2)
+
+        with p1:
+            sport_label = st.selectbox(
+                "Sport",
+                ["Hockey", "Fotboll"],
+                key="search_sport",
+            )
+            sport = "hockey" if sport_label == "Hockey" else "football"
+            if sport == "football":
+                st.caption(EXCLUDED_PRODUCT_LABEL)
+
+        with p2:
+            max_price = st.number_input(
+                "Budget – max totalpris inkl. frakt",
+                key="search_budget",
+                min_value=0,
+                value=1000,
+                step=50,
+                help="Annonser vars pris + frakt överstiger budgeten sorteras bort.",
+            )
+
+        # En enda standardmotor: användaren ska inte behöva välja analysstrategi.
+        # premium_flip är den bredaste fyndmotorn och kombineras längre ned med
+        # efterfrågan, risk, samlarmerit, comps och verifierad ekonomisk edge.
+        strategy = "premium_flip"
+
+        search = st.text_input(
+            "Sök spelare, set eller kort",
+            key="search_text",
+            value="",
+            placeholder="T.ex. Bedard, Young Guns, Messi…",
+            help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",
+        )
+        effective_search = normalize_sport_category_search(search, sport)
+        if str(search or "").strip() and not str(effective_search or "").strip():
+            st.caption(
+                f"{sport_label} är redan valt ovan. FlipFynd söker därför i alla {sport_label.lower()}kort "
+                "i stället för att bara matcha annonser som råkar innehålla kategorinamnet."
+            )
+
+        with st.expander("Avancerade filter"):
+            st.caption("Sökningen prioriterar senaste annonserna. Ett urval av äldre sparade annonser ingår också.")
+            include_older = st.checkbox(
+                "Ta med äldre sparade annonser",
+                key="search_archive",
+                value=False,
+                help="Normalt prioriteras senaste annonserna och en begränsad del av äldre lagret granskas automatiskt. Slå på för ett bredare arkivurval.",
+            )
+            a1, a2 = st.columns(2)
+            with a1:
+                sale_type = st.selectbox(
+                    "Annonsform",
+                    ["Alla", "Endast auktioner", "Endast Köp nu"],
+                    key="search_sale_type",
+                )
+                minimum_confidence = st.slider(
+                    "Minsta analyssäkerhet",
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.05,
+                    key="search_minimum_confidence",
+                )
+
+            with a2:
+                show_count = st.number_input(
+                    "Antal fynd att visa",
+                    key="search_show_count",
+                    min_value=1,
+                    max_value=100,
+                    value=20,
+                )
+                show_skip = st.checkbox(
+                    "Visa även svaga kandidater",
+                    key="search_show_skip",
+                    value=False,
+                    help="Slå på endast om du vill se kort som inte är tillräckligt starka för huvudlistan.",
+                )
+
+            st.caption(
+                "Autografer, numrerade kort och patch/relic ingår alltid i den vanliga fyndsökningen. "
+                "Filtren nedan används bara om du vill begränsa sökningen till en viss korttyp."
+            )
+            card_type_filter = st.radio(
+                "Korttyp",
+                ["Alla kort", "Endast autograf", "Endast numrerade", "Endast patch/relic"],
+                horizontal=True,
+                key="ordinary_card_type_filter",
+            )
+            auto_only = card_type_filter == "Endast autograf"
+            numbered_only = card_type_filter == "Endast numrerade"
+            patch_only = card_type_filter == "Endast patch/relic"
+
+        # Intern prestandaparameter: användaren ska inte behöva förstå den.
+        # Keep the interactive Streamlit request bounded. The background worker
+        # can use a wider deep pass once deployed.
+        full_limit = 8
+
+        _find_disabled = _flow_fetching or bool(_saved_search and _saved_search.get("status") == "RUNNING")
+        if _flow_fetching:
+            _find_label = "⏳ Vänta – annonser hämtas"
+        else:
+            _find_label = "🔎 Sök med nuvarande filter" if st.session_state.get("results") is not None else "🔎 Hitta fynd"
+            _prior_debug = (_saved_search or {}).get('debug') or {}
+            _prior_params = (_saved_search or {}).get('params') or {}
+            if (_prior_params.get('widgets') == _search_experience_module.search_widgets(st.session_state)
+                    and _prior_params.get('app_version') == APP_VERSION
+                    and (_prior_debug.get('inventory_price_remaining') or _prior_debug.get('description_identity_remaining'))):
+                _find_label = "🔎 Fortsätt hitta fynd"
+        run = st.button(
+            _find_label,
+            key="run_main_search",
+            type="primary",
+            use_container_width=True,
+            disabled=_find_disabled,
+            help=(
+                "Knappen låses medan en hämtning pågår. Vänta tills hämtningen visar KLAR."
+                if _flow_fetching
+                else "Hämtar annonser för vald sport om de saknas och analyserar sedan med dessa filter."
+            ),
+        )
+
+        clear_main_search = st.button(
+            "Töm resultat", key="clear_main_results", use_container_width=True,
+            disabled=_flow_fetching or bool(_saved_search and _saved_search.get("status") == "RUNNING"),
+            help="Tömmer denna söknings resultat. Inlästa annonser och säljarlistor behålls.",
+        )
+
+    fetch_category = "Hockey - NHL" if sport == "hockey" else "Fotboll"
+    _request_phase = _search_experience_module.pending_phase(st.session_state.get("pending_find_request"),
+        _fetch_status, st.session_state.get("fetch_category"))
+    if _request_phase == "WAIT":
+        st.info("Steg 1 av 2 · " + (fetch_progress_message() or "Hämtar annonser…"))
+        st.caption("Analysen startar automatiskt med filtren från ditt knapptryck när hämtningen är klar.")
+        if st.button("Avbryt sökningen", key="cancel_pending_find"):
+            st.session_state.pop("pending_find_request", None)
+            st.session_state["continue_market_after_latest"] = False
+            stop_fetch()
+            _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+            st.rerun()
+    elif _request_phase == "READY":
+        if _sport_counts[sport] > 0:
+            st.session_state.pop("pending_find_request", None)
+            run = True
+        else:
+            st.session_state.pop("pending_find_request", None)
+            st.warning("Hämtningen blev klar utan användbara annonser för vald sport. Ingen analys har startats. Försök igen med Hitta fynd.")
+    elif _request_phase == "FAILED":
+        st.session_state.pop("pending_find_request", None)
+        st.error("Sökningen kunde inte fortsätta efter hämtningen. Inget köpresultat har skapats. Tryck Hitta fynd för att försöka igen.")
+
+    with st.expander("Driftstatus och data", expanded=False):
+        st.caption(_market_summary)
+        _advanced_terminal = st.checkbox("Visa fördjupad analys", value=False,
+            help="Visar interna analysmått och verktyg.", key="show_advanced_terminal")
+        from src.idle_quota import render_counter as _render_idle_quota
+        _render_idle_quota(_ebay_runtime.configured_credentials(),
+            searching=bool(_saved_search and _saved_search.get("status") == "RUNNING"))
+        st.caption("Uppdateringen använder samma sportval som sökningen ovan.")
+        if st.button("Uppdatera senaste annonser", key="top_fetch_selected", disabled=_flow_fetching):
+            if start_fetch(fetch_category, True, "latest"):
+                st.session_state["continue_market_after_latest"] = True
+                _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+                st.rerun()
+        if _flow_fetching and not _request_phase:
+            st.info(fetch_progress_message() or "Hämtar annonser…")
+            if st.button("Avbryt hämtning", key="top_stop_fetch"):
+                st.session_state["continue_market_after_latest"] = False
+                stop_fetch()
+                st.rerun()
+        elif _fetch_status == "finished" and st.session_state.pop("continue_market_after_latest", False) and not _request_phase:
+            # A queued request keeps its sport even when the visible selector changes.
+            start_fetch(st.session_state.get("fetch_category") or fetch_category, True, "market_batch")
+            _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+            st.rerun()
+        elif _fetch_status == "failed":
+            st.error(st.session_state.get("fetch_last_message") or "Hämtningen misslyckades. Tryck Uppdatera senaste annonser för att försöka igen.")
+            log_tail = read_fetch_log_tail()
+            if log_tail:
+                with st.expander("Tekniska detaljer"):
+                    st.code(log_tail, language="text")
+        elif _fetch_status == "finished":
+            st.success(st.session_state.get("fetch_last_message") or "Annonserna har uppdaterats.")
+        with st.expander("Avancerade hämtningsinställningar", expanded=False):
+            extra_modes = {"Uppdatera äldre sparade sidor": "scheduled_refresh", "Full genomsökning (tar längre tid)": "full"}
+            extra_mode = st.selectbox("Omfattning", list(extra_modes), key="extra_fetch_mode")
+            if st.button("Kör avancerad hämtning", disabled=_flow_fetching, key="extra_fetch_start"):
+                start_fetch(fetch_category, True, extra_modes[extra_mode])
+                st.rerun()
+        with st.expander("Börja om med nya annonser", expanded=False):
+            st.warning("Detta tömmer sökresultatet och appens inlästa marknadsannonser. Annonserna måste hämtas igen. Säljarlistor behålls.")
+            _reset_confirmed = st.checkbox("Rensa resultat och inlästa annonser", key="confirm_market_reset")
+            if st.button("Rensa resultat och inlästa annonser", key="reset_main_market",
+                    disabled=not _reset_confirmed or _flow_fetching or bool(_saved_search and _saved_search.get("status") == "RUNNING")):
+                _search_experience_module.clear_results(st.session_state, st.query_params)
+                clear_all_loaded_data()
+                get_data.clear()
+                st.session_state["continue_market_after_latest"] = False
+                st.session_state["fetch_status"] = "idle"
+                st.session_state["fetch_last_message"] = ""
+                _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+                st.rerun()
+
+    if clear_main_search:
+        _search_experience_module.clear_results(st.session_state, st.query_params)
         _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
         st.rerun()
-elif _fetch_status == "failed":
-    _failed_message = st.session_state.get("fetch_last_message") or "Hämtningen misslyckades. Försök igen."
-    if not data and "Inlästa annonser är sparade" in _failed_message:
-        _failed_message = "Servern startades om och marknadsarkivet saknas. Läs in annonser igen; sparade analysresultat visas separat."
-    st.error(_failed_message)
-    log_tail = read_fetch_log_tail()
-    if log_tail:
-        with st.expander("Tekniska detaljer"):
-            st.code(log_tail, language="text")
 
-# Advanced fetch controls are intentionally hidden from the normal flow.
-# The primary button above both refreshes newest listings and extends the archive.
-with st.expander("Avancerade hämtningsinställningar", expanded=False):
-    extra_modes = {
-        "Uppdatera äldre sparade sidor": "scheduled_refresh",
-        "Full genomsökning (tar längre tid)": "full",
-    }
-    extra_mode = st.selectbox("Omfattning", list(extra_modes), key="extra_fetch_mode")
-    if st.button(
-        "Kör avancerad hämtning",
-        disabled=_fetch_status == "running",
-        key="extra_fetch_start",
-    ):
-        start_fetch(fetch_category, True, extra_modes[extra_mode])
+    if run and _sport_counts[sport] == 0:
+        st.session_state["pending_find_request"] = _search_experience_module.pending_search(st.session_state, fetch_category)
+        if start_fetch(fetch_category, True, "latest"):
+            st.session_state["continue_market_after_latest"] = False
+        else:
+            st.session_state.pop("pending_find_request", None)
+        _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
         st.rerun()
 
-def render_search_pipeline(debug, sport_label, max_price, search):
-    """Explain where listings disappear without guessing about the market."""
-    if not isinstance(debug, dict):
-        return
-    stages = [
-        ("Dataset", int(debug.get("total_items", 0) or 0)),
-        ("Efter prestandaskydd", int(debug.get("performance_items", 0) or 0)),
-        (f"{sport_label}", int(debug.get("after_sport", 0) or 0)),
-        ("Har giltigt pris", int(debug.get("valid_price", 0) or 0)),
-        (f"Inom budget {int(max_price)} kr", int(debug.get("within_budget", 0) or 0)),
-        ("Matchar sökning", int(debug.get("after_search", 0) or 0)),
-        ("Rätt annonsform", int(debug.get("after_sale_type", 0) or 0)),
-        ("Efter specialfilter", int(debug.get("after_feature_filters", 0) or 0)),
-        ("Fysiska kortannonser", int(debug.get("integrity_eligible_candidates", debug.get("after_feature_filters", 0)) or 0)),
-        ("Snabbanalyserade", int(debug.get("fast_pool_selected", debug.get("final_results", 0)) or 0)),
-        ("Djupanalyserade", int(debug.get("deep_analysed_candidates", debug.get("full_analysis", 0)) or 0)),
-    ]
-    st.markdown("### 🔎 Sållning – var försvinner annonserna?")
-    st.caption("Varje steg visar hur många annonser som återstår. Då ser du om problemet är data, budget, sökning eller ett filter.")
-    cols = st.columns(3)
-    for idx, (label, value) in enumerate(stages):
-        cols[idx % 3].metric(label, value)
 
-    latest_selected = int(debug.get("latest_fast_selected", 0) or 0)
-    archive_selected = int(debug.get("archive_fast_selected", 0) or 0)
-    if debug.get("automatic_archive_coverage"):
-        st.caption(
-            f"Analysurval: {latest_selected} från senaste hämtningen + "
-            f"{archive_selected} äldre sparade annonser. Äldre annonser får en reserverad chans utan att analysbudgeten ökas."
-        )
-
-    sport_count = int(debug.get("after_sport", 0) or 0)
-    if sport_count and int(debug.get("valid_price", 0) or 0) == 0:
-        st.error("Alla annonser för vald sport saknar ett användbart pris. Det pekar på ett inläsnings-/parserfel, inte på dina sökfilter.")
-    elif int(debug.get("valid_price", 0) or 0) and int(debug.get("within_budget", 0) or 0) == 0:
-        st.warning("Alla annonser med giltigt pris ligger över vald totalbudget. Höj budgeten för att se kandidater.")
-    elif int(debug.get("within_budget", 0) or 0) and int(debug.get("after_search", 0) or 0) == 0 and str(search or "").strip():
-        st.warning("Budgeten släpper igenom annonser, men ingen matchar söktexten. Prova kortare eller tom sökning.")
-    elif int(debug.get("after_search", 0) or 0) and int(debug.get("after_sale_type", 0) or 0) == 0:
-        st.warning("Annonsform-filtret sorterar bort allt. Välj Alla för att kontrollera marknaden.")
-    elif int(debug.get("after_sale_type", 0) or 0) and int(debug.get("after_feature_filters", 0) or 0) == 0:
-        st.warning("Ett specialfilter – numrerat, patch/relic eller autograf – sorterar bort alla annonser.")
-
-
-# Keep the next action visible without repeating the whole onboarding flow.
-_flow_fetching = st.session_state.get("fetch_status") == "running"
-if not _has_data:
-    st.info("Välj sport och läs in annonser ovan. Välj sedan budget och tryck Hitta fynd.")
-elif not _flow_fetching:
-    st.caption("Välj sport och budget. Lämna sökrutan tom för en bred sökning.")
-
-
-# Metadata must never hold the entire page waiting on eBay OAuth/Analytics.
-from src.idle_quota import render_counter as _render_idle_quota
-_render_idle_quota(_ebay_runtime.configured_credentials(),
-                   searching=bool(_saved_search and _saved_search.get("status") == "RUNNING"))
-
-with st.form("analysis_form"):
-    p1, p2 = st.columns(2)
-
-    with p1:
-        sport_label = st.selectbox(
-            "Sport",
-            ["Hockey", "Fotboll"],
-            key="search_sport",
-        )
-        sport = "hockey" if sport_label == "Hockey" else "football"
-        if sport == "football":
-            st.caption(EXCLUDED_PRODUCT_LABEL)
-
-    with p2:
-        max_price = st.number_input(
-            "Budget – max totalpris inkl. frakt",
-            key="search_budget",
-            min_value=0,
-            value=1000,
-            step=50,
-            help="Annonser vars pris + frakt överstiger budgeten sorteras bort.",
-        )
-
-    # En enda standardmotor: användaren ska inte behöva välja analysstrategi.
-    # premium_flip är den bredaste fyndmotorn och kombineras längre ned med
-    # efterfrågan, risk, samlarmerit, comps och verifierad ekonomisk edge.
-    strategy = "premium_flip"
-
-    search = st.text_input(
-        "Sök spelare, set eller kort",
-        key="search_text",
-        value="",
-        placeholder="T.ex. Bedard, Young Guns, Messi…",
-        help="Lämna tomt för att låta FlipFynd hitta de bästa fynden i hela den valda sporten.",
-    )
-    effective_search = normalize_sport_category_search(search, sport)
-    if str(search or "").strip() and not str(effective_search or "").strip():
-        st.caption(
-            f"{sport_label} är redan valt ovan. FlipFynd söker därför i alla {sport_label.lower()}kort "
-            "i stället för att bara matcha annonser som råkar innehålla kategorinamnet."
-        )
-
-    with st.expander("Avancerade filter"):
-        st.caption("Sökningen prioriterar senaste annonserna. Ett urval av äldre sparade annonser ingår också.")
-        include_older = st.checkbox(
-            "Ta med äldre sparade annonser",
-            key="search_archive",
-            value=False,
-            help="Normalt prioriteras senaste annonserna och en begränsad del av äldre lagret granskas automatiskt. Slå på för ett bredare arkivurval.",
-        )
-        a1, a2 = st.columns(2)
-        with a1:
-            sale_type = st.selectbox(
-                "Annonsform",
-                ["Alla", "Endast auktioner", "Endast Köp nu"],
-                key="search_sale_type",
-            )
-            minimum_confidence = st.slider(
-                "Minsta analyssäkerhet",
-                0.0,
-                1.0,
-                0.0,
-                0.05,
-                key="search_minimum_confidence",
-            )
-
-        with a2:
-            show_count = st.number_input(
-                "Antal fynd att visa",
-                key="search_show_count",
-                min_value=1,
-                max_value=100,
-                value=20,
-            )
-            show_skip = st.checkbox(
-                "Visa även svaga kandidater",
-                key="search_show_skip",
-                value=False,
-                help="Slå på endast om du vill se kort som inte är tillräckligt starka för huvudlistan.",
-            )
-
-        st.caption(
-            "Autografer, numrerade kort och patch/relic ingår alltid i den vanliga fyndsökningen. "
-            "Filtren nedan används bara om du vill begränsa sökningen till en viss korttyp."
-        )
-        card_type_filter = st.radio(
-            "Korttyp",
-            ["Alla kort", "Endast autograf", "Endast numrerade", "Endast patch/relic"],
-            horizontal=True,
-            key="ordinary_card_type_filter",
-        )
-        auto_only = card_type_filter == "Endast autograf"
-        numbered_only = card_type_filter == "Endast numrerade"
-        patch_only = card_type_filter == "Endast patch/relic"
-
-    # Intern prestandaparameter: användaren ska inte behöva förstå den.
-    # Keep the interactive Streamlit request bounded. The background worker
-    # can use a wider deep pass once deployed.
-    full_limit = 8
-
-    _find_disabled = (not _has_data) or _flow_fetching or bool(_saved_search and _saved_search.get("status") == "RUNNING")
-    if _flow_fetching:
-        _find_label = "⏳ Vänta – annonser hämtas"
-    elif not _has_data:
-        _find_label = "📥 Hämta annonser först"
-    else:
-        _find_label = "🔎 Hitta fynd"
+    if run:
+        # Resolve data and secrets on the UI thread, then pass only ordinary Python
+        # objects to the worker. No worker depends on a live Streamlit session.
+        _previous_search_token = st.query_params.get("search_run")
+        _search_token = resumable_search.new_token()
+        st.query_params["search_run"] = _search_token
+        _params = {
+            "widgets": _search_experience_module.search_widgets(st.session_state),
+            "app_version": APP_VERSION,
+            "previous_search_run": _previous_search_token,
+        }
+        _job_kwargs = dict(data=list(data), sport=sport, search=effective_search,
+            max_price=max_price, sale_type=sale_type, full_limit=full_limit,
+            strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
+            auto_only=auto_only, include_older=include_older,
+            data_version=f"{get_data_version()}:{APP_VERSION}", sold_comp_data=get_sold_comp_data())
+        _prior_params = (_saved_search or {}).get('params') or {}
         _prior_debug = (_saved_search or {}).get('debug') or {}
-        if _prior_debug.get('inventory_price_remaining') or _prior_debug.get('description_identity_remaining'):
-            _find_label = "🔎 Fortsätt hitta fynd"
-    run = st.form_submit_button(
-        _find_label,
-        type="primary",
-        use_container_width=True,
-        disabled=_find_disabled,
-        help=(
-            "Knappen låses medan en hämtning pågår. Vänta tills hämtningen visar KLAR."
-            if _flow_fetching
-            else "Analyserar redan inlästa annonser – den hämtar inte ny data."
-        ),
-    )
+        if (_prior_params.get('widgets') == _params['widgets']
+                and _prior_params.get('app_version') == APP_VERSION
+                and (_prior_debug.get('inventory_price_remaining') or _prior_debug.get('description_identity_remaining'))):
+            _job_kwargs['research_checkpoint'] = _prior_debug.get('research_checkpoint')
+        if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
+            import src.card_parser as _card_parser_module
+            importlib.reload(_card_parser_module)
+            import src.ebay_browse_context as _ebay_context_module
+            import src.analysis_cache as _analysis_cache_module
+            import src.inventory_price_sweep as _inventory_sweep_module
+            importlib.reload(_analysis_cache_module)
+            importlib.reload(_inventory_sweep_module)
+            importlib.reload(_ebay_context_module)
+            importlib.reload(_asking_price_module)
+            import src.analyzer as _analyzer_module
+            importlib.reload(_analyzer_module)
+            importlib.reload(_ordinary_pipeline)
+            _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
+        _job_fn = _ordinary_pipeline.analyze_data
+        resumable_search.start(_search_token, _params,
+            lambda kwargs=_job_kwargs, fn=_job_fn: fn(**kwargs), database_url=DATABASE_URL, fresh=True)
+        st.session_state["results"] = None
+        st.session_state["debug"] = {}
+        _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
+        st.rerun()
 
-    clear_main_search = st.form_submit_button(
-        "🧹 Rensa huvudsökning",
-        use_container_width=True,
-        help="Rensar visade resultat och sessionscache. Nästa Hitta fynd körs med aktuell appversion.",
-    )
+    if _saved_search and _saved_search.get("status") == "RUNNING":
+        from src.search_progress import render_search_progress
+        render_search_progress(_saved_search)
+        st.info("Steg 2 av 2 · Analysen fortsätter i bakgrunden. Du kan lämna appen och återvända till samma länk.")
+        if st_autorefresh:
+            st_autorefresh(interval=3000, key="resume_search_poll")
+        else:
+            st.button("Visa sökningens status")
+        st.stop()
+    elif _saved_search and _saved_search.get("status") in {"FAILED", "INTERRUPTED"}:
+        st.warning("Sökningen avbröts på servern. Dina filter är återställda. Tryck Hitta fynd för att försöka igen.")
 
-
-if clear_main_search:
-    st.session_state["_browser_clear_requested"] = True
-    st.query_params.pop("search_run", None)
-    _saved_search = None
-    st.session_state["results"] = None
-    st.session_state["debug"] = None
-    st.session_state["result_cache"] = {}
-    st.session_state.pop("active_search_job_id", None)
-    st.session_state.pop("results_data_version", None)
-    # "Rensa huvudsökning" means a genuinely fresh market search, not merely
-    # hiding the old result cards. Remove the loaded listing snapshot as well.
-    try:
-        clear_all_loaded_data()
-    except Exception:
-        pass
-    try:
-        get_data.clear()
-    except Exception:
-        pass
-    st.session_state["fetch_status"] = "idle"
-    st.session_state["fetch_last_message"] = ""
-    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
-    st.success("Huvudsökningen och inlästa annonser är rensade. Hämta nya annonser innan nästa Hitta fynd.")
-    st.rerun()
-
-
-if run:
-    # Resolve data and secrets on the UI thread, then pass only ordinary Python
-    # objects to the worker. No worker depends on a live Streamlit session.
-    _previous_search_token = st.query_params.get("search_run")
-    _search_token = resumable_search.new_token()
-    st.query_params["search_run"] = _search_token
-    _params = {
-        "widgets": {key: st.session_state.get(key) for key in (
-            "search_sport", "search_budget", "search_text", "search_archive",
-            "search_sale_type", "ordinary_card_type_filter")},
-        "app_version": APP_VERSION,
-        "previous_search_run": _previous_search_token,
-    }
-    _job_kwargs = dict(data=list(data), sport=sport, search=effective_search,
-        max_price=max_price, sale_type=sale_type, full_limit=full_limit,
-        strategy=strategy, numbered_only=numbered_only, patch_only=patch_only,
-        auto_only=auto_only, include_older=include_older,
-        data_version=f"{get_data_version()}:{APP_VERSION}", sold_comp_data=get_sold_comp_data())
-    _prior_params = (_saved_search or {}).get('params') or {}
-    _prior_debug = (_saved_search or {}).get('debug') or {}
-    if (_prior_params.get('widgets') == _params['widgets']
-            and _prior_params.get('app_version') == APP_VERSION
-            and (_prior_debug.get('inventory_price_remaining') or _prior_debug.get('description_identity_remaining'))):
-        _job_kwargs['research_checkpoint'] = _prior_debug.get('research_checkpoint')
-    if getattr(_ordinary_pipeline, "_flipfynd_loaded_version", None) != APP_VERSION:
-        import src.card_parser as _card_parser_module
-        importlib.reload(_card_parser_module)
-        import src.ebay_browse_context as _ebay_context_module
-        import src.analysis_cache as _analysis_cache_module
-        import src.inventory_price_sweep as _inventory_sweep_module
-        importlib.reload(_analysis_cache_module)
-        importlib.reload(_inventory_sweep_module)
-        importlib.reload(_ebay_context_module)
-        importlib.reload(_asking_price_module)
-        import src.analyzer as _analyzer_module
-        importlib.reload(_analyzer_module)
-        importlib.reload(_ordinary_pipeline)
-        _ordinary_pipeline._flipfynd_loaded_version = APP_VERSION
-    _job_fn = _ordinary_pipeline.analyze_data
-    resumable_search.start(_search_token, _params,
-        lambda kwargs=_job_kwargs, fn=_job_fn: fn(**kwargs), database_url=DATABASE_URL, fresh=True)
-    st.session_state["results"] = None
-    st.session_state["debug"] = {}
-    _workspace_recovery.persist_current(st.session_state, st.query_params, DATABASE_URL)
-    st.rerun()
-
-if _saved_search and _saved_search.get("status") == "RUNNING":
-    from src.search_progress import render_search_progress
-    render_search_progress(_saved_search)
-    st.info("Analysen fortsätter i bakgrunden. Du kan lämna appen och återvända till samma länk.")
-    if st_autorefresh:
-        st_autorefresh(interval=3000, key="resume_search_poll")
-    else:
-        st.button("Visa sökningens status")
-    st.stop()
-elif _saved_search and _saved_search.get("status") in {"FAILED", "INTERRUPTED"}:
-    st.warning("Sökningen avbröts på servern. Dina filter är återställda. Tryck Hitta fynd för att försöka igen.")
 
 
 def render_same_seller_button(item: dict, key: str) -> None:
@@ -2905,6 +2867,14 @@ def render_card_explanation_button(item: dict, key: str) -> None:
 
 
 if st.session_state.get("results") is not None:
+    _result_context = _search_experience_module.result_context(_saved_search,
+        _search_experience_module.search_widgets(st.session_state))
+    _result_widgets = _result_context['widgets']
+    if _result_widgets.get('search_sport') in ('Hockey', 'Fotboll'):
+        sport_label = _result_widgets['search_sport']
+        sport = 'hockey' if sport_label == 'Hockey' else 'football'
+        max_price = _result_widgets.get('search_budget', max_price)
+        search = _result_widgets.get('search_text', search)
     # Filter the presentation copy, preserving saved results and dismissals.
     _display_results, _product_excluded = filter_search_products(st.session_state.get("results") or [], sport=sport)
     _display_debug = dict(st.session_state.get("debug") or {})
@@ -2999,11 +2969,12 @@ if st.session_state.get("results") is not None:
                 _previous = (_saved_search.get("params") or {}).get("previous_search_run")
                 if resumable_search.valid_token(_previous):
                     st.link_button("Visa föregående sparade sökning", f"?search_run={_previous}")
-            render_asking_price_shortlist(
-                _display_results,
-                research_leads=(_display_debug or {}).get("single_price_research_leads") or [])
-            _local_rows = (_display_debug or {}).get("tradera_price_find_rows") or []
-            render_asking_price_shortlist(_local_rows, heading="Möjliga fynd mot begärda Tradera-priser")
+            with st.expander("Fler prisuppslag och jämförelselistor", expanded=False):
+                render_asking_price_shortlist(
+                    _display_results,
+                    research_leads=(_display_debug or {}).get("single_price_research_leads") or [])
+                _local_rows = (_display_debug or {}).get("tradera_price_find_rows") or []
+                render_asking_price_shortlist(_local_rows, heading="Möjliga fynd mot begärda Tradera-priser")
 
             # One compact Top 5. Research signals may rank UNDERSÖK candidates,
             # but KÖP remains gated by verified economic evidence.
@@ -3022,7 +2993,9 @@ if st.session_state.get("results") is not None:
             current_debug = _display_debug or {}
             price_funnel = current_debug.get("price_research_funnel") or {}
             if not price_funnel:
-                st.error("Prisfunneln saknas i analysresultatet. Debug-fält: " + (", ".join(sorted(current_debug.keys())) or "inga"))
+                st.warning("Prisjämförelsen saknar fullständig sammanställning. Korten kan granskas, men kör en ny sökning innan ett köpbeslut.")
+                with st.expander("Tekniska detaljer för prisjämförelsen", expanded=False):
+                    st.caption("Debug-fält: " + (", ".join(sorted(current_debug.keys())) or "inga"))
             if price_funnel:
                 with st.expander("💰 Prisresearch – felsökning", expanded=False):
                     ebay_ready = bool(current_debug.get("ebay_credentials_configured"))
@@ -3097,8 +3070,11 @@ if st.session_state.get("results") is not None:
                             f"{len(current_debug.get('single_price_research_leads') or [])} osäkra positiva prisspår."
                         )
 
+            st.caption(snapshot_notice(_saved_search, st.session_state.get("debug"), _total_loaded))
+            if (_saved_search or {}).get('params', {}).get('app_version') != APP_VERSION:
+                st.caption('Sparad analys från en äldre version. Kör en ny sökning innan ett köpbeslut.')
             render_best_alternatives(opportunity_top5,
-                explain=render_card_explanation_button, seller=render_same_seller_button)
+                explain=render_card_explanation_button, seller=render_same_seller_button, context=_result_context)
 
             with st.expander("🔬 Avancerad fyndjakt / så tänker FlipFynd", expanded=False):
                 coverage = evidence_coverage(_display_results)

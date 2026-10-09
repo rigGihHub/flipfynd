@@ -86,88 +86,136 @@ def alternative_status(row):
     return 'UNDERSÖK · köp ej bekräftat'
 
 
-def render_best_alternatives(result, *, explain=None, seller=None):
+def candidate_status(row):
+    margin = _number(row.get('practical_margin'))
+    if row.get('decision') == 'AVSTÅ' or (margin is not None and margin <= 0):
+        return 'Avstå'
+    if row.get('decision') == 'KÖP':
+        return 'Köpunderlag finns'
+    return 'Granska'
+
+
+def candidate_images(row):
+    """Only actual listing URLs; never generated card pictures."""
+    images = []
+    for item in (row.get('_source_item') or {}, row.get('source_item') or {}, row):
+        for key in ('detail_image_urls', 'image_urls', 'visual_image_urls'):
+            values = item.get(key) or []
+            if isinstance(values, str):
+                values = [values]
+            for value in values:
+                if not isinstance(value, str):
+                    continue
+                parts = urlsplit(value)
+                if parts.scheme in ('https', 'http') and parts.netloc and value not in images:
+                    images.append(value)
+    return images[:6]
+
+
+def candidate_presentation(row):
+    review = row.get('candidate_review') or build_candidate_review(row.get('_source_item') or row)
+    summary = build_seller_net_profit_summary(row)
+    indication = row.get('market_value')
+    if indication is None:
+        indication = row.get('asking_reference')
+    source = ('Verifierade försäljningar' if row.get('market_value') is not None else
+              'Begärda priser' if row.get('asking_reference') is not None else 'Saknas')
+    net = (('Scenario ' if summary['evidence_kind'] == 'ACTIVE_ASKING' else '')
+           + f"{summary['value']:+.0f} kr") if summary['available'] else 'Ej beräkningsbar'
+    assessed = has_supported_price_context(row)
+    return {'status': candidate_status(row), 'review': review, 'images': candidate_images(row),
+            'price': evidence_money(indication) if indication is not None else 'Okänt',
+            'source': source, 'net': net, 'summary': summary,
+            'costs': acquisition_breakdown(row, row.get('total_cost')),
+            'potential': f"{float(row.get('potential') or 0):.0f}/100" if assessed else 'Ej bedömd',
+            'certainty': f"{float(row.get('certainty') or 0):.0f}/100" if assessed else 'Ej bedömd'}
+
+
+def render_best_alternatives(result, *, explain=None, seller=None, context=None):
     import streamlit as st
     rows = result.get('rows') or []
-    st.markdown('### 🏆 De 5 bästa alternativen')
-    st.caption('Bäst bland de tillgängliga alternativen i din sökning. En plats i listan betyder inte att kortet är ett lönsamt köp.')
-    if any(str((row.get('_source_item') or {}).get('source_category') or '').casefold().find('fotboll') >= 0 for row in rows):
-        st.caption('Utan ett styrkt fynd prioriteras numrerade kort, autografer, relikkort och identifierade hobbyserier framför vanliga inserts med svaga modellvärden.')
+    st.markdown('### De 5 bästa alternativen')
+    if context:
+        st.info(context['label'])
+        if context['changed']:
+            st.warning('Filtren har ändrats men sökningen har inte körts med dem. Korten nedan tillhör den sparade sökningen.')
+    st.caption('En plats i listan betyder inte att kortet är ett lönsamt köp. Okänt pris betyder att relevant underlag saknas.')
     if result.get('product_scope_excluded_count'):
-        st.caption(f"{result['product_scope_excluded_count']} annonser uteslutna av produktfiltret. Match Attax, Adrenalyn och vanliga Beast Mode-inserts fyller inte topplistan.")
+        st.caption(f"{result['product_scope_excluded_count']} annonser uteslutna av produktfiltret.")
     if len(rows) < 5:
         st.info(f'Endast {len(rows)} unika alternativ finns i det analyserade underlaget. Listan fylls på när fler har analyserats.')
     if not rows:
         return
     table = []
-    def money(value):
-        number = _number(value)
-        return f'{number:.0f} kr' if number is not None else 'Saknas'
     for rank, row in enumerate(rows, 1):
-        summary = build_seller_net_profit_summary(row)
-        indication = row.get('market_value') or row.get('asking_reference')
-        source = 'SOLD/verifierat' if row.get('market_value') is not None else (
-            'Begärda priser' if row.get('asking_reference') is not None else (
-                'Saknas verifierat pris'))
-        net = (('Scenario ' if summary['evidence_kind'] == 'ACTIVE_ASKING' else '')
-               + f"{summary['value']:+.0f} kr") if summary['available'] else 'Ej beräkningsbar'
-        table.append({'#': rank, 'Kort': clean_card_title(row['title']), 'Bedömning': alternative_status(row),
-                      'Total kostnad': money(row.get('total_cost')), 'Prisindikation': money(indication) if indication is not None else 'Okänt',
-                      'Underlag': source, 'Netto / scenario': net,
-                      'Fyndpotential': f"{float(row.get('potential') or 0):.0f}/100",
-                      'Säkerhet': f"{float(row.get('certainty') or 0):.0f}/100"})
-    st.dataframe(table, use_container_width=True, hide_index=True)
-    st.caption('Okänt betyder att relevant prisunderlag saknas. Schablonvärden används inte som pris eller marginal i denna lista.')
-    def review_details(row):
-        review = row.get('candidate_review') or build_candidate_review(row.get('_source_item') or row)
-        st.write('**Varför granska:** ' + ' · '.join(review['reasons']))
-        st.write('**Kontrollera före köp:**')
-        for check in review['checks']:
-            st.write('• ' + check)
-        with st.expander('Kortidentitet · källa och saknade uppgifter', expanded=False):
-            st.dataframe([{'Uppgift': fact['label'], 'Identifierat': fact['value'],
-                           'Källa': fact['source'] or 'Saknas'} for fact in review['identity']['rows']],
-                         hide_index=True, use_container_width=True)
-            st.caption(review['identity']['note'])
-    for rank, row in enumerate(rows, 1):
-        with st.expander(f"#{rank} · {clean_card_title(row['title'])}", expanded=False):
-            st.write('**' + alternative_status(row) + '**')
-            source_item = row.get('_source_item') or {}
-            scenario = source_item.get('asking_price_opportunity') or {}
-            price = scenario.get('purchase_price', source_item.get('pris', source_item.get('price')))
-            shipping = scenario.get('shipping', source_item.get('frakt', source_item.get('shipping')))
-            costs = acquisition_breakdown(source_item, row.get('total_cost'))
-            st.caption(' · '.join(label + ' ' + evidence_money(value) for label, value in costs['parts'])
-                       + ' · total kostnad ' + evidence_money(costs['total']))
-            summary = build_seller_net_profit_summary(row)
-            if summary['available']:
-                st.write(f"{summary['label']}: **{summary['value']:+.2f} kr**")
-                st.caption(summary['basis'])
-            else:
-                st.caption('Nettovinst kan inte beräknas med tillräckligt underlag.')
-            review_details(row)
+        view = candidate_presentation(row)
+        review = view['review']
+        source_item = row.get('_source_item') or row
+        with st.container(border=True):
+            st.markdown(f"#### {rank}. {clean_card_title(row['title'])}")
+            left, right = st.columns([1, 3], gap='medium')
+            with left:
+                if view['images']:
+                    st.image(view['images'][0], width=220, caption='Annonsbild · kontrollera själv')
+                    if len(view['images']) > 1:
+                        with st.expander(f"Fler annonsbilder ({len(view['images']) - 1})"):
+                            for image in view['images'][1:]:
+                                st.image(image, width=220)
+                    st.link_button('Förstora bild ↗', view['images'][0], key=f'candidate_image_{rank}')
+                else:
+                    st.caption('Annonsbild saknas i underlaget.')
+            with right:
+                if view['status'] == 'Köpunderlag finns':
+                    st.success(view['status'] + ' · enligt sparad analys')
+                elif view['status'] == 'Avstå':
+                    st.warning(view['status'] + ' · enligt sparad analys')
+                else:
+                    st.write('**Granska** · köp ej bekräftat')
+                st.write('**Total kostnad: ' + evidence_money(view['costs']['total']) + '**')
+                st.caption(' · '.join(label + ' ' + evidence_money(value) for label, value in view['costs']['parts']))
+                if not view['costs']['verified']:
+                    st.caption('Kostnaden är ett sparat scenario. Kontrollera aktuellt pris och avgifter.')
+                st.write('**Varför granska:** ' + ' · '.join(review['reasons'][:2]))
+                if view['summary']['available']:
+                    st.write('**' + view['summary']['label'] + ':** ' + view['net'])
+                    st.caption(view['summary']['basis'])
+                st.write('**Kontrollera först:** ' + review['checks'][0])
+                st.write('**Prisunderlag:** ' + view['source'] + ' · prisindikation ' + view['price'])
+                if row.get('url'):
+                    st.link_button('Öppna annonsen ↗', row['url'], key=f'candidate_open_{rank}', use_container_width=True)
+            with st.expander('Kontrollista och kortidentitet', expanded=False):
+                st.write('**Kontrollera före köp:**')
+                for check in review['checks']:
+                    st.write('• ' + check)
+                for fact in review['identity']['rows']:
+                    st.write(f"**{fact['label']}:** {fact['value']} · källa: {fact['source'] or 'Saknas'}")
+                st.caption(review['identity']['note'])
             render_listing_review(source_item, total_cost=row.get('total_cost'))
-            if row.get('reasons'):
-                st.caption('Varför: ' + ' · '.join(row['reasons']))
-            if row.get('primary_blocker'):
-                st.caption('Kontrollera först: ' + row['primary_blocker'])
-            if explain:
-                explain(source_item, f'top5_{rank}')
-            if seller:
-                seller(source_item, f'top5_{rank}')
-            if row.get('url'):
-                st.link_button('Öppna annonsen ↗', row['url'], use_container_width=True)
-    review = result.get('review_candidates') or []
-    if review:
-        with st.expander(f'Fler potentiella kandidater ({len(review)})', expanded=False):
-            st.caption('Ytterligare kort att granska. Saknade jämförpriser eller ett lågt modellvärde räcker inte för att avfärda dem. Dessa är inga bekräftade köp.')
-            for rank, row in enumerate(review, 6):
-                st.markdown(f"**{rank}. {clean_card_title(row['title'])}**")
-                st.caption(alternative_status(row) + ' · total kostnad ' + money(row.get('total_cost')))
-                review = row.get('candidate_review') or build_candidate_review(row.get('_source_item') or row)
-                st.caption('Varför granska: ' + ' · '.join(review['reasons']))
-                st.caption('Nästa kontroll: ' + review['checks'][0])
+            with st.expander('Fördjupning och analysmått', expanded=False):
+                st.write('Fyndpotential: ' + view['potential'] + ' · Analyssäkerhet: ' + view['certainty'])
+                st.write(view['summary']['label'] + ': ' + view['net'])
+                st.caption(view['summary']['basis'])
                 if row.get('primary_blocker'):
-                    st.caption('Kontrollera först: ' + row['primary_blocker'])
+                    st.caption('Verifieringslucka: ' + row['primary_blocker'])
+                if explain:
+                    explain(source_item, f'top5_{rank}')
+                if seller:
+                    seller(source_item, f'top5_{rank}')
+        table.append({'#': rank, 'Kort': clean_card_title(row['title']), 'Bedömning': view['status'],
+                      'Total kostnad': evidence_money(view['costs']['total']), 'Prisindikation': view['price'],
+                      'Underlag': view['source'], 'Netto / scenario': view['net'],
+                      'Fyndpotential': view['potential'], 'Säkerhet': view['certainty']})
+    with st.expander('Jämför alternativen i tabell', expanded=False):
+        st.dataframe(table, use_container_width=True, hide_index=True)
+    more = result.get('review_candidates') or []
+    if more:
+        with st.expander(f'Fler potentiella kandidater ({len(more)})', expanded=False):
+            st.caption('Ytterligare kort att granska. Dessa är inga bekräftade köp.')
+            for rank, row in enumerate(more, 6):
+                view = candidate_presentation(row)
+                st.markdown(f"**{rank}. {clean_card_title(row['title'])}**")
+                st.caption(view['status'] + ' · total kostnad ' + evidence_money(view['costs']['total']))
+                st.caption('Varför granska: ' + ' · '.join(view['review']['reasons'][:2]))
+                st.caption('Kontrollera först: ' + view['review']['checks'][0])
                 if row.get('url'):
                     st.link_button('Öppna annonsen ↗', row['url'], key=f'review_candidate_{rank}', use_container_width=True)

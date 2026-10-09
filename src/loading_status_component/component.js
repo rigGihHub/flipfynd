@@ -42,7 +42,7 @@ export default function({parentElement}) {
           try {parent.sessionStorage.setItem(key,JSON.stringify(samples.slice(-5)));} catch(_){}
         }
         clock.first=false; clock.started=null; clock.finished=now;
-        box.textContent=`Vyn är klar · ${Math.round(seconds)} s`;
+        box.textContent=`Vyn har uppdaterats · ${Math.round(seconds)} s`;
         box.style.display=seconds>=1?'block':'none';
       } else if(clock.finished!==null && now-clock.finished>5000) box.style.display='none';
     }

@@ -4,7 +4,8 @@ from pathlib import Path
 
 def test_refresh_has_one_shared_sport_selector():
     app = Path("app.py").read_text(encoding="utf-8")
-    assert app.count('key="onboarding_fetch_scope"') == 1
+    assert app.count('key="search_sport"') == 1
+    assert 'key="onboarding_fetch_scope"' not in app
     assert 'start_fetch(fetch_category, True, "latest")' in app
 
 

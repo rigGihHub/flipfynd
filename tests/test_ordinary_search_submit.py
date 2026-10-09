@@ -16,7 +16,7 @@ def isolate_market_cache():
 
 def test_normal_search_submits_and_recovers_completed_results_without_error():
     listings = [{'tradera_item_id': 'test-normal-1', 'titel': '2024 Upper Deck Connor McDavid',
-                 'pris': 20, 'frakt': 20, 'sport': 'hockey', 'category': 'Hockey - NHL',
+                 'pris': 20, 'frakt': 20, 'sport': 'hockey', 'category': 'Hockey - NHL', 'source_category': 'Hockey - NHL',
                  'url': 'https://www.tradera.com/item/293316/1/test'}]
     def load(path):
         return listings if str(path).endswith('tradera_data.json') else []
@@ -72,6 +72,6 @@ def test_continue_passes_checkpoint_but_changed_filters_start_fresh():
         assert 'research_checkpoint' not in analyze.call_args.kwargs
         submit('🔎 Fortsätt hitta fynd')
         assert analyze.call_args.kwargs['research_checkpoint'] == checkpoint
-        app.number_input(key='search_budget').set_value(2000)
-        submit('🔎 Fortsätt hitta fynd')
+        app.number_input(key='search_budget').set_value(2000).run()
+        submit('🔎 Sök med nuvarande filter')
         assert 'research_checkpoint' not in analyze.call_args.kwargs

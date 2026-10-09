@@ -102,6 +102,6 @@ def test_app_exposes_more_candidates_without_claiming_profit():
         assert not app.exception
         frame = next(frame.value for frame in app.dataframe if 'Bedömning' in frame.value.columns)
         assert len(frame) == 5
-        assert frame['Bedömning'].str.startswith('Potentiell kandidat').all()
+        assert frame['Bedömning'].eq('Granska').all()
         assert frame['Netto / scenario'].eq('Ej beräkningsbar').all()
         assert any(expander.label == 'Fler potentiella kandidater (4)' for expander in app.expander)

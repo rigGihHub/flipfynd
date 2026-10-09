@@ -82,5 +82,5 @@ def test_app_shows_five_even_when_all_candidates_lose_money(advanced):
         assert not app.exception
         table = next(frame.value for frame in app.dataframe if 'Bedömning' in frame.value.columns)
         assert len(table) == 5
-        assert table['Bedömning'].str.startswith('AVSTÅ').all()
+        assert table['Bedömning'].eq('Avstå').all()
         assert any('De 5 bästa alternativen' in value.value for value in app.markdown)

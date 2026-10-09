@@ -133,6 +133,7 @@ def test_app_has_one_latest_action_and_no_duplicate_admin_actions():
     assert "Uppdatera alla sporter" not in labels
     assert "Endast vald sport" not in labels
     assert labels.count("Kör avancerad hämtning") == 1
-    assert len(app.radio(key="onboarding_fetch_scope").options) == 3
+    assert app.selectbox(key="search_sport").options == ["Hockey", "Fotboll"]
+    assert not any(r.key == "onboarding_fetch_scope" for r in app.radio)
     archive = next(x for x in app.checkbox if x.label == "Ta med äldre sparade annonser")
     assert archive.value is False

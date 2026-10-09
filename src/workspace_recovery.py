@@ -53,7 +53,7 @@ WIDGETS = {'search_sport', 'search_budget', 'search_text', 'search_archive', 'se
            'search_minimum_confidence', 'search_show_count', 'search_show_skip'}
 FIELDS = WIDGETS | {'results', 'debug', 'seller_top5_result', '_applied_seller_run',
                    'results_data_version', 'fetch_status', 'fetch_category', 'fetch_last_message',
-                   'continue_market_after_latest'}
+                   'continue_market_after_latest', 'pending_find_request'}
 PREFIXES = ('seller_inventory_result_', 'seller_inventory_quick_result_', 'seller_live_full_')
 QUERY = {'search_run', 'seller_run', 'seller', 'seller_profile'}
 MAX_BYTES = 32_000_000

@@ -1,4 +1,4 @@
-# Cloud rebuild v0.14.135: evidence-first collector review and streamed search jobs.
+# Cloud rebuild v0.14.136: unified search and mobile candidate cards.
 streamlit==1.64.0
 # Match Community Cloud's Arrow workaround before Streamlit is imported.
 pyarrow==24.0.0
