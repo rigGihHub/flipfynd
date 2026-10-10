@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-10-09T23:16:57.969927+00:00",
+  "checked_at": "2026-10-10T13:44:15.544768+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-10-10",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-10-09",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-10-06",
+      "name": "ESPN esp.1 2026-10-10",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-10-06",
+      "name": "ESPN ger.1 2026-10-10",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-10-06",
+      "name": "ESPN ita.1 2026-10-10",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-10-06",
+      "name": "ESPN fra.1 2026-10-10",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-10-06",
+      "name": "ESPN uefa.champions 2026-10-10",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-10-06",
+      "name": "ESPN usa.1 2026-10-10",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-10-06",
+      "name": "ESPN ksa.1 2026-10-10",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-10-06",
+      "name": "NHL 2026-10-10",
       "ok": true
     },
     {
@@ -140,13 +144,41 @@
     {
       "name": "NHL 2026-10-07",
       "ok": true
-    },
-    {
-      "name": "NHL 2026-10-06",
-      "ok": true
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Ben Meyers",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020066/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Frederick Gaudreau",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-09T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020066/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Francisco Trincão",
