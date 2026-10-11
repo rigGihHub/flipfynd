@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-11T14:03:51.313451+00:00",
+  "checked_at": "2026-10-11T22:55:55.896360+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-11",
@@ -147,6 +147,38 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Isco",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-11T16:30:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard?dates=20261011&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Boulaye Dia",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-11T15:15:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261011&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "André Luiz",
