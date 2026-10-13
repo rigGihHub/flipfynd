@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-13T15:04:36.518359+00:00",
+  "checked_at": "2026-10-13T23:16:48.762016+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-13",
@@ -147,6 +147,54 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Nicolo Tresoldi",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-13T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261013&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Lautaro Martínez",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-13T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261013&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Harry Kane",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-13T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261013&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Sam Reinhart",
