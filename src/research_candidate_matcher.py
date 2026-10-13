@@ -105,7 +105,8 @@ def match_research_candidate(identity: dict | None, candidate: dict | None) -> d
         else:
             conflicts.append(label)
 
-    tv, cv = target.get("season"), cf.get("season")
+    tv = target.get("season") or target.get("year")
+    cv = cf.get("season") if target.get("season") else cf.get("year")
     if tv:
         if not cv:
             missing.append("säsong")

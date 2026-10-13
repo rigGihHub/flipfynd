@@ -333,6 +333,7 @@ def match_active_rows(raw_rows, identity):
         candidate_number_norm = str(parsed.get("card_number") or candidate.get("card_number") or "").strip().lstrip("#").casefold()
         core_identity_match = bool(
             (not target_season or target_season == candidate_season)
+            and (not (identity or {}).get('year') or str(identity['year']) == str(parsed.get('year')))
             and (not target_set or target_set == candidate_set)
             and (not target_number_norm or target_number_norm == candidate_number_norm)
             and ("price_program" not in (identity or {}) or str(identity.get("price_program") or "") == price_program(str(row.get("title") or "")))
@@ -421,7 +422,7 @@ def fetch_configured_ebay_active_context(query, identity=None):
     client_id, client_secret = configured_credentials()
     # Extra parser scores do not change the same exact-card lookup.
     fields = {key: identity_obj.get(key) for key in (
-        "player_name", "season", "set_name", "card_number", "parallel",
+        "player_name", "season", "year", "set_name", "card_number", "parallel",
         "serial_denominator", "grading_company", "grade", "is_lot", "is_auto", "autograph_type", "is_patch", "price_program")}
     key = (_limit_key(client_id, client_secret), " ".join(str(query).casefold().split()),
            json.dumps(fields, sort_keys=True, default=str))

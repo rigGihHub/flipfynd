@@ -48,6 +48,18 @@ def build_candidate_review(item):
         checks.append('Identifiera ' + ', '.join(identity['missing']) + ' från kortet eller checklistan')
     if item.get('identity_conflicts') or item.get('detail_evidence_fusion_has_conflict'):
         checks.insert(0, 'Lös motstridiga identitetsuppgifter innan prisjämförelsen används')
+        labels = {'set_name': 'Serie', 'season': 'År/säsong', 'year': 'År',
+                  'card_number': 'Kortnummer', 'player_name': 'Spelare', 'parallel': 'Variant',
+                  'serial_number': 'Numrering'}
+        conflicts = [str(value) for value in (item.get('identity_conflicts') or [])]
+        if conflicts:
+            detail = conflicts[0]
+            for field, label in labels.items():
+                detail = detail.replace(field + ':', label + ':')
+            checks[0] = 'Motstridiga uppgifter – ' + detail
+    text = ' '.join(str(item.get(key) or '') for key in ('titel', 'raw_text', 'full_description'))
+    if re.search(r'reservationspris.{0,25}(?:ej|inte)\s+uppnått', text, re.I):
+        checks.insert(0, 'Reservationspriset är inte uppnått; nuvarande bud är ingen möjlig köpkostnad ännu')
     if not item.get('valuation_display_safe'):
         checks.append('Hitta sålda jämförelser med samma program, år, kortnummer och variant')
     checks.append('Kontrollera aktuellt pris, frakt, eventuellt reservationspris och skick')

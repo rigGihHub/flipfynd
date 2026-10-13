@@ -28,6 +28,8 @@ def build_best_alternatives(results, *, research_leads=(), extra_rows=()):
         title = item.get('titel') or item.get('title')
         if not title:
             return
+        if item.get('listing_inactive'):
+            return
         if not product_scope(item)["allowed"]:
             excluded.add(url or str(title).casefold())
             return
@@ -181,6 +183,8 @@ def render_best_alternatives(result, *, explain=None, seller=None, context=None)
                     st.caption(view['summary']['basis'])
                 st.write('**Kontrollera först:** ' + review['checks'][0])
                 st.write('**Prisunderlag:** ' + view['source'] + ' · prisindikation ' + view['price'])
+                from src.priority_candidate_research import research_report
+                st.caption('Research: ' + research_report(source_item)['text'])
                 if row.get('url'):
                     st.link_button('Öppna annonsen ↗', row['url'], key=f'candidate_open_{rank}', use_container_width=True)
             with st.expander('Kontrollista och kortidentitet', expanded=False):

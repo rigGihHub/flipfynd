@@ -33,6 +33,10 @@ def price_program(title):
         (r"reflections", "Reflections"),
         (r"radiance", "Radiance"),
         (r"synergy", "Synergy"),
+        (r"\bcult\s+heroes\b", "Cult Heroes"),
+        (r"\bpremier\s+league\b", "Premier League"),
+        (r"\b(?:ucl|uefa\s+(?:champions\s+league|club\s+competitions))\b", "UCL"),
+        (r"\beuro\b", "Euro"),
     )
     return "|".join(name for pattern, name in patterns if re.search(pattern, title or "", re.I))
 
@@ -49,13 +53,13 @@ def recover_description_identity(item):
         return {}
     title = clean_card_title(str(item.get("titel") or item.get("title") or ""))
     parsed = parse_card_features(title)
-    if not parsed.get("player_name") or not parsed.get("set_name") or parsed.get("is_lot"):
+    if not parsed.get("player_name") or parsed.get("is_lot"):
         return {}
     description = str(item.get("full_description") or "")
     # Do not extract jersey numbers, print runs, statistics or other auctions.
-    token = r"([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)"
+    token = r"([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)(?![A-Za-z0-9-])(?!/\s*\d)"
     patterns = (
-        rf"#\s*{token}\b(?!\s*/\s*\d)",
+        rf"#\s*{token}\b",
         rf"\bkort(?:et)?\s+(?:är\s+)?(?:märkt|nummer|nr\.?|har\s+nummer)\s*:?\s*{token}\b",
         rf"\bkortnummer\s*:?\s*{token}\b",
     )
@@ -72,18 +76,30 @@ def recover_description_identity(item):
     from src.card_listing_integrity import assess_listing_integrity
     opening_features = parse_card_features(opening)
     if (not assess_listing_integrity(opening)["eligible_physical_single_card"]
-            or (opening_features.get("set_name") and opening_features["set_name"] != parsed["set_name"])):
+            or (opening_features.get("set_name") and parsed.get("set_name")
+                and opening_features["set_name"] != parsed["set_name"])):
         return {}
+    if not parsed.get("set_name"):
+        if not opening_features.get("set_name"):
+            return {}
+        fields["set_name"] = opening_features["set_name"]
+    # A literal issue year is also an identity anchor for football releases.
+    if parsed.get("year") and opening_features.get("year") and parsed["year"] != opening_features["year"]:
+        return {}
+    if not parsed.get("year") and opening_features.get("year") and opening_features.get("set_name"):
+        fields["year"] = opening_features["year"]
     seasons = {extract_season(m.group(0)) for m in re.finditer(r"(?<!\d)(?:19|20)\d{2}\s*[-/]\s*(?:(?:19|20)?\d{2})\b", opening)}
     seasons.discard(None)
     if parsed.get("season") and seasons and parsed["season"] not in seasons:
         return {}
     if not parsed.get("season") and len(seasons) == 1:
         fields["season"] = next(iter(seasons))
+        # Preserve the existing season-only recovery contract.
+        fields.pop("year", None)
     return fields
 
 
-def enrich_description_routes(rows, *, limit=80, verifier=None, previously_checked=()):
+def enrich_description_routes(rows, *, limit=80, verifier=None, previously_checked=(), priority=False):
     """Bound HTTP detail work to cheap identifiable cards missing a number."""
     from src.tradera_purchase_cost import verify_purchase_cost
     from src.search_progress import begin_phase, report_phase
@@ -105,17 +121,22 @@ def enrich_description_routes(rows, *, limit=80, verifier=None, previously_check
         parts = urlsplit(str(row.get("lank") or row.get("url") or ""))
         if (parts.hostname in {"www.tradera.com", "tradera.com"}
                 and re.match(r"/item/\d+/\d+(?:/|$)", parts.path)
-                and parsed.get("player_name") and parsed.get("set_name")
-                and not title_number and not parsed.get("is_lot")):
+                and parsed.get("player_name") and (parsed.get("set_name") or priority)
+                and (not title_number or (priority and not (parsed.get('year') or parsed.get('season'))))
+                and not parsed.get("is_lot") and not row.get('listing_inactive')):
             if listing_fingerprint(row) not in previously_checked:
                 candidates.append(row)
     # Give low entry costs the first chance; retain the rest for a later scan.
-    candidates.sort(key=lambda row: float(row.get("pris") or row.get("price") or 999999))
+    if priority:
+        from src.candidate_review import collector_research_priority
+        candidates.sort(key=collector_research_priority, reverse=True)
+    else:
+        candidates.sort(key=lambda row: float(row.get("pris") or row.get("price") or 999999))
     selected = candidates[:limit]
     recovered = sum(bool(row.get("description_research_identity")) for row in rows)
     checked = 0
     inactive = sum(bool(row.get("listing_inactive")) for row in rows)
-    phase = "Läser saknade kortnummer från annonsbeskrivningar"
+    phase = "Kompletterar toppkandidaternas kortidentitet" if priority else "Läser saknade kortnummer från annonsbeskrivningar"
     begin_phase(phase, len(selected))
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(verifier, row): row for row in selected}
@@ -124,9 +145,10 @@ def enrich_description_routes(rows, *, limit=80, verifier=None, previously_check
             try:
                 row.update(future.result())
                 fields = recover_description_identity(row)
+                if fields:
+                    row["description_research_identity"] = fields
                 if fields.get("card_number"):
                     recovered += 1
-                    row["description_research_identity"] = fields
                 inactive += int(bool(row.get("listing_inactive")))
                 if row.get("purchase_detail_verified"):
                     key = (str(row.get("lank") or row.get("url") or ""), str(row.get("titel") or row.get("title") or ""))

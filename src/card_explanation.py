@@ -133,6 +133,10 @@ def build_card_identity_summary(item: dict) -> dict:
             if value not in (None, ""):
                 return value, "interpreted"
         for key in (name,) + fallbacks:
+            value = (item.get('description_research_identity') or {}).get(key)
+            if value not in (None, ''):
+                return value, 'research'
+        for key in (name,) + fallbacks:
             value = observed.get(key)
             if value not in (None, ""):
                 return value, "observed"
@@ -148,7 +152,8 @@ def build_card_identity_summary(item: dict) -> dict:
             if missing_label:
                 missing.append(missing_label)
             return
-        source_label = {"verified": "verifierat", "interpreted": "strukturerat", "observed": "från annonstitel"}.get(level, level)
+        source_label = {"verified": "verifierat", "interpreted": "strukturerat", "observed": "från annonstitel",
+                        "research": "från kontrollerad annonsbeskrivning · för research"}.get(level, level)
         rows.append({"label": label, "value": str(value), "known": True, "level": level, "source": source_label})
 
     player = pick("player_name", "player_name")
@@ -163,8 +168,8 @@ def build_card_identity_summary(item: dict) -> dict:
         add("Insert", (observed["insert_name"], "observed"))
     season = pick("season", "season", "rookie_window_card_year")
     if season[0] in (None, ""):
-        year = item.get("year") or observed.get("year")
-        season = (year, "interpreted" if item.get("year") else "observed") if year not in (None, "") else season
+        year = pick("year", "year")
+        season = year if year[0] not in (None, "") else season
     add("Säsong / år", season, "säsong/år")
 
     card_number, card_level = pick("card_number", "card_number")

@@ -242,7 +242,7 @@ _startup_notice.info("Startar Flipfynd och återställer sparade sökningar…")
 
 # Visible runtime marker. This makes deploy/hot-reload state observable instead
 # of guessing from stale search results.
-RUNTIME_BUILD = "2026-10-09.137-serial-fraction-boundaries"
+RUNTIME_BUILD = "2026-10-13.138-priority-candidate-research"
 # A tiny source change at module startup intentionally forces Streamlit Cloud
 # to restart/reload app.py instead of relying on hot-reloaded imported modules.
 
@@ -342,7 +342,7 @@ div[data-testid="stCaptionContainer"] {
 
 
 
-APP_VERSION = "v0.14.137"
+APP_VERSION = "v0.14.138"
 import src.player_interest as _player_interest_runtime
 import src.card_parser as _literal_parser_runtime
 import src.research_title_identity as _literal_research_runtime
@@ -419,13 +419,15 @@ SELLER_PRESENTATION_CONTRACT = "dynamic-top5-football-product-scope-v6"
 import src.asking_price_ui as _asking_ui_module
 import src.opportunity_top5 as _opportunity_ui_module
 import src.best_alternatives as _best_alternatives_ui_module
+import src.priority_candidate_research as _priority_research_ui_module
 import src.search_experience as _search_experience_module
 import src.collector_evidence as _collector_ui_module
 import src.card_explanation as _card_explanation_module
 import src.seller_identity as _seller_identity_module
 import src.seller_bundle_opportunity as _seller_bundle_module
 for _ui_module in (_collector_ui_module, _card_explanation_module, _seller_identity_module, _seller_bundle_module,
-                   _asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module, _search_experience_module):
+                   _asking_ui_module, _opportunity_ui_module, _best_alternatives_ui_module, _search_experience_module,
+                   _priority_research_ui_module):
     if getattr(_ui_module, "_flipfynd_loaded_version", None) != APP_VERSION:
         importlib.reload(_ui_module)
         _ui_module._flipfynd_loaded_version = APP_VERSION

@@ -358,4 +358,6 @@ def price_lookup_query(identity):
     """
     fields = dict(identity)
     fields.pop("set_name", None)
+    if not fields.get("season") and fields.get("year"):
+        fields["season"] = str(fields["year"])
     return exact_identity_query(fields)

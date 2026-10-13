@@ -131,6 +131,10 @@ def detect_set(
         title
         or ""
     ).casefold()
+    from src.card_parser import extract_set_name
+    canonical = extract_set_name(title)
+    if canonical and canonical not in {'Upper Deck', 'Topps', 'Panini'}:
+        return canonical
 
     aliases = {
         "Young Guns": [
@@ -214,7 +218,10 @@ def detect_set(
         )
 
         for needle in needles:
-            if needle in text:
+            pattern = r"(?<!\w)" + re.escape(needle) + r"(?!\w)"
+            if needle == 'premier':
+                pattern += r"(?!\s+league\b)"
+            if re.search(pattern, text):
                 return set_name
 
     return None

@@ -560,6 +560,12 @@ def analyze_data(
     # the user wants the best findings, not a search that stops at its first hit.
     inventory_screened = []
     if debug.get("ebay_credentials_configured"):
+        from src.priority_candidate_research import complete_priority_research
+        results, priority_debug = complete_priority_research(results,
+            previously_checked=research_checkpoint.get('description_checked') or [])
+        debug.update(priority_debug)
+        debug.setdefault('description_checked_fingerprints', []).extend(
+            debug.pop('priority_description_fingerprints', []))
         sweep_options = {'completed': completed_prices} if completed_prices else {}
         # Probe beyond the cheapest cluster early enough to survive a time or
         # request cap, then keep every unselected route in the remaining queue.

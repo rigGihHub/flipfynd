@@ -7,7 +7,7 @@ from src.player_market import get_all_player_names, normalize_player_name
 KNOWN_PLAYERS = [name.casefold() for name in get_all_player_names()]
 
 # Printed insert names are product text, never fallback player names.
-INSERT_NAMES = ("Century Momentous", "Diamond Dominance", "New Breed Materials")
+INSERT_NAMES = ("Century Momentous", "Diamond Dominance", "New Breed Materials", "Cult Heroes")
 
 
 def extract_insert_name(title: str) -> Optional[str]:
@@ -235,7 +235,7 @@ def extract_player_name(title: str) -> Optional[str]:
     norm = normalize_text(raw)
 
     for player in KNOWN_PLAYERS:
-        if player in norm:
+        if re.search(r"(?<!\w)" + re.escape(normalize_text(player)) + r"(?!\w)", norm):
             return normalize_player_name(player.title())
 
     # Product labels must not become a player's name ("Ultimate Of").
@@ -261,6 +261,13 @@ def extract_player_name(title: str) -> Optional[str]:
         candidates.append(token)
 
     if len(candidates) >= 2:
+        # Preserve a literal compound surname rather than losing its last half.
+        for compound in re.findall(r"\b[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)+\b", raw):
+            parts = normalize_text(compound).split()
+            if candidates[1:1 + len(parts)] == parts:
+                return candidates[0].title() + " " + compound.title()
+            if candidates[:len(parts)] == parts and len(candidates) > len(parts):
+                return compound.title() + " " + candidates[len(parts)].title()
         return f"{candidates[0].title()} {candidates[1].title()}"
 
     return None
@@ -268,15 +275,30 @@ def extract_player_name(title: str) -> Optional[str]:
 
 def extract_set_name(title: str) -> Optional[str]:
     norm = normalize_text(title)
-
+    # Manufacturer + program beats generic foil/league wording. Prizm is also
+    # printed on Select cards; Premier League is not Upper Deck Premier.
+    for pattern, display in (
+        (r"\bpanini\s+select\b", "Panini Select"),
+        (r"\bfutera\s+unique\b", "Futera Unique"),
+    ):
+        if re.search(pattern, norm):
+            return display
     for raw_pattern, display_name in SET_PATTERNS:
-        if raw_pattern in norm:
+        pattern = r"(?<!\w)" + re.escape(normalize_text(raw_pattern)) + r"(?!\w)"
+        if raw_pattern == "premier":
+            pattern += r"(?!\s+league\b)"
+        if re.search(pattern, norm):
             return display_name
 
     if re.search(r"\bud\s+young\s+guns\b", norm):
         return "Young Guns"
 
     return None
+
+
+def _labelled_serial(text: str, start: int) -> bool:
+    return bool(re.search(r"\b(?:numrerad(?:e|t)?|numbered|serial|exemplar|copy)\s*[:#-]?\s*$",
+                          str(text)[:start][-40:], flags=re.I))
 
 
 def extract_season(title: str) -> Optional[str]:
@@ -291,7 +313,7 @@ def extract_season(title: str) -> Optional[str]:
 
     # Full start year + short/full end year.
     match = re.search(r"(?<!\d)((?:19|20)\d{2})\s*[-/]\s*((?:19|20)?\d{2})\b", raw)
-    if match:
+    if match and not _labelled_serial(raw, match.start()):
         start = int(match.group(1))
         end_raw = match.group(2)
         end = int(end_raw) if len(end_raw) == 4 else start + 1 if int(end_raw) == (start + 1) % 100 else -1
@@ -301,7 +323,7 @@ def extract_season(title: str) -> Optional[str]:
     # Short form is common in listings, but also resembles serial numbering.
     # Require a known product/set and consecutive years before accepting it.
     short = re.search(r"(?<!\d)(\d{2})\s*[-/]\s*(\d{2})(?!\d)", raw)
-    if short and extract_set_name(raw):
+    if short and extract_set_name(raw) and not _labelled_serial(raw, short.start()):
         start2, end2 = int(short.group(1)), int(short.group(2))
         if (end2 - start2) % 100 == 1:
             start = 2000 + start2 if start2 <= 79 else 1900 + start2
@@ -335,13 +357,13 @@ def extract_serial_number(title: str) -> Optional[int]:
     # tokens before looking for serial numbering.
     serial_text = re.sub(
         r"\b(?:19|20)\d{2}\s*[-/]\s*(?:(?:19|20)?\d{2})\b",
-        " ",
+        lambda match: match.group(0) if _labelled_serial(raw, match.start()) else " ",
         raw,
     )
     if extract_set_name(raw):
         def _strip_short_season(match):
             a, b = int(match.group(1)), int(match.group(2))
-            return " " if (b - a) % 100 == 1 else match.group(0)
+            return " " if (b - a) % 100 == 1 and not _labelled_serial(serial_text, match.start()) else match.group(0)
         serial_text = re.sub(
             r"(?<!\d)(\d{2})\s*[-/]\s*(\d{2})(?!\d)",
             _strip_short_season,
@@ -369,14 +391,14 @@ def extract_card_number(title: str) -> Optional[str]:
 
     # Explicit hash notation is the strongest signal. Reject a value that is
     # immediately part of a print-run fraction (e.g. #12/99).
-    hash_match = re.search(r"(?<![\w/])#\s*([A-Za-z]{1,5}[- ]?\d{1,4}|\d{1,4})(?!\s*/\s*\d)", raw)
+    hash_match = re.search(r"(?<![\w/])#\s*([A-Za-z]{1,5}[- ]?\d{1,4}|\d{1,4})(?![A-Za-z0-9])(?!/\s*\d)", raw)
     if hash_match:
         value = re.sub(r"\s+", "", hash_match.group(1)).upper()
         return value
 
     # Card/No. wording is also sufficiently explicit, but bare numbers are not.
     labelled = re.search(
-        r"\b(?:card|kort|no\.?|nr\.?)\s*(?:#\s*)?([A-Za-z]{1,5}[- ]?\d{1,4}|\d{1,4})(?!\s*/\s*\d)",
+        r"\b(?:card|kort|no\.?|nr\.?)\s*(?:#\s*)?([A-Za-z]{1,5}[- ]?\d{1,4}|\d{1,4})(?![A-Za-z0-9])(?!/\s*\d)",
         raw,
         flags=re.IGNORECASE,
     )
@@ -387,6 +409,11 @@ def extract_card_number(title: str) -> Optional[str]:
             return None
         return value
 
+    # A printed insert prefix is safe only with its explicitly named program.
+    if extract_set_name(raw) == "Futera Unique" and extract_insert_name(raw) == "Cult Heroes":
+        code = re.search(r"\b(CH-?\d{1,3})\b", raw, flags=re.I)
+        if code:
+            return code.group(1).upper().replace("-", "")
     return None
 
 
@@ -703,7 +730,7 @@ def parse_card_features(title: str) -> dict:
     # Preserve it only when the title contains a valid fraction for that run.
     serial_copy_number = None
     if serial_number:
-        copies = {int(m.group(1)) for m in re.finditer(r'(?<![\d/])(\d{1,4})\s*/\s*(\d{1,4})(?!\d)', title)
+        copies = {int(m.group(1)) for m in re.finditer(r'(?<![\d/#])(\d{1,4})\s*/\s*(\d{1,4})(?!\d)', title)
                   if int(m.group(2)) == serial_number and 0 < int(m.group(1)) <= serial_number}
         if len(copies) == 1:
             serial_copy_number = copies.pop()
