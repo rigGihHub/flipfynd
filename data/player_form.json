@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-16T12:26:56.666385+00:00",
+  "checked_at": "2026-10-16T22:06:20.571665+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-16",
@@ -147,6 +147,22 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Antonio Raimondo",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-16T18:45:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261016&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
     {
       "status": "READY",
       "player_name": "Jack Eichel",
