@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-19T14:41:47.496003+00:00",
+  "checked_at": "2026-10-19T22:54:28.394243+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-19",
@@ -147,6 +147,70 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Giovanni Simeone",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-19T18:45:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261019&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Josh Brownhill",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-19T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261019&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Gustavo Varela",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-19T16:30:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261019&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Artem Bondarenko",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-19T15:05:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261019&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Kylian Mbappé",
@@ -402,6 +466,22 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Jet Greaves",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-17T23:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020129/boxscore",
+      "source_type": "official_league",
+      "detail": "31 räddningar, 100.0% och seger",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 31
     },
     {
       "status": "READY",
