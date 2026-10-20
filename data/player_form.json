@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-20T12:44:24.189204+00:00",
+  "checked_at": "2026-10-20T22:18:46.330625+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-20",
@@ -147,6 +147,86 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Alexis Mac Allister",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-20T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261020&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Phil Foden",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-20T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261020&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Scott McTominay",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-20T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261020&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Youssef En-Nesyri",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-20T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261020&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Serhou Guirassy",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-20T16:45:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261020&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Auston Matthews",
