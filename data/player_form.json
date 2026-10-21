@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-21T12:56:45.442583+00:00",
+  "checked_at": "2026-10-21T22:22:51.230267+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-21",
@@ -147,6 +147,70 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Luis Suárez",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-21T19:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261021&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Roger Brugué",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-21T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard?dates=20261021&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Nico Paz",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-21T16:45:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261021&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Soriba Diaoune",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-21T16:45:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261021&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Anthony Cirelli",
