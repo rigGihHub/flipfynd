@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-23T12:38:17.973169+00:00",
+  "checked_at": "2026-10-23T22:12:26.340205+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-23",
@@ -149,6 +149,38 @@
   "events": [
     {
       "status": "READY",
+      "player_name": "Ermedin Demirovic",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-23T18:30:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard?dates=20261023&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Ivan Toney",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-23T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261023&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
       "player_name": "Logan Cooley",
       "sport": "hockey",
       "event_type": "performance_breakout",
@@ -189,11 +221,11 @@
       "source_name": "NHL matchstatistik",
       "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020162/boxscore",
       "source_type": "official_league",
-      "detail": "36 räddningar, 97.3% och seger",
+      "detail": "38 räddningar, 97.4% och seger",
       "ranking_before": null,
       "ranking_after": null,
       "metric_before": null,
-      "metric_after": 36
+      "metric_after": 38
     },
     {
       "status": "READY",
@@ -2846,22 +2878,6 @@
       "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020066/boxscore",
       "source_type": "official_league",
       "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Francisco Trincão",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-09T14:55:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261009&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
       "ranking_before": null,
       "ranking_after": null,
       "metric_before": null,
