@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-26T14:16:55.795816+00:00",
+  "checked_at": "2026-10-26T23:08:25.427413+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-26",
@@ -3020,38 +3020,6 @@
       "observed_at": null,
       "source_name": "ESPN matchstatistik",
       "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261013&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Sam Reinhart",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-12T17:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020087/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Nikola Krstovic",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-12T16:30:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261012&limit=100",
       "source_type": "sports_statistics",
       "detail": "2 mål i en avslutad match",
       "ranking_before": null,
