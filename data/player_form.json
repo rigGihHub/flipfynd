@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-28T14:02:08.988950+00:00",
+  "checked_at": "2026-10-28T23:14:15.484040+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-28",
@@ -147,6 +147,38 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Samuel Mbangula",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-28T17:30:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261028&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Alphadjo Cissè",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-28T17:30:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261028&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Brock Boeser",
@@ -2674,102 +2706,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Donyell Malen",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-14T19:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261014&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Nicolas Jackson",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-14T19:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261014&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Ross Barkley",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-14T19:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261014&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Erling Haaland",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-14T19:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261014&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Bradley Barcola",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-14T16:45:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261014&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "3 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Florian Flecker",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-14T16:45:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261014&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
     }
   ]
 }
