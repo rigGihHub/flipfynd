@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-30T14:10:55.917133+00:00",
+  "checked_at": "2026-10-30T22:58:53.726041+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-10-30",
@@ -147,6 +147,70 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Achraf Hakimi",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-30T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261030&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Elye Wahi",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-30T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261030&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Ricardo Mathias",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-30T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261030&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Yannick Carrasco",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-10-30T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261030&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "3 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
     {
       "status": "READY",
       "player_name": "Zach Benson",
@@ -349,11 +413,11 @@
       "source_name": "NHL matchstatistik",
       "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020207/boxscore",
       "source_type": "official_league",
-      "detail": "31 räddningar, 96.9% och seger",
+      "detail": "30 räddningar, 96.8% och seger",
       "ranking_before": null,
       "ranking_after": null,
       "metric_before": null,
-      "metric_after": 31
+      "metric_after": 30
     },
     {
       "status": "READY",
@@ -3006,22 +3070,6 @@
       "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020119/boxscore",
       "source_type": "official_league",
       "detail": "0 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Antonio Raimondo",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-16T18:45:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261016&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "3 mål i en avslutad match",
       "ranking_before": null,
       "ranking_after": null,
       "metric_before": null,
