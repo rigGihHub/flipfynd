@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-11-02T17:05:59.636071+00:00",
+  "checked_at": "2026-11-03T01:36:00.557404+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-11-03",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-11-02",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-10-30",
+      "name": "ESPN esp.1 2026-11-03",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-10-30",
+      "name": "ESPN ger.1 2026-11-03",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-10-30",
+      "name": "ESPN ita.1 2026-11-03",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-10-30",
+      "name": "ESPN fra.1 2026-11-03",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-10-30",
+      "name": "ESPN uefa.champions 2026-11-03",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-10-30",
+      "name": "ESPN usa.1 2026-11-03",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-10-30",
+      "name": "ESPN ksa.1 2026-11-03",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-10-30",
+      "name": "NHL 2026-11-03",
       "ok": true
     },
     {
@@ -140,13 +144,25 @@
     {
       "name": "NHL 2026-10-31",
       "ok": true
-    },
-    {
-      "name": "NHL 2026-10-30",
-      "ok": true
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Armand Laurienté",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-02T17:30:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261102&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Joaquín Pereyra",
@@ -2988,118 +3004,6 @@
       "observed_at": null,
       "source_name": "ESPN matchstatistik",
       "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261020&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Auston Matthews",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T23:30:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020139/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Sergei Bobrovsky",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T23:30:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020139/boxscore",
-      "source_type": "official_league",
-      "detail": "30 räddningar, 96.8% och seger",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 30
-    },
-    {
-      "status": "READY",
-      "player_name": "Oliver Bjorkstrand",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T23:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020137/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Matvei Michkov",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T23:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020138/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Trevor Zegras",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T23:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020138/boxscore",
-      "source_type": "official_league",
-      "detail": "0 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Giovanni Simeone",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T18:45:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261019&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Josh Brownhill",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-19T18:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261019&limit=100",
       "source_type": "sports_statistics",
       "detail": "2 mål i en avslutad match",
       "ranking_before": null,
