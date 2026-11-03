@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-03T01:36:00.557404+00:00",
+  "checked_at": "2026-11-03T15:09:54.408790+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-03",
@@ -147,6 +147,38 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Jaden Schwartz",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-03T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020234/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Nazem Kadri",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-03T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020234/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Armand Laurienté",
