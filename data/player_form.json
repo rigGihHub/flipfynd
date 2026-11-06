@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-06T15:04:43.786723+00:00",
+  "checked_at": "2026-11-06T23:43:44.834667+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-06",
@@ -149,6 +149,22 @@
   "events": [
     {
       "status": "READY",
+      "player_name": "Thierno Barry",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-06T20:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20261106&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
       "player_name": "Beckett Sennecke",
       "sport": "hockey",
       "event_type": "performance_breakout",
@@ -290,6 +306,22 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Cam Talbot",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-06T00:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020258/boxscore",
+      "source_type": "official_league",
+      "detail": "31 räddningar, 96.9% och seger",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 31
     },
     {
       "status": "READY",
@@ -2930,38 +2962,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Ermedin Demirovic",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-23T18:30:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard?dates=20261023&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Ivan Toney",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-23T18:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261023&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
     }
   ]
 }
