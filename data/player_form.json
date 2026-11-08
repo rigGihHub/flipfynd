@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-08T14:18:37.356817+00:00",
+  "checked_at": "2026-11-08T22:54:00.802961+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-08",
@@ -147,6 +147,38 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Fermín López",
+      "sport": "football",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-08T20:00:00+00:00",
+      "observed_at": null,
+      "source_name": "ESPN matchstatistik",
+      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard?dates=20261108&limit=100",
+      "source_type": "sports_statistics",
+      "detail": "2 mål i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Jeremy Swayman",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-08T18:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020277/boxscore",
+      "source_type": "official_league",
+      "detail": "40 räddningar, 97.6% och seger",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 40
+    },
     {
       "status": "READY",
       "player_name": "Leon Draisaitl",
@@ -2914,70 +2946,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 33
-    },
-    {
-      "status": "READY",
-      "player_name": "Jason Robertson",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-25T22:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020181/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Kylian Mbappé",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-25T20:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard?dates=20261025&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Josh Maja",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-25T16:15:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261025&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Sebastian Szymanski",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-25T16:15:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261025&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
     }
   ]
 }
