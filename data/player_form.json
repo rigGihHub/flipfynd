@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-11-13T15:24:48.707990+00:00",
+  "checked_at": "2026-11-14T00:20:48.786336+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-11-14",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-11-13",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-11-10",
+      "name": "ESPN esp.1 2026-11-14",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-11-10",
+      "name": "ESPN ger.1 2026-11-14",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-11-10",
+      "name": "ESPN ita.1 2026-11-14",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-11-10",
+      "name": "ESPN fra.1 2026-11-14",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-11-10",
+      "name": "ESPN uefa.champions 2026-11-14",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-11-10",
+      "name": "ESPN usa.1 2026-11-14",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-11-10",
+      "name": "ESPN ksa.1 2026-11-14",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-11-10",
+      "name": "NHL 2026-11-14",
       "ok": true
     },
     {
@@ -139,10 +143,6 @@
     },
     {
       "name": "NHL 2026-11-11",
-      "ok": true
-    },
-    {
-      "name": "NHL 2026-11-10",
       "ok": true
     }
   ],
@@ -2450,166 +2450,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Matt Coronato",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-31T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020216/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Joel Farabee",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-31T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020216/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Anton Lundell",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T23:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020215/boxscore",
-      "source_type": "official_league",
-      "detail": "3 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Seth Jones",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T23:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020215/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Arseny Gritsyuk",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T22:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020214/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Jack Hughes",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T22:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020214/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Achraf Hakimi",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T18:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261030&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "3 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Elye Wahi",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T18:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20261030&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "3 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Ricardo Mathias",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T18:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261030&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Yannick Carrasco",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-10-30T18:00:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ksa.1/scoreboard?dates=20261030&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "3 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
     }
   ]
 }
