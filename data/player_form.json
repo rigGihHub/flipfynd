@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-11-16T17:03:23.029635+00:00",
+  "checked_at": "2026-11-17T02:28:29.014809+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-11-17",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-11-16",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-11-13",
+      "name": "ESPN esp.1 2026-11-17",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-11-13",
+      "name": "ESPN ger.1 2026-11-17",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-11-13",
+      "name": "ESPN ita.1 2026-11-17",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-11-13",
+      "name": "ESPN fra.1 2026-11-17",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-11-13",
+      "name": "ESPN uefa.champions 2026-11-17",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-11-13",
+      "name": "ESPN usa.1 2026-11-17",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-11-13",
+      "name": "ESPN ksa.1 2026-11-17",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-11-13",
+      "name": "NHL 2026-11-17",
       "ok": true
     },
     {
@@ -139,10 +143,6 @@
     },
     {
       "name": "NHL 2026-11-14",
-      "ok": true
-    },
-    {
-      "name": "NHL 2026-11-13",
       "ok": true
     }
   ],
@@ -397,11 +397,11 @@
       "source_name": "NHL matchstatistik",
       "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020316/boxscore",
       "source_type": "official_league",
-      "detail": "31 räddningar, 100.0% och seger",
+      "detail": "32 räddningar, 100.0% och seger",
       "ranking_before": null,
       "ranking_after": null,
       "metric_before": null,
-      "metric_after": 31
+      "metric_after": 32
     },
     {
       "status": "READY",
@@ -2460,54 +2460,6 @@
       "observed_at": null,
       "source_name": "ESPN matchstatistik",
       "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20261103&limit=100",
-      "source_type": "sports_statistics",
-      "detail": "2 mål i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Jaden Schwartz",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-03T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020234/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Nazem Kadri",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-03T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020234/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Armand Laurienté",
-      "sport": "football",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-02T17:30:00+00:00",
-      "observed_at": null,
-      "source_name": "ESPN matchstatistik",
-      "source_url": "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20261102&limit=100",
       "source_type": "sports_statistics",
       "detail": "2 mål i en avslutad match",
       "ranking_before": null,
