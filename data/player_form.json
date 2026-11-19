@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-19T01:13:39.924028+00:00",
+  "checked_at": "2026-11-19T16:34:57.987608+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-19",
@@ -147,6 +147,38 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Sebastian Cossa",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-19T03:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020346/boxscore",
+      "source_type": "official_league",
+      "detail": "30 räddningar, 96.8% och seger",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 30
+    },
+    {
+      "status": "READY",
+      "player_name": "Lane Hutson",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-19T00:30:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020345/boxscore",
+      "source_type": "official_league",
+      "detail": "0 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
     {
       "status": "READY",
       "player_name": "Mikko Rantanen",
@@ -2338,54 +2370,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 31
-    },
-    {
-      "status": "READY",
-      "player_name": "Adrian Kempe",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-05T03:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020249/boxscore",
-      "source_type": "official_league",
-      "detail": "3 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Artemi Panarin",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-05T03:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020249/boxscore",
-      "source_type": "official_league",
-      "detail": "0 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Quinton Byfield",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-05T03:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020249/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
     }
   ]
 }
