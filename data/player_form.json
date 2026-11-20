@@ -1,6 +1,10 @@
 {
-  "checked_at": "2026-11-19T16:34:57.987608+00:00",
+  "checked_at": "2026-11-20T01:16:42.337963+00:00",
   "sources": [
+    {
+      "name": "ESPN eng.1 2026-11-20",
+      "ok": true
+    },
     {
       "name": "ESPN eng.1 2026-11-19",
       "ok": true
@@ -14,7 +18,7 @@
       "ok": true
     },
     {
-      "name": "ESPN eng.1 2026-11-16",
+      "name": "ESPN esp.1 2026-11-20",
       "ok": true
     },
     {
@@ -30,7 +34,7 @@
       "ok": true
     },
     {
-      "name": "ESPN esp.1 2026-11-16",
+      "name": "ESPN ger.1 2026-11-20",
       "ok": true
     },
     {
@@ -46,7 +50,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ger.1 2026-11-16",
+      "name": "ESPN ita.1 2026-11-20",
       "ok": true
     },
     {
@@ -62,7 +66,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ita.1 2026-11-16",
+      "name": "ESPN fra.1 2026-11-20",
       "ok": true
     },
     {
@@ -78,7 +82,7 @@
       "ok": true
     },
     {
-      "name": "ESPN fra.1 2026-11-16",
+      "name": "ESPN uefa.champions 2026-11-20",
       "ok": true
     },
     {
@@ -94,7 +98,7 @@
       "ok": true
     },
     {
-      "name": "ESPN uefa.champions 2026-11-16",
+      "name": "ESPN usa.1 2026-11-20",
       "ok": true
     },
     {
@@ -110,7 +114,7 @@
       "ok": true
     },
     {
-      "name": "ESPN usa.1 2026-11-16",
+      "name": "ESPN ksa.1 2026-11-20",
       "ok": true
     },
     {
@@ -126,7 +130,7 @@
       "ok": true
     },
     {
-      "name": "ESPN ksa.1 2026-11-16",
+      "name": "NHL 2026-11-20",
       "ok": true
     },
     {
@@ -139,10 +143,6 @@
     },
     {
       "name": "NHL 2026-11-17",
-      "ok": true
-    },
-    {
-      "name": "NHL 2026-11-16",
       "ok": true
     }
   ],
@@ -2210,166 +2210,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Beckett Sennecke",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020260/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Pavel Mintyukov",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020260/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Connor McDavid",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020260/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Nick Schmaltz",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020251/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Logan Cooley",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020251/boxscore",
-      "source_type": "official_league",
-      "detail": "3 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Nick Suzuki",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020251/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Ilya Mikheyev",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020253/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Anthony Mantha",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020254/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
-    },
-    {
-      "status": "READY",
-      "player_name": "Pavel Zacha",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020257/boxscore",
-      "source_type": "official_league",
-      "detail": "2 mål och 2 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 2
-    },
-    {
-      "status": "READY",
-      "player_name": "Cam Talbot",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-06T00:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020258/boxscore",
-      "source_type": "official_league",
-      "detail": "31 räddningar, 96.9% och seger",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 31
     }
   ]
 }
