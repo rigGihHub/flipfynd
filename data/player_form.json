@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-23T00:18:49.665233+00:00",
+  "checked_at": "2026-11-23T19:15:39.438739+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-23",
@@ -147,6 +147,86 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Tyler Bertuzzi",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-23T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020377/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Roman Kantserov",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-23T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020377/boxscore",
+      "source_type": "official_league",
+      "detail": "3 mål och 4 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 4
+    },
+    {
+      "status": "READY",
+      "player_name": "Jake Oettinger",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-23T00:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020376/boxscore",
+      "source_type": "official_league",
+      "detail": "33 räddningar, 100.0% och seger",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 33
+    },
+    {
+      "status": "READY",
+      "player_name": "Zach Benson",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-22T22:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020374/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Tage Thompson",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-22T22:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020374/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
     {
       "status": "READY",
       "player_name": "Pio Esposito",
@@ -2386,54 +2466,6 @@
       "ranking_after": null,
       "metric_before": null,
       "metric_after": 30
-    },
-    {
-      "status": "READY",
-      "player_name": "Cutter Gauthier",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-09T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020282/boxscore",
-      "source_type": "official_league",
-      "detail": "3 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Mikael Granlund",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-09T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020282/boxscore",
-      "source_type": "official_league",
-      "detail": "1 mål och 4 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 4
-    },
-    {
-      "status": "READY",
-      "player_name": "Jackson LaCombe",
-      "sport": "hockey",
-      "event_type": "performance_breakout",
-      "occurred_at": "2026-11-09T01:00:00+00:00",
-      "observed_at": null,
-      "source_name": "NHL matchstatistik",
-      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020282/boxscore",
-      "source_type": "official_league",
-      "detail": "0 mål och 3 poäng i en avslutad match",
-      "ranking_before": null,
-      "ranking_after": null,
-      "metric_before": null,
-      "metric_after": 3
     }
   ]
 }
