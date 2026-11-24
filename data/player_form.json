@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-24T04:19:23.001200+00:00",
+  "checked_at": "2026-11-24T18:54:07.953256+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-24",
@@ -149,6 +149,54 @@
   "events": [
     {
       "status": "READY",
+      "player_name": "Matt Boldy",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-24T03:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020384/boxscore",
+      "source_type": "official_league",
+      "detail": "0 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Joel Eriksson Ek",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-24T03:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020384/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
+    {
+      "status": "READY",
+      "player_name": "Kirill Kaprizov",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-24T03:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020384/boxscore",
+      "source_type": "official_league",
+      "detail": "1 mål och 4 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 4
+    },
+    {
+      "status": "READY",
       "player_name": "Linus Ullmark",
       "sport": "hockey",
       "event_type": "performance_breakout",
@@ -157,11 +205,11 @@
       "source_name": "NHL matchstatistik",
       "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020380/boxscore",
       "source_type": "official_league",
-      "detail": "35 räddningar, 97.2% och seger",
+      "detail": "34 räddningar, 97.1% och seger",
       "ranking_before": null,
       "ranking_after": null,
       "metric_before": null,
-      "metric_after": 35
+      "metric_after": 34
     },
     {
       "status": "READY",
