@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-25T03:02:17.550395+00:00",
+  "checked_at": "2026-11-25T17:58:32.795429+00:00",
   "sources": [
     {
       "name": "ESPN eng.1 2026-11-25",
@@ -147,6 +147,38 @@
     }
   ],
   "events": [
+    {
+      "status": "READY",
+      "player_name": "Jack Eichel",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-25T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020385/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 2 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 2
+    },
+    {
+      "status": "READY",
+      "player_name": "Trevor Connelly",
+      "sport": "hockey",
+      "event_type": "performance_breakout",
+      "occurred_at": "2026-11-25T01:00:00+00:00",
+      "observed_at": null,
+      "source_name": "NHL matchstatistik",
+      "source_url": "https://api-web.nhle.com/v1/gamecenter/2026020385/boxscore",
+      "source_type": "official_league",
+      "detail": "2 mål och 3 poäng i en avslutad match",
+      "ranking_before": null,
+      "ranking_after": null,
+      "metric_before": null,
+      "metric_after": 3
+    },
     {
       "status": "READY",
       "player_name": "Antonio Nusa",
